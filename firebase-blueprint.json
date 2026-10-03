@@ -1,0 +1,180 @@
+{
+  "entities": {
+    "User": {
+      "title": "User Profile",
+      "description": "Extended user information and preferences",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string" },
+        "displayName": { "type": "string" },
+        "photoURL": { "type": "string" },
+        "onboarded": { "type": "boolean" },
+        "goals": { "type": "array", "items": { "type": "string" } },
+        "currentLevel": { "type": "string" },
+        "dailyTargetMinutes": { "type": "number" },
+        "xp": { "type": "number" },
+        "level": { "type": "number" },
+        "streak": { "type": "number" },
+        "lastActive": { "type": "string", "format": "date-time" },
+        "telegramId": { "type": "string" }
+      },
+      "required": ["uid", "email"]
+    },
+    "StudyPlan": {
+      "title": "Study Plan",
+      "description": "AI generated roadmap for a specific goal",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "goal": { "type": "string" },
+        "targetDate": { "type": "string", "format": "date-time" },
+        "roadmap": { "type": "array" },
+        "status": { "type": "string", "enum": ["active", "completed", "archived"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      }
+    },
+    "Note": {
+      "title": "Study Note",
+      "description": "User created or AI assisted notes",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "title": { "type": "string" },
+        "content": { "type": "string" },
+        "subject": { "type": "string" },
+        "tags": { "type": "array", "items": { "type": "string" } },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      }
+    },
+    "Flashcard": {
+      "title": "Flashcard",
+      "description": "Spaced repetition cards",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "deckId": { "type": "string" },
+        "front": { "type": "string" },
+        "back": { "type": "string" },
+        "nextReview": { "type": "string", "format": "date-time" },
+        "easeFactor": { "type": "number" },
+        "interval": { "type": "number" },
+        "repetition": { "type": "number" }
+      }
+    },
+    "Deck": {
+      "title": "Deck",
+      "description": "User-owned flashcard deck",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "icon": { "type": "string" },
+        "color": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      }
+    },
+    "NotebookSource": {
+      "title": "Notebook Source",
+      "description": "Uploaded or linked source analyzed by AI",
+      "type": "object",
+      "properties": {
+        "type": { "type": "string" },
+        "title": { "type": "string" },
+        "url": { "type": "string" },
+        "fileName": { "type": "string" },
+        "mimeType": { "type": "string" },
+        "downloadURL": { "type": "string" },
+        "extractedText": { "type": "string" },
+        "summary": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      }
+    },
+    "Notification": {
+      "title": "Notification",
+      "description": "User notification with read state",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "body": { "type": "string" },
+        "type": { "type": "string" },
+        "read": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "readAt": { "type": "string", "format": "date-time" }
+      }
+    },
+    "StudySession": {
+      "title": "Focus Session",
+      "description": "Log of a study or focus session",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "duration": { "type": "number" },
+        "subject": { "type": "string" },
+        "category": { "type": "string" },
+        "xpEarned": { "type": "number" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      }
+    },
+    "CommunityMessage": {
+      "title": "Community Message",
+      "description": "Messages for accountability rooms",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "userName": { "type": "string" },
+        "content": { "type": "string" },
+        "roomId": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      }
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profiles and settings"
+    },
+    "/users/{userId}/decks/{deckId}": {
+      "schema": "Deck",
+      "description": "User-owned flashcard decks"
+    },
+    "/users/{userId}/decks/{deckId}/cards/{cardId}": {
+      "schema": "Flashcard",
+      "description": "User-owned spaced repetition cards"
+    },
+    "/users/{userId}/notebookNotes/{noteId}": {
+      "schema": "Note",
+      "description": "Notebook workspace notes"
+    },
+    "/users/{userId}/notebookSources/{sourceId}": {
+      "schema": "NotebookSource",
+      "description": "Notebook source documents and summaries"
+    },
+    "/users/{userId}/notifications/{notificationId}": {
+      "schema": "Notification",
+      "description": "Realtime user notifications"
+    },
+    "/studyPlans/{planId}": {
+      "schema": "StudyPlan",
+      "description": "Personalized AI Study Plans"
+    },
+    "/notes/{noteId}": {
+      "schema": "Note",
+      "description": "User study notes"
+    },
+    "/decks/{deckId}/flashcards/{cardId}": {
+      "schema": "Flashcard",
+      "description": "Spaced repetition flashcards"
+    },
+    "/studySessions/{sessionId}": {
+      "schema": "StudySession",
+      "description": "Tracked study data"
+    },
+    "/accountabilityRooms/{roomId}/messages/{messageId}": {
+      "schema": "CommunityMessage",
+      "description": "Real-time community interaction"
+    }
+  }
+}

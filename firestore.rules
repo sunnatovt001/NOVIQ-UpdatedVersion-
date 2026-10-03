@@ -1,0 +1,363 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isOwnerField() {
+      return isSignedIn() && request.resource.data.userId == request.auth.uid;
+    }
+
+    function isAdmin() {
+      return isSignedIn()
+        && (
+          request.auth.token.get("admin", false) == true
+          || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get("isAdmin", false) == true
+        );
+    }
+
+    function clientProfileMutableKeys() {
+      return [
+        "displayName",
+        "photoURL",
+        "onboarded",
+        "onboardingAnswers",
+        "goals",
+        "currentLevel",
+        "dailyTargetMinutes",
+        "showActionButtons",
+        "settings"
+      ];
+    }
+
+    function clientProfileCreateKeys() {
+      return [
+        "uid",
+        "email",
+        "displayName",
+        "photoURL",
+        "createdAt",
+        "isAdmin",
+        "onboarded",
+        "onboardingAnswers",
+        "goals",
+        "currentLevel",
+        "dailyTargetMinutes",
+        "xp",
+        "level",
+        "levelName",
+        "xpAwarded",
+        "streak",
+        "lastActive",
+        "totalStudySeconds",
+        "subscription",
+        "usage",
+        "settings",
+        "showActionButtons"
+      ];
+    }
+
+    function isDefaultClientSubscription() {
+      return !("subscription" in request.resource.data)
+        || (
+          request.resource.data.subscription.keys().hasOnly(["plan", "status"])
+          && request.resource.data.subscription.plan == "free"
+          && request.resource.data.subscription.status == "active"
+        );
+    }
+
+    function isEmptyClientUsage() {
+      return !("usage" in request.resource.data)
+        || request.resource.data.usage.keys().hasOnly([]);
+    }
+
+    function isSafeProfileCreate(userId) {
+      return isOwner(userId)
+        && request.resource.data.keys().hasOnly(clientProfileCreateKeys())
+        && request.resource.data.uid == userId
+        && (!("createdAt" in request.resource.data) || request.resource.data.createdAt is string)
+        && (!("isAdmin" in request.resource.data) || request.resource.data.isAdmin == false)
+        && (!("xp" in request.resource.data) || request.resource.data.xp == 0)
+        && (!("level" in request.resource.data) || request.resource.data.level == 1)
+        && (!("levelName" in request.resource.data) || request.resource.data.levelName == "Novice Student")
+        && (!("streak" in request.resource.data) || request.resource.data.streak == 0)
+        && (!("xpAwarded" in request.resource.data) || request.resource.data.xpAwarded.keys().hasOnly([]))
+        && (!("totalStudySeconds" in request.resource.data) || request.resource.data.totalStudySeconds == 0)
+        && isDefaultClientSubscription()
+        && isEmptyClientUsage();
+    }
+
+    function isSafeProfileUpdate() {
+      // The diff includes additions and removals, so protected fields remain
+      // immutable even on legacy profiles missing isAdmin/subscription/usage.
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(clientProfileMutableKeys());
+    }
+
+    function isPendingSubscriptionRequest() {
+      return request.resource.data.status == "pending"
+        && request.resource.data.keys().hasOnly(["action", "status", "currentPlan", "currentStatus", "createdAt", "syncStatus", "syncedAt"])
+        && request.resource.data.action in ["cancel_renewal", "update_billing"]
+        && (!("syncStatus" in request.resource.data) || request.resource.data.syncStatus in ["pending", "synced", "failed"]);
+    }
+
+    function hasValidSyncStatus() {
+      return !("syncStatus" in request.resource.data)
+        || request.resource.data.syncStatus in ["pending", "synced", "failed"];
+    }
+
+    function isProgressEventCreate(userId, eventId) {
+      return isOwner(userId)
+        && request.resource.data.keys().hasOnly(["type", "sessionId", "dayKey", "awards", "rawXp", "activity", "proposedProgressPatch", "createdAt", "syncStatus", "syncedAt", "status"])
+        && request.resource.data.type in ["daily_activity", "xp_award", "study_session"]
+        && request.resource.data.createdAt is string
+        && (request.resource.data.type != "study_session"
+          || (request.resource.data.sessionId is string && eventId == "session-" + request.resource.data.sessionId))
+        && (!("status" in request.resource.data) || request.resource.data.status == "pending")
+        && (!("rawXp" in request.resource.data) || (request.resource.data.rawXp is number && request.resource.data.rawXp >= 0 && request.resource.data.rawXp <= 30))
+        && hasValidSyncStatus();
+    }
+
+    function isAnalyticsEventCreate() {
+      return isSignedIn()
+        && request.resource.data.keys().hasOnly(["userId", "eventType", "xp", "details", "page", "createdAt", "syncStatus", "syncedAt"])
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.eventType is string
+        && request.resource.data.eventType.matches('^[a-z_]{1,64}$')
+        && (!("xp" in request.resource.data) || request.resource.data.xp <= 500)
+        && hasValidSyncStatus();
+    }
+
+    function onlySyncMetadataChanged() {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(["syncStatus", "syncedAt"])
+        && hasValidSyncStatus();
+    }
+
+    // Default deny. Every working app path is explicitly opened below.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // User profile. Server-owned fields cannot be changed by the client.
+    match /users/{userId} {
+      allow create: if isSafeProfileCreate(userId) || isAdmin();
+      allow read: if isOwner(userId) || isAdmin();
+      allow update: if (isOwner(userId) && isSafeProfileUpdate()) || isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // Admin collection group reads for Founder Control Center.
+    match /{path=**}/studySessions/{docId} {
+      allow read: if isAdmin();
+      allow create, update, delete: if false;
+    }
+
+    match /{path=**}/progressEvents/{docId} {
+      allow read: if isAdmin();
+      allow create, update, delete: if false;
+    }
+
+    match /{path=**}/notebookNotes/{docId} {
+      allow read: if isAdmin();
+      allow create, update, delete: if false;
+    }
+
+    match /{path=**}/notebookMessages/{docId} {
+      allow read: if isAdmin();
+      allow create, update, delete: if false;
+    }
+
+    match /{path=**}/tutorMessages/{docId} {
+      allow read: if isAdmin();
+      allow create, update, delete: if false;
+    }
+
+    match /{path=**}/decks/{docId} {
+      allow read: if isAdmin();
+      allow create, update, delete: if false;
+    }
+
+    match /{path=**}/trusted/{docId} {
+      allow read: if isAdmin();
+      allow create, update, delete: if false;
+    }
+
+    match /{path=**}/subscriptionRequests/{docId} {
+      allow read: if isAdmin();
+      allow create, update, delete: if false;
+    }
+
+    match /{path=**}/subscriptionCheckouts/{docId} {
+      allow read: if isAdmin();
+      allow create, update, delete: if false;
+    }
+
+    // AI Tutor chat memory.
+    match /users/{userId}/tutorMessages/{messageId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow create, update, delete: if isOwner(userId);
+    }
+
+    // Decks and flashcards.
+    match /users/{userId}/decks/{deckId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow create, update, delete: if isOwner(userId);
+
+      match /cards/{cardId} {
+        allow read: if isOwner(userId) || isAdmin();
+        allow create, update, delete: if isOwner(userId);
+      }
+    }
+
+    // NotebookLM-style workspace.
+    match /users/{userId}/notebookNotes/{noteId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow create, update, delete: if isOwner(userId);
+    }
+
+    match /users/{userId}/notebookSources/{sourceId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow create, update, delete: if isOwner(userId);
+    }
+
+    match /users/{userId}/notebookMessages/{messageId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow create, update, delete: if isOwner(userId);
+    }
+
+    // Realtime notification center.
+    match /users/{userId}/notifications/{notificationId} {
+      allow create, read, update, delete: if isOwner(userId);
+    }
+
+    // Dashboard journals, roadmap tasks, and user-scoped session history.
+    match /users/{userId}/journals/{journalId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow create, update, delete: if isOwner(userId);
+    }
+
+    match /users/{userId}/roadmapTasks/{taskId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow create, update, delete: if isOwner(userId);
+    }
+
+    match /users/{userId}/studySessions/{sessionId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow create: if false;
+      allow update: if isOwner(userId) && onlySyncMetadataChanged();
+      allow delete: if false;
+    }
+
+    match /users/{userId}/progressEvents/{eventId} {
+      allow create: if isProgressEventCreate(userId, eventId);
+      allow read: if isOwner(userId) || isAdmin();
+      allow delete: if false;
+      allow update: if isOwner(userId) && onlySyncMetadataChanged();
+    }
+
+    // Trusted server-owned progress. Cloud Functions/Admin SDK bypass rules for writes.
+    match /users/{userId}/trusted/{docId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow create, update, delete: if false;
+    }
+
+    match /users/{userId}/subscriptionCheckouts/{checkoutId} {
+      allow create: if false;
+      allow read: if isOwner(userId) || isAdmin();
+      allow update: if isOwner(userId) && onlySyncMetadataChanged();
+      allow delete: if false;
+    }
+
+    match /users/{userId}/subscriptionRequests/{requestId} {
+      allow create: if isOwner(userId) && isPendingSubscriptionRequest();
+      allow read: if isOwner(userId) || isAdmin();
+      allow update: if isOwner(userId) && onlySyncMetadataChanged();
+      allow delete: if false;
+    }
+
+    match /users/{userId}/planner/{plannerId} {
+      allow create, read, update, delete: if isOwner(userId);
+    }
+
+    match /users/{userId}/joinedCommunities/{communityId} {
+      allow read: if isOwner(userId);
+      allow write: if false;
+    }
+    match /users/{userId}/friendInvites/{inviteId} {
+      allow read: if isOwner(userId);
+      allow write: if false;
+    }
+    match /users/{userId}/friends/{friendId} {
+      allow read: if isOwner(userId);
+      allow write: if false;
+    }
+    match /communities/{communityId} {
+      allow read: if isSignedIn();
+      allow write: if false;
+      match /members/{memberId} {
+        allow read: if isOwner(memberId) || isAdmin();
+        allow write: if false;
+      }
+      match /messages/{messageId} {
+        allow read: if isSignedIn() && exists(/databases/$(database)/documents/communities/$(communityId)/members/$(request.auth.uid));
+        allow write: if false;
+      }
+    }
+
+    match /analytics/{docId} {
+      allow write: if false;
+      allow read: if isAdmin();
+    }
+
+    match /analyticsUsers/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow create, update, delete: if false;
+    }
+
+    match /analyticsEvents/{eventId} {
+      allow create: if isAnalyticsEventCreate();
+      allow read: if isAdmin();
+      allow update: if isSignedIn()
+        && resource.data.userId == request.auth.uid
+        && onlySyncMetadataChanged();
+      allow delete: if false;
+    }
+
+
+    // Legacy root collections kept for older pages that still store userId.
+    match /studyPlans/{planId} {
+      allow read: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow create: if false;
+      allow update, delete: if false;
+    }
+
+    match /notes/{noteId} {
+      allow read: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow create: if false;
+      allow update, delete: if false;
+    }
+
+    match /decks/{deckId}/flashcards/{cardId} {
+      allow read: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow create: if false;
+      allow update, delete: if false;
+    }
+
+    match /studySessions/{sessionId} {
+      allow read: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow create: if false;
+      allow update, delete: if false;
+    }
+
+    match /accountabilityRooms/{roomId}/messages/{messageId} {
+      allow read: if isSignedIn();
+      allow create: if isOwnerField();
+      allow update, delete: if isSignedIn() && resource.data.userId == request.auth.uid;
+    }
+  }
+}

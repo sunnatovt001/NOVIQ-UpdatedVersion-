@@ -1,0 +1,13 @@
+User-agent: *
+Allow: /
+Disallow: /dashboard
+Disallow: /planner
+Disallow: /notes
+Disallow: /tutor
+Disallow: /flashcards
+Disallow: /focus
+Disallow: /analytics
+Disallow: /profile
+Disallow: /admin
+
+Sitemap: https://noviq.app/sitemap.xml

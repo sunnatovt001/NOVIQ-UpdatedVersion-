@@ -1,0 +1,14 @@
+{
+  "name": "Noviq",
+  "description": "An AI Study Operating System for exam preparation and academic success across IELTS, SAT, HSK, CEFR, school subjects, and university entrance exams.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ],
+  "majorCapabilities": [
+    "AI Study Planner",
+    "Smart Notes",
+    "Focus Mode",
+    "Daily Roadmap"
+  ]
+}

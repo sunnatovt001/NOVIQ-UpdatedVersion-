@@ -1,0 +1,632 @@
+const test = require("node:test");
+const assert = require("node:assert/strict");
+const vm = require("node:vm");
+const fs = require("node:fs");
+const crypto = require("node:crypto");
+
+// Exercise the exported handlers against an isolated transaction store. No
+// Firebase credentials, Gemini calls, Telegram messages or payments are made.
+function harness(env = {}) {
+  const records = new Map();
+  const stamp = (date) => ({ toDate: () => new Date(date) });
+  const merge = (base, patch) => {
+    const result = { ...base };
+    for (const [key, value] of Object.entries(patch)) {
+      if (value?.increment !== undefined)
+        result[key] = (Number(result[key]) || 0) + value.increment;
+      else if (
+        value &&
+        typeof value === "object" &&
+        !Array.isArray(value) &&
+        !value.toDate
+      )
+        result[key] = merge(result[key] || {}, value);
+      else result[key] = value;
+    }
+    return result;
+  };
+  const ref = (path) => ({
+    path,
+    collection: (name) => collection(`${path}/${name}`),
+    get: async () => snapshot(path),
+    set: async (data, opts) => write(path, data, opts),
+    create: async (data) => {
+      if (records.has(path))
+        throw Object.assign(new Error("exists"), { code: 6 });
+      write(path, data);
+    },
+  });
+  const collection = (path) => ({
+    path,
+    doc: (id = crypto.randomBytes(8).toString("hex")) => ref(`${path}/${id}`),
+    limit: () => ({ queryPath: path }),
+  });
+  const snapshot = (path) => ({
+    exists: records.has(path),
+    data: () => records.get(path),
+    ref: ref(path),
+  });
+  const write = (path, data, opts) =>
+    records.set(path, merge(opts?.merge ? records.get(path) || {} : {}, data));
+  let tail = Promise.resolve();
+  const db = {
+    doc: ref,
+    collection,
+    runTransaction: (fn) => {
+      const run = tail.then(async () => {
+        const pending = [];
+        const tx = {
+          get: async (target) =>
+            target.queryPath
+              ? {
+                  empty: ![...records.keys()].some((key) =>
+                    key.startsWith(`${target.queryPath}/`),
+                  ),
+                }
+              : snapshot(target.path),
+          set: (target, data, opts) =>
+            pending.push(() => write(target.path, data, opts)),
+          create: (target, data) => {
+            if (records.has(target.path)) throw new Error("exists");
+            pending.push(() => write(target.path, data));
+          },
+          update: (target, data) =>
+            pending.push(() => write(target.path, data, { merge: true })),
+          delete: (target) => pending.push(() => records.delete(target.path)),
+        };
+        const result = await fn(tx);
+        pending.forEach((operation) => operation());
+        return result;
+      });
+      tail = run.catch(() => {});
+      return run;
+    },
+  };
+  class HttpsError extends Error {
+    constructor(code, message) {
+      super(message);
+      this.code = code;
+    }
+  }
+  const handler = (...args) => args.at(-1);
+  const services = {
+    "firebase-admin": { initializeApp() {}, auth: () => ({}) },
+    "firebase-admin/firestore": {
+      getFirestore: () => db,
+      FieldValue: {
+        increment: (increment) => ({ increment }),
+        serverTimestamp: () => stamp(Date.now()),
+      },
+      Timestamp: {
+        fromDate: stamp,
+        fromMillis: stamp,
+        now: () => stamp(Date.now()),
+      },
+    },
+    "firebase-functions/v2": {
+      logger: { info() {}, warn() {}, error() {} },
+      setGlobalOptions() {},
+    },
+    "firebase-functions/v2/firestore": { onDocumentCreated: handler },
+    "firebase-functions/v2/https": {
+      onCall: handler,
+      onRequest: handler,
+      HttpsError,
+    },
+    "firebase-functions/v2/scheduler": { onSchedule: handler },
+    "node:crypto": crypto,
+    "./policy": require("./policy"),
+    "./community": require("./community"),
+  };
+  const context = {
+    exports: {},
+    require: (name) => services[name],
+    process: {
+      env: {
+        GEMINI_API_KEY: "test-key",
+        PAYMENT_WEBHOOK_SECRET: "payment-secret",
+        TELEGRAM_BOT_TOKEN: "test-bot",
+        TELEGRAM_WEBHOOK_SECRET: "telegram-secret",
+        ...env,
+      },
+    },
+    Buffer,
+    Date,
+    Intl,
+    URL,
+    AbortSignal,
+    fetch: async () => ({
+      ok: true,
+      json: async () => ({
+        candidates: [{ content: { parts: [{ text: "answer" }] } }],
+      }),
+    }),
+  };
+  vm.runInNewContext(fs.readFileSync(`${__dirname}/index.js`, "utf8"), context);
+  records.set("users/u1", {
+    uid: "u1",
+    xp: 0,
+    subscription: { plan: "free", status: "active" },
+    dailyTargetMinutes: 30,
+  });
+  const response = () => ({
+    code: 200,
+    status(code) {
+      this.code = code;
+      return this;
+    },
+    send(value) {
+      this.body = value;
+    },
+    json(value) {
+      this.body = value;
+    },
+  });
+  return { functions: context.exports, records, snapshot, response, stamp };
+}
+const auth = { uid: "u1", token: {} };
+
+test("AI requires authentication and rejects concurrent quota overflow", async () => {
+  const h = harness();
+  await assert.rejects(
+    h.functions.generateAiResponse({ data: { contents: "hello" } }),
+    { code: "unauthenticated" },
+  );
+  const results = await Promise.allSettled(
+    Array.from({ length: 6 }, () =>
+      h.functions.generateAiResponse({
+        auth,
+        data: { contents: "hello", feature: "tutor" },
+      }),
+    ),
+  );
+  assert.equal(results.filter((item) => item.status === "fulfilled").length, 5);
+  assert.equal(
+    results.filter((item) => item.status === "rejected")[0].reason.message,
+    "AI_DAILY_LIMIT",
+  );
+});
+test("analytics retry increments nested counters exactly once", async () => {
+  const h = harness();
+  h.records.set("analyticsEvents/e1", {
+    userId: "u1",
+    eventType: "site_visit",
+    details: { pageViews: 99999 },
+  });
+  const event = { data: { ref: h.snapshot("analyticsEvents/e1").ref } };
+  await Promise.all([
+    h.functions.onAnalyticsEventCreated(event),
+    h.functions.onAnalyticsEventCreated(event),
+  ]);
+  assert.equal(h.records.get("analytics/summary").pageViews, 1);
+  assert.equal(h.records.get("analytics/summary").eventCounts.site_visit, 1);
+  assert.equal(h.records.get("analyticsUsers/u1").pageViews, 1);
+});
+test("forged XP awards do not earn raw XP or invented bonuses", async () => {
+  const h = harness();
+  h.records.set("users/u1/progressEvents/e1", {
+    type: "xp_award",
+    rawXp: 30,
+    awards: [
+      { key: "bonus:monthly-goals:fake" },
+      { key: "daily-mission-complete:fake" },
+    ],
+  });
+  await h.functions.onProgressEventCreated({
+    params: { userId: "u1", eventId: "e1" },
+  });
+  assert.equal(h.records.get("users/u1").xp, 5);
+  h.records.set("users/u1/progressEvents/e2", { type: "xp_award", rawXp: 30 });
+  await h.functions.onProgressEventCreated({
+    params: { userId: "u1", eventId: "e2" },
+  });
+  assert.equal(h.records.get("users/u1").xp, 5);
+});
+test("study session completion requires a server-issued start and caps elapsed time", async () => {
+  const h = harness();
+  const sessionId = "a".repeat(32);
+  await assert.rejects(
+    h.functions.completeStudySession({
+      auth,
+      data: { sessionId, duration: 3600, subject: "Math" },
+    }),
+    { code: "failed-precondition" },
+  );
+  h.records.set("users/u1/trusted/activeSession", {
+    id: sessionId,
+    category: "focus",
+    startedAt: h.stamp(Date.now() - 120000),
+    completed: false,
+  });
+  const request = {
+    auth,
+    data: { sessionId, duration: 3600, subject: "Math" },
+  };
+  await Promise.all([
+    h.functions.completeStudySession(request),
+    h.functions.completeStudySession(request),
+  ]);
+  assert.ok(
+    h.records.get(`users/u1/studySessions/${sessionId}`).duration <= 121,
+  );
+  assert.equal(
+    h.records.get(`users/u1/studySessions/${sessionId}`).xpEarned,
+    2,
+  );
+});
+test("valid session triggers can arrive out of order without losing or duplicating XP", async () => {
+  const h = harness();
+  const now = Date.now();
+  for (const [id, ended] of [
+    ["early", now - 300000],
+    ["late", now - 120000],
+  ]) {
+    h.records.set(`users/u1/studySessions/${id}`, {
+      userId: "u1",
+      verified: true,
+      category: "focus",
+      duration: 60,
+      timestamp: new Date(ended).toISOString(),
+      xpEarned: 99999,
+    });
+    h.records.set(`users/u1/progressEvents/session-${id}`, {
+      type: "study_session",
+      sessionId: id,
+    });
+  }
+  for (const id of ["late", "early", "late"]) {
+    await h.functions.onProgressEventCreated({
+      params: { userId: "u1", eventId: `session-${id}` },
+    });
+  }
+  assert.equal(h.records.get("users/u1").xp, 7);
+  assert.equal(h.records.get("users/u1").totalStudySeconds, 120);
+  assert.equal(
+    h.records.get("users/u1").lastStudySessionAt,
+    new Date(now - 120000).toISOString(),
+  );
+});
+test("unconfigured online payments fail before creating a checkout", async () => {
+  const h = harness();
+  await assert.rejects(
+    h.functions.createSubscriptionCheckout({
+      auth,
+      data: { billingCycle: "monthly", provider: "click", amount: 1 },
+    }),
+    { code: "failed-precondition" },
+  );
+  assert.equal(
+    [...h.records.keys()].filter((key) => key.includes("subscriptionCheckouts"))
+      .length,
+    0,
+  );
+});
+test("payment validation rejects a wrong amount and replay does not extend subscription", async () => {
+  const h = harness();
+  const checkout = {
+    plan: "pro",
+    provider: "click",
+    billingCycle: "monthly",
+    amount: 39000,
+    currency: "UZS",
+    status: "pending",
+  };
+  h.records.set("users/u1/subscriptionCheckouts/c1", checkout);
+  const body = {
+    userId: "u1",
+    checkoutId: "c1",
+    provider: "click",
+    amount: 1,
+    currency: "UZS",
+    transactionId: "tx1",
+  };
+  const request = { method: "POST", get: () => "payment-secret", body };
+  let res = h.response();
+  await h.functions.paymentWebhook(request, res);
+  assert.equal(res.code, 400);
+  body.amount = 39000;
+  res = h.response();
+  await h.functions.paymentWebhook(request, res);
+  assert.equal(res.code, 200);
+  const periodEnd = h.records.get("users/u1").subscription.currentPeriodEnd;
+  await h.functions.paymentWebhook(request, h.response());
+  assert.equal(
+    h.records.get("users/u1").subscription.currentPeriodEnd,
+    periodEnd,
+  );
+});
+test("Telegram rejects UID linking, expired tokens and token reuse", async () => {
+  const h = harness();
+  const token = (await h.functions.createTelegramLink({ auth })).token;
+  const call = async (payload) => {
+    const res = h.response();
+    await h.functions.telegramWebhook(
+      {
+        method: "POST",
+        get: () => "telegram-secret",
+        body: {
+          message: {
+            text: `/start link_${payload}`,
+            chat: { id: 123456, type: "private" },
+            from: {},
+          },
+        },
+      },
+      res,
+    );
+    return res;
+  };
+  assert.equal((await call("u1")).body.linked, false);
+  assert.equal((await call(token)).body.linked, true);
+  assert.equal((await call(token)).body.linked, false);
+  const expired = (await h.functions.createTelegramLink({ auth })).token;
+  const hash = crypto.createHash("sha256").update(expired).digest("hex");
+  h.records.get(`telegramLinks/${hash}`).expiresAt = h.stamp(Date.now() - 1000);
+  assert.equal((await call(expired)).body.linked, false);
+});
+
+test("independent study contexts resume and survive another task starting", async () => {
+  const h = harness();
+  const focus = await h.functions.startStudySession({
+    auth,
+    data: { category: "focus", context: "focus" },
+  });
+  const planner = await h.functions.startStudySession({
+    auth,
+    data: { category: "quiz", context: "planner-task" },
+  });
+  assert.notEqual(focus.sessionId, planner.sessionId);
+  const resumed = await h.functions.startStudySession({
+    auth,
+    data: { category: "quiz", context: "planner-task" },
+  });
+  assert.equal(resumed.sessionId, planner.sessionId);
+  assert.equal(resumed.resumed, true);
+  h.records.get(`users/u1/trusted/start-${focus.sessionId}`).startedAt =
+    h.stamp(Date.now() - 240000);
+  h.records.get(`users/u1/trusted/start-${planner.sessionId}`).startedAt =
+    h.stamp(Date.now() - 240000);
+  await h.functions.completeStudySession({
+    auth,
+    data: { sessionId: focus.sessionId, duration: 120, subject: "Focus" },
+  });
+  await h.functions.completeStudySession({
+    auth,
+    data: { sessionId: planner.sessionId, duration: 120, subject: "Quiz" },
+  });
+  assert.equal(
+    h.records.get(`users/u1/studySessions/${planner.sessionId}`).duration,
+    120,
+  );
+  const fresh = await h.functions.startStudySession({
+    auth,
+    data: { category: "quiz", context: "planner-task" },
+  });
+  assert.notEqual(fresh.sessionId, planner.sessionId);
+});
+test("parallel timers cannot credit more time than the server wall clock", async () => {
+  const h = harness();
+  const starts = await Promise.all(
+    ["focus", "planner"].map((context) =>
+      h.functions.startStudySession({
+        auth,
+        data: { category: "focus", context },
+      }),
+    ),
+  );
+  for (const start of starts)
+    h.records.get(`users/u1/trusted/start-${start.sessionId}`).startedAt =
+      h.stamp(Date.now() - 120000);
+  await h.functions.completeStudySession({
+    auth,
+    data: { sessionId: starts[0].sessionId, duration: 120, subject: "Focus" },
+  });
+  await assert.rejects(
+    h.functions.completeStudySession({
+      auth,
+      data: {
+        sessionId: starts[1].sessionId,
+        duration: 120,
+        subject: "Planner",
+      },
+    }),
+    { code: "failed-precondition" },
+  );
+});
+test("community membership writes are atomic and repeat joins/leaves preserve counts", async () => {
+  const h = harness();
+  h.records.set("users/u2", { displayName: "Friend" });
+  const { communityId } = await h.functions.createCommunity({
+    auth,
+    data: { name: "Study together", description: "Practice" },
+  });
+  assert.equal(h.records.get(`communities/${communityId}`).membersCount, 1);
+  assert.equal(
+    h.records.get(`users/u1/joinedCommunities/${communityId}`).role,
+    "owner",
+  );
+  const friend = { uid: "u2", token: {} };
+  await Promise.all(
+    [1, 2].map(() =>
+      h.functions.joinCommunity({ auth: friend, data: { communityId } }),
+    ),
+  );
+  assert.equal(h.records.get(`communities/${communityId}`).membersCount, 2);
+  await assert.rejects(
+    h.functions.leaveCommunity({ auth, data: { communityId } }),
+    { code: "failed-precondition" },
+  );
+  await Promise.all(
+    [1, 2].map(() =>
+      h.functions.leaveCommunity({ auth: friend, data: { communityId } }),
+    ),
+  );
+  assert.equal(h.records.get(`communities/${communityId}`).membersCount, 1);
+  assert.equal(
+    h.records.has(`users/u2/joinedCommunities/${communityId}`),
+    false,
+  );
+});
+test("chat requires membership, preserves retry IDs and limits message spam", async () => {
+  const h = harness(),
+    communityId = "room";
+  const request = {
+    auth,
+    data: { communityId, content: "Hello", messageId: "message-1" },
+  };
+  await assert.rejects(h.functions.sendCommunityMessage(request), {
+    code: "permission-denied",
+  });
+  h.records.set("communities/room/members/u1", { displayName: "Student" });
+  await Promise.all(
+    [1, 2].map(() => h.functions.sendCommunityMessage(request)),
+  );
+  assert.equal(h.records.get("users/u1/trusted/communityMessageRate").count, 1);
+  assert.equal(
+    h.records.get("communities/room/messages/message-1").displayName,
+    "Student",
+  );
+  await assert.rejects(
+    h.functions.sendCommunityMessage({
+      ...request,
+      data: { ...request.data, content: "Changed" },
+    }),
+    { code: "already-exists" },
+  );
+  const results = await Promise.allSettled(
+    Array.from({ length: 31 }, (_, i) =>
+      h.functions.sendCommunityMessage({
+        auth,
+        data: { communityId, content: "Message", messageId: `next-${i}` },
+      }),
+    ),
+  );
+  assert.equal(results.filter((r) => r.status === "fulfilled").length, 29);
+  await assert.rejects(
+    h.functions.sendCommunityMessage({
+      auth,
+      data: { communityId, content: "x".repeat(2001), messageId: "large" },
+    }),
+    { code: "invalid-argument" },
+  );
+});
+test("friend invites require the intended verified recipient and create reciprocal friendships once", async () => {
+  const h = harness(),
+    sender = {
+      uid: "u1",
+      token: { email: "sender@example.com", email_verified: true },
+    },
+    recipient = {
+      uid: "u2",
+      token: { email: "friend@example.com", email_verified: true },
+    };
+  h.records.set("users/u2", { displayName: "Friend" });
+  const { token } = await h.functions.createFriendInvite({
+    auth: sender,
+    data: { email: "FRIEND@example.com" },
+  });
+  await assert.rejects(
+    h.functions.acceptFriendInvite({ auth: sender, data: { token } }),
+    { code: "permission-denied" },
+  );
+  await assert.rejects(
+    h.functions.acceptFriendInvite({
+      auth: {
+        uid: "u3",
+        token: { email: "stranger@example.com", email_verified: true },
+      },
+      data: { token },
+    }),
+    { code: "permission-denied" },
+  );
+  await assert.rejects(
+    h.functions.acceptFriendInvite({
+      auth: {
+        ...recipient,
+        token: { email: "friend@example.com", email_verified: false },
+      },
+      data: { token },
+    }),
+    { code: "failed-precondition" },
+  );
+  const preview = await h.functions.getFriendInvite({
+    auth: recipient,
+    data: { token },
+  });
+  assert.equal(preview.status, "pending");
+  await Promise.all(
+    [1, 2].map(() =>
+      h.functions.acceptFriendInvite({ auth: recipient, data: { token } }),
+    ),
+  );
+  assert.equal(
+    h.records.get("users/u1/friends/u2").email,
+    "friend@example.com",
+  );
+  assert.equal(
+    h.records.get("users/u2/friends/u1").email,
+    "sender@example.com",
+  );
+  assert.equal(
+    h.records.get(`users/u1/friendInvites/${token}`).status,
+    "accepted",
+  );
+});
+test("expired invitations and self invitations are rejected", async () => {
+  const h = harness(),
+    sender = { uid: "u1", token: { email: "sender@example.com" } };
+  await assert.rejects(
+    h.functions.createFriendInvite({
+      auth: sender,
+      data: { email: "sender@example.com" },
+    }),
+    { code: "invalid-argument" },
+  );
+  const { token } = await h.functions.createFriendInvite({
+    auth: sender,
+    data: { email: "friend@example.com" },
+  });
+  h.records.get(`friendInvitations/${token}`).expiresAt = new Date(
+    Date.now() - 1000,
+  ).toISOString();
+  await assert.rejects(
+    h.functions.acceptFriendInvite({
+      auth: {
+        uid: "u2",
+        token: { email: "friend@example.com", email_verified: true },
+      },
+      data: { token },
+    }),
+    { code: "deadline-exceeded" },
+  );
+});
+
+test("expired study proofs restart cleanly and cannot complete old work", async () => {
+  const h = harness();
+  const original = await h.functions.startStudySession({
+    auth,
+    data: { category: "quiz", context: "planner-expired" },
+  });
+  const key = crypto
+    .createHash("sha256")
+    .update("planner-expired")
+    .digest("hex");
+  for (const path of [
+    `users/u1/trusted/session-${key}`,
+    `users/u1/trusted/start-${original.sessionId}`,
+  ])
+    h.records.get(path).startedAt = h.stamp(Date.now() - 9 * 3600000);
+  const restarted = await h.functions.startStudySession({
+    auth,
+    data: { category: "quiz", context: "planner-expired" },
+  });
+  assert.equal(restarted.resumed, false);
+  assert.notEqual(restarted.sessionId, original.sessionId);
+  await assert.rejects(
+    h.functions.completeStudySession({
+      auth,
+      data: { sessionId: original.sessionId, duration: 120, subject: "Quiz" },
+    }),
+    { code: "failed-precondition" },
+  );
+});

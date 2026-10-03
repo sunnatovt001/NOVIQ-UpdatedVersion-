@@ -1,0 +1,63 @@
+{
+  "name": "noviq",
+  "private": true,
+  "version": "1.0.0",
+  "description": "AI-powered study platform for students with planner, tutor, notebook, and focus tools",
+  "keywords": [
+    "ai",
+    "study",
+    "planner",
+    "tutor",
+    "notebook",
+    "education"
+  ],
+  "author": "Noviq AI",
+  "homepage": "https://noviq.app",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/noviq/noviq"
+  },
+  "type": "module",
+  "scripts": {
+    "dev": "vite --port=3000 --host=0.0.0.0",
+    "build": "vite build",
+    "preview": "vite preview",
+    "clean": "node -e \"require('node:fs').rmSync('dist', {recursive:true, force:true})\"",
+    "lint": "tsc --noEmit",
+    "test": "node --test tests/*.test.cjs && npm --prefix functions test",
+    "test:rules": "npx firebase-tools emulators:exec --project demo-noviq --config firebase.emulators.json --only firestore \"node --test tests/firestore.rules.cjs\"",
+    "deploy:hosting": "npm run build && npx --yes firebase-tools deploy --only hosting --project gen-lang-client-0937997111",
+    "deploy": "npm run build && npx --yes firebase-tools deploy --only hosting,firestore:ai-studio-b3129ca2-3cf9-4d3f-bf24-5a6d266fe7a1 --project gen-lang-client-0937997111",
+    "deploy:full": "npm run build && npx --yes firebase-tools deploy --only hosting,functions,firestore:ai-studio-b3129ca2-3cf9-4d3f-bf24-5a6d266fe7a1,storage --project gen-lang-client-0937997111",
+    "deploy:functions": "npx --yes firebase-tools deploy --only functions --project gen-lang-client-0937997111",
+    "deploy:rules": "npx --yes firebase-tools deploy --only firestore:ai-studio-b3129ca2-3cf9-4d3f-bf24-5a6d266fe7a1,storage --project gen-lang-client-0937997111"
+  },
+  "dependencies": {
+    "clsx": "^2.1.1",
+    "date-fns": "^4.1.0",
+    "firebase": "^12.13.0",
+    "lucide-react": "^0.546.0",
+    "mammoth": "^1.4.20",
+    "motion": "^12.23.24",
+    "react": "^19.0.1",
+    "react-dom": "^19.0.1",
+    "react-markdown": "^10.1.0",
+    "recharts": "^3.8.1",
+    "tailwind-merge": "^3.6.0"
+  },
+  "overrides": {
+    "@grpc/grpc-js": "^1.14.5"
+  },
+  "devDependencies": {
+    "@firebase/rules-unit-testing": "^5.0.2",
+    "@tailwindcss/vite": "^4.1.14",
+    "@types/node": "^22.14.0",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^5.0.4",
+    "autoprefixer": "^10.4.21",
+    "tailwindcss": "^4.1.14",
+    "typescript": "~5.8.2",
+    "vite": "^6.2.3"
+  }
+}

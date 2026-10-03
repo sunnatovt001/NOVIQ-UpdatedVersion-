@@ -1,0 +1,36 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    function isOwner(userId) {
+      return request.auth != null && request.auth.uid == userId;
+    }
+
+    function isImage() {
+      return request.resource.contentType.matches('image/.*');
+    }
+
+    function under(sizeInMb) {
+      return request.resource.size < sizeInMb * 1024 * 1024;
+    }
+
+    match /users/{userId}/avatars/{fileName} {
+      allow read, delete: if isOwner(userId);
+      allow create, update: if isOwner(userId) && isImage() && under(8);
+    }
+
+    match /users/{userId}/flashcards/{deckId}/{fileName} {
+      allow read, delete: if isOwner(userId);
+      allow create, update: if isOwner(userId) && isImage() && under(8);
+    }
+
+    match /users/{userId}/notebookSources/{fileName} {
+      allow read, delete: if isOwner(userId);
+      allow create, update: if isOwner(userId) && under(25);
+    }
+
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

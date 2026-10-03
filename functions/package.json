@@ -1,0 +1,19 @@
+{
+  "name": "noviq-functions",
+  "private": true,
+  "engines": {
+    "node": "20"
+  },
+  "main": "index.js",
+  "scripts": {
+    "lint": "node --check index.js && node --check policy.js && node --check community.js",
+    "test": "node --test *.test.js"
+  },
+  "dependencies": {
+    "firebase-admin": "^13.0.0",
+    "firebase-functions": "^6.0.0"
+  },
+  "overrides": {
+    "uuid": "^11.1.1"
+  }
+}

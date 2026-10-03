@@ -1,0 +1,745 @@
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { useAuth } from "@/src/contexts/AuthContext";
+import {
+  LayoutDashboard,
+  BookOpen,
+  MessageSquare,
+  Timer,
+  Calendar,
+  Layers,
+  Users,
+  User,
+  BarChart3,
+  LogOut,
+  Sparkles,
+  Menu,
+  X,
+  ChevronRight,
+  Flame,
+  Bell,
+  CreditCard,
+  Moon,
+  Sun,
+  ChevronsLeft,
+  ChevronsRight,
+} from "lucide-react";
+import { cn } from "@/src/lib/utils";
+import { motion, AnimatePresence } from "motion/react";
+import {
+  addDoc,
+  collection,
+  doc,
+  getDoc,
+  getDocs,
+  limit,
+  onSnapshot,
+  orderBy,
+  query,
+  serverTimestamp,
+  setDoc,
+  updateDoc,
+} from "firebase/firestore";
+import { db } from "@/src/lib/firebase";
+import { getAppErrorMessage } from "@/src/lib/errors";
+import { calculateLevelName, getLocalDayKey } from "@/src/lib/progress";
+import { FloatingTutor } from "@/src/components/FloatingTutor";
+import type { UserProfile } from "@/src/types";
+import {
+  getNotificationPreferences,
+  shouldShowPreferenceNotification,
+  type NotificationPreferenceKey,
+} from "@/src/lib/preferences";
+
+interface SidebarItemProps {
+  id: string;
+  icon: React.ReactNode;
+  label: string;
+  active: boolean;
+  collapsed: boolean;
+  onClick: (id: string) => void;
+}
+
+const SidebarItem = ({ id, icon, label, active, collapsed, onClick }: SidebarItemProps) => (
+  <button
+    onClick={() => onClick(id)}
+    aria-current={active ? "page" : undefined}
+    aria-label={label}
+    title={collapsed ? label : undefined}
+    className={cn(
+      "w-full flex items-center gap-4 px-5 py-3.5 rounded-2xl transition-all duration-300 group relative border",
+      collapsed && "lg:mx-auto lg:h-[3.25rem] lg:w-[3.25rem] lg:justify-center lg:gap-0 lg:px-0 lg:py-0",
+      active 
+        ? "border-[#3F7D58]/25 bg-[#F0FDF4] text-[#2F6145]" 
+        : "border-transparent text-[#6B7280] hover:border-[#E5E7EB] hover:bg-white hover:text-[#111827]"
+    )}
+  >
+    <div className={cn(
+      "transition-all duration-300", 
+      active ? "scale-110 text-[#3F7D58]" : "group-hover:scale-110 group-hover:text-[#3F7D58]"
+    )}>
+      {icon}
+    </div>
+    <span className={cn(
+      "font-bold text-sm tracking-tight transition-all duration-300",
+      active ? "translate-x-1" : "group-hover:translate-x-1",
+      collapsed && "lg:hidden"
+    )}>
+      {label}
+    </span>
+    
+    {active && !collapsed ? (
+      <motion.div 
+        layoutId="active-pill"
+        className="ml-auto h-1.5 w-1.5 rounded-full bg-[#3F7D58]"
+      />
+    ) : !collapsed ? (
+      <ChevronRight size={14} className="ml-auto -translate-x-2 text-[#9CA3AF] opacity-0 transition-all group-hover:translate-x-0 group-hover:opacity-100" />
+    ) : (
+      <span className={cn("absolute right-1.5 hidden h-1.5 w-1.5 rounded-full lg:block", active ? "bg-[#3F7D58]" : "bg-transparent")} />
+    )}
+  </button>
+);
+
+const LOGO_SRC = "/noviq-logo.jpeg";
+type AppTheme = "light" | "dark";
+
+interface AppNotification {
+  id: string;
+  title: string;
+  body: string;
+  type: "streak" | "reminder" | "review" | "ai" | "system";
+  read: boolean;
+  preference?: NotificationPreferenceKey;
+  createdAt?: { toMillis?: () => number };
+}
+
+const notificationIconClass: Record<AppNotification["type"], string> = {
+  streak: "bg-amber-50 text-amber-600",
+  reminder: "bg-[#F0FDF4] text-[#3F7D58]",
+  review: "bg-[#F0FDF4] text-[#3F7D58]",
+  ai: "bg-[#F0FDF4] text-[#3F7D58]",
+  system: "bg-slate-100 text-slate-600",
+};
+
+const formatNotificationTime = (notification: AppNotification) => {
+  const timestamp = notification.createdAt?.toMillis?.();
+  if (!timestamp) return "Now";
+
+  const minutes = Math.round((Date.now() - timestamp) / 60000);
+  if (minutes < 1) return "Now";
+  if (minutes < 60) return `${minutes}m ago`;
+  if (minutes < 1440) return `${Math.round(minutes / 60)}h ago`;
+  return `${Math.round(minutes / 1440)}d ago`;
+};
+
+const todayKey = () => getLocalDayKey();
+
+const parseProfileDate = (value?: string | null) => {
+  if (!value) return null;
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+};
+
+const dayDistanceFromToday = (value?: string | null) => {
+  const parsed = parseProfileDate(value);
+  if (!parsed) return null;
+  const today = new Date();
+  const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const parsedStart = new Date(parsed.getFullYear(), parsed.getMonth(), parsed.getDate());
+  return Math.round((todayStart.getTime() - parsedStart.getTime()) / 86400000);
+};
+
+const nextMomentumMilestone = (streak: number) => {
+  if (streak < 7) return 7;
+  if (streak < 14) return 14;
+  if (streak < 30) return 30;
+  return Math.ceil((streak + 1) / 30) * 30;
+};
+
+const getMomentumState = (profile?: UserProfile | null) => {
+  if (!profile) {
+    return {
+      message: "Loading today's study rhythm.",
+      progress: 0,
+      caption: "Today",
+    };
+  }
+
+  const streak = Math.max(0, Math.round(Number(profile.streak) || 0));
+  const milestone = nextMomentumMilestone(streak);
+  const lastStudyKey = profile.lastStudySessionAt ? getLocalDayKey(profile.lastStudySessionAt) : "";
+  const completedToday = lastStudyKey === getLocalDayKey();
+  const daysSinceStudy = dayDistanceFromToday(profile.lastStudySessionAt || profile.lastActive);
+  const progress = streak > 0 ? Math.min(100, Math.max(8, Math.round((streak / milestone) * 100))) : 0;
+
+  if (completedToday) {
+    return {
+      message: streak > 1 ? `Today locked in. ${streak}-day streak is active.` : "Today locked in. Your streak has started.",
+      progress: Math.max(progress, 18),
+      caption: `${Math.max(streak, 1)} / ${milestone} days`,
+    };
+  }
+
+  if (streak > 0 && (daysSinceStudy === 0 || daysSinceStudy === 1)) {
+    return {
+      message: `Protect your ${streak}-day streak with one focused session today.`,
+      progress,
+      caption: `${streak} / ${milestone} days`,
+    };
+  }
+
+  if (daysSinceStudy !== null && daysSinceStudy > 1) {
+    return {
+      message: "New day, clean start. Rebuild momentum with one short session.",
+      progress: 0,
+      caption: "0 / 7 days",
+    };
+  }
+
+  return {
+    message: "Start today's first focused session to build a real streak.",
+    progress: 0,
+    caption: "0 / 7 days",
+  };
+};
+
+export const Layout: React.FC<{ 
+  children: React.ReactNode; 
+  activeTab: string; 
+  setActiveTab: (tab: string) => void;
+}> = ({ children, activeTab, setActiveTab }) => {
+  const { profile, signOut, user } = useAuth();
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return window.localStorage.getItem("noviq-sidebar") === "collapsed";
+  });
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [notifications, setNotifications] = useState<AppNotification[]>([]);
+  const pushedNotificationIdsRef = useRef<Set<string>>(new Set());
+  const momentum = useMemo(() => getMomentumState(profile), [profile?.lastActive, profile?.lastStudySessionAt, profile?.streak]);
+  const [theme, setTheme] = useState<AppTheme>(() => {
+    if (typeof window === "undefined") return "light";
+    return window.localStorage.getItem("noviq-theme") === "dark" ? "dark" : "light";
+  });
+  const [pushPermission, setPushPermission] = useState<NotificationPermission>(
+    typeof Notification !== "undefined" ? Notification.permission : "default"
+  );
+  const firstName = profile?.displayName?.split(" ")[0] || "Student";
+  const levelName = profile?.levelName || calculateLevelName(profile?.xp || 0);
+  const visibleNotifications = useMemo(
+    () => notifications.filter((notification) => shouldShowPreferenceNotification(profile, notification)),
+    [notifications, profile?.settings]
+  );
+  const unreadCount = useMemo(
+    () => visibleNotifications.filter((notification) => !notification.read).length,
+    [visibleNotifications]
+  );
+  const isDarkTheme = theme === "dark";
+
+  const menuItems = [
+    { id: "dashboard", label: "Dashboard", icon: <LayoutDashboard size={20} /> },
+    { id: "planner", label: "AI Planner", icon: <Calendar size={20} /> },
+    { id: "tutor", label: "Noviq Tutor", icon: <MessageSquare size={20} /> },
+    { id: "notes", label: "Notebook", icon: <BookOpen size={20} /> },
+    { id: "flashcards", label: "Decks", icon: <Layers size={20} /> },
+    { id: "focus", label: "Focus Zone", icon: <Timer size={20} /> },
+    { id: "community", label: "Nexus", icon: <Users size={20} /> },
+    { id: "analytics", label: "Metrics", icon: <BarChart3 size={20} /> },
+    { id: "pricing", label: "Noviq Pro", icon: <CreditCard size={20} /> },
+    ...(profile?.isAdmin ? [{ id: "admin", label: "Admin", icon: <Users size={20} /> }] : []),
+    { id: "profile", label: "Profile", icon: <User size={20} /> },
+  ];
+
+  useEffect(() => {
+    document.documentElement.classList.toggle("dark", isDarkTheme);
+    window.localStorage.setItem("noviq-theme", theme);
+  }, [isDarkTheme, theme]);
+
+  useEffect(() => {
+    window.localStorage.setItem("noviq-sidebar", isSidebarCollapsed ? "collapsed" : "expanded");
+  }, [isSidebarCollapsed]);
+
+  useEffect(() => {
+    if (!user) return undefined;
+
+    const notificationsQuery = query(
+      collection(db, "users", user.uid, "notifications"),
+      orderBy("createdAt", "desc"),
+      limit(30)
+    );
+
+    return onSnapshot(
+      notificationsQuery,
+      (snapshot) => {
+        setNotifications(
+          snapshot.docs.map((document) => ({
+            id: document.id,
+            ...document.data(),
+          })) as AppNotification[]
+        );
+      },
+      (error) => {
+        console.warn(getAppErrorMessage(error));
+      }
+    );
+  }, [user]);
+
+  useEffect(() => {
+    if (!user || !profile) return;
+
+    const seedDailyNotifications = async () => {
+      const key = todayKey();
+      const notificationPreferences = getNotificationPreferences(profile);
+      const notificationsRef = collection(db, "users", user.uid, "notifications");
+      const dailyRef = doc(notificationsRef, `daily-${key}`);
+      const reminderRef = doc(notificationsRef, `study-reminder-${key}`);
+      const reviewRef = doc(notificationsRef, `deck-review-${key}`);
+      const aiRef = doc(notificationsRef, "ai-tutor-stability-update");
+      const systemRef = doc(notificationsRef, "notebook-sources-update");
+
+      const createIfMissing = async (
+        targetRef: ReturnType<typeof doc>,
+        payload: Omit<AppNotification, "id" | "createdAt">
+      ) => {
+        const snapshot = await getDoc(targetRef);
+        if (!snapshot.exists()) {
+          await setDoc(targetRef, { ...payload, createdAt: serverTimestamp() });
+        }
+      };
+
+      if (notificationPreferences.dailyStreakSummary) {
+        await createIfMissing(dailyRef, {
+          type: "streak",
+          preference: "dailyStreakSummary",
+          title: "Daily progress check",
+          body: `Current streak: ${profile.streak || 0}. Complete one focused session to keep momentum.`,
+          read: false,
+        });
+      }
+
+      if (notificationPreferences.studyReminders) {
+        await createIfMissing(reminderRef, {
+          type: "reminder",
+          preference: "studyReminders",
+          title: "Study reminder",
+          body: `Your daily target is ${profile.dailyTargetMinutes || 30} minutes. Plan one session for today.`,
+          read: false,
+        });
+      }
+
+      if (notificationPreferences.studyReminders) {
+        try {
+          const decksSnapshot = await getDocs(collection(db, "users", user.uid, "decks"));
+          let dueCount = 0;
+          await Promise.all(
+            decksSnapshot.docs.map(async (deckDoc) => {
+              const cardsSnapshot = await getDocs(collection(db, "users", user.uid, "decks", deckDoc.id, "cards"));
+              dueCount += cardsSnapshot.docs.filter((cardDoc) => {
+                const dueAt = String(cardDoc.data().dueAt || "");
+                return dueAt && new Date(dueAt).getTime() <= Date.now();
+              }).length;
+            })
+          );
+
+          if (dueCount > 0) {
+            await createIfMissing(reviewRef, {
+              type: "review",
+              preference: "studyReminders",
+              title: "Deck reviews due",
+              body: `${dueCount} flashcards are ready for spaced repetition review.`,
+              read: false,
+            });
+          }
+        } catch (error) {
+          console.warn("Could not seed deck review notification", error);
+        }
+      }
+
+      if (notificationPreferences.aiSourcePreviews) {
+        await createIfMissing(aiRef, {
+          type: "ai",
+          preference: "aiSourcePreviews",
+          title: "Noviq Tutor upgraded",
+          body: "Tutor now uses exam goals, chat memory, files, images, PDFs, DOCX, and TXT to coach the next score move.",
+          read: false,
+        });
+
+        await createIfMissing(systemRef, {
+          type: "system",
+          preference: "aiSourcePreviews",
+          title: "Notebook Engine is live",
+          body: "Notebook now turns sources into evidence, exam traps, recall drills, flashcards, knowledge graphs, and source-grounded next actions.",
+          read: false,
+        });
+      }
+    };
+
+    seedDailyNotifications().catch((error) => console.warn(getAppErrorMessage(error)));
+  }, [profile, user]);
+
+  useEffect(() => {
+    if (!visibleNotifications.length || pushPermission !== "granted") return;
+    const latest = visibleNotifications[0];
+    const timestamp = latest.createdAt?.toMillis?.() || 0;
+    if (latest.read || Date.now() - timestamp > 5000 || pushedNotificationIdsRef.current.has(latest.id)) return;
+    pushedNotificationIdsRef.current.add(latest.id);
+
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.ready
+        .then((registration) => registration.showNotification(latest.title, { body: latest.body, icon: LOGO_SRC }))
+        .catch(() => new Notification(latest.title, { body: latest.body, icon: LOGO_SRC }));
+    } else {
+      new Notification(latest.title, { body: latest.body, icon: LOGO_SRC });
+    }
+  }, [visibleNotifications, pushPermission]);
+
+  const handleTabChange = (id: string) => {
+    setActiveTab(id);
+    setIsMobileMenuOpen(false);
+  };
+
+  const requestPushPermission = async () => {
+    if (typeof Notification === "undefined") return;
+    if ("serviceWorker" in navigator) {
+      await navigator.serviceWorker.register("/noviq-sw.js");
+    }
+    const permission = await Notification.requestPermission();
+    setPushPermission(permission);
+
+    if (permission === "granted" && user) {
+      await addDoc(collection(db, "users", user.uid, "notifications"), {
+        type: "system",
+        title: "Push notifications enabled",
+        body: "Noviq can now show browser notifications for reminders and study updates.",
+        read: false,
+        createdAt: serverTimestamp(),
+      });
+    }
+  };
+
+  const markNotificationRead = async (notification: AppNotification) => {
+    if (!user || notification.read) return;
+    await updateDoc(doc(db, "users", user.uid, "notifications", notification.id), {
+      read: true,
+      readAt: serverTimestamp(),
+    });
+  };
+
+  const markAllRead = async () => {
+    if (!user) return;
+    await Promise.all(
+      visibleNotifications
+        .filter((notification) => !notification.read)
+        .map((notification) =>
+          updateDoc(doc(db, "users", user.uid, "notifications", notification.id), {
+            read: true,
+            readAt: serverTimestamp(),
+          })
+        )
+    );
+  };
+
+  const toggleTheme = () => {
+    setTheme((current) => (current === "dark" ? "light" : "dark"));
+  };
+
+  const renderThemeToggleButton = () => (
+    <button
+      type="button"
+      onClick={toggleTheme}
+      className="theme-toggle flex h-12 w-12 items-center justify-center rounded-[1.1rem] border border-[#E5E7EB] bg-white text-[#6B7280] transition-all hover:border-[#3F7D58] hover:bg-[#F0FDF4] hover:text-[#111827]"
+      aria-label={isDarkTheme ? "Switch to light theme" : "Switch to dark theme"}
+      title={isDarkTheme ? "Light theme" : "Dark theme"}
+    >
+      {isDarkTheme ? <Sun size={18} /> : <Moon size={18} />}
+    </button>
+  );
+
+  const notificationDropdown = (
+    <AnimatePresence>
+      {notificationsOpen && (
+        <motion.div
+          initial={{ opacity: 0, y: 10, scale: 0.98 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          exit={{ opacity: 0, y: 10, scale: 0.98 }}
+          className="noviq-popover-viewport absolute right-0 top-[calc(100%+0.75rem)] z-[500] flex max-h-[min(72vh,520px)] w-[min(92vw,420px)] flex-col overflow-hidden rounded-3xl border border-[#E5E7EB] bg-white text-[#111827] shadow-[0_28px_90px_rgba(17,24,39,0.22)]"
+        >
+          <div className="flex items-center justify-between border-b border-[#E5E7EB] p-4">
+            <div>
+              <h3 className="text-sm font-black uppercase tracking-[0.2em] text-[#111827]">Notifications</h3>
+              <p className="mt-1 text-xs text-[#6B7280]">{unreadCount} unread updates</p>
+            </div>
+            <button
+              type="button"
+              onClick={markAllRead}
+              className="rounded-xl border border-[#E5E7EB] bg-white px-3 py-2 text-xs font-bold text-[#6B7280] transition hover:border-[#3F7D58] hover:bg-[#F0FDF4] hover:text-[#111827]"
+            >
+              Mark all read
+            </button>
+          </div>
+
+          <div className="CustomScrollbar flex-1 overflow-y-auto p-3">
+            {visibleNotifications.map((notification) => (
+              <button
+                key={notification.id}
+                type="button"
+                onClick={() => markNotificationRead(notification)}
+                className={cn(
+                  "mb-2 flex w-full gap-3 rounded-2xl border p-3 text-left transition",
+                  notification.read
+                    ? "border-transparent bg-[#FAFAF8] opacity-70 hover:opacity-100"
+                    : "border-[#3F7D58]/20 bg-[#F0FDF4]"
+                )}
+              >
+                <span className={cn("mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl", notificationIconClass[notification.type])}>
+                  <Bell size={16} />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-sm font-bold text-[#111827]">{notification.title}</span>
+                  <span className="mt-1 block text-xs leading-5 text-[#6B7280]">{notification.body}</span>
+                  <span className="mt-2 block text-[10px] font-bold uppercase tracking-widest text-[#9CA3AF]">
+                    {formatNotificationTime(notification)}
+                  </span>
+                </span>
+                {!notification.read && <span className="mt-2 h-2 w-2 rounded-full bg-[#3F7D58]" />}
+              </button>
+            ))}
+
+            {visibleNotifications.length === 0 && (
+              <div className="p-8 text-center">
+                <Bell className="mx-auto text-[#9CA3AF]" size={28} />
+                <p className="mt-3 text-sm font-bold text-[#111827]">No notifications yet</p>
+              </div>
+            )}
+          </div>
+
+          <div className="border-t border-[#E5E7EB] p-3">
+            <button
+              type="button"
+              onClick={requestPushPermission}
+              className="w-full rounded-2xl border border-[#E5E7EB] bg-white px-4 py-3 text-sm font-bold text-[#111827] transition hover:border-[#3F7D58] hover:bg-[#F0FDF4]"
+            >
+              {pushPermission === "granted" ? "Push notifications enabled" : "Enable browser push notifications"}
+            </button>
+          </div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+
+  return (
+    <div className={cn("noviq-app relative flex h-screen overflow-hidden font-sans", isDarkTheme && "dark")}>
+      <div className="app-bg pointer-events-none fixed inset-0 -z-20 overflow-hidden" />
+
+      {/* Mobile Top Nav */}
+      <header className="app-mobile-header fixed left-0 right-0 top-0 z-[100] flex h-20 items-center justify-between border-b border-[#E5E7EB] bg-white/90 px-5 backdrop-blur-xl lg:hidden">
+        <div className="flex items-center gap-3">
+          <img
+            src={LOGO_SRC}
+            alt="Noviq logo"
+            className="h-11 w-11 rounded-2xl border border-[#E5E7EB] object-cover"
+          />
+          <h1 className="font-display text-2xl font-black tracking-tighter text-[#111827]">Noviq</h1>
+        </div>
+        <div className="flex items-center gap-2">
+          {renderThemeToggleButton()}
+          <button 
+            onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+            className="app-icon-button flex h-12 w-12 items-center justify-center rounded-2xl border border-[#E5E7EB] bg-white text-[#111827] transition-transform active:scale-90"
+            aria-label={isMobileMenuOpen ? "Close menu" : "Open menu"}
+          >
+            {isMobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
+          </button>
+        </div>
+      </header>
+
+      {/* Sidebar - Desktop & Tablet */}
+      <aside className={cn(
+        "app-sidebar fixed inset-y-0 left-0 z-[110] flex w-72 flex-col border-r border-[#E5E7EB] bg-[#FAFAF8]/96 shadow-[12px_0_40px_rgba(17,24,39,0.04)] backdrop-blur-xl transition-[width,transform] duration-500 lg:relative lg:translate-x-0",
+        isSidebarCollapsed ? "lg:w-24" : "lg:w-72",
+        isMobileMenuOpen ? "translate-x-0" : "-translate-x-full"
+      )}>
+        <div className={cn(
+          "flex items-center justify-between p-10 lg:pt-10",
+          isSidebarCollapsed && "lg:flex-col lg:gap-4 lg:px-4 lg:py-8"
+        )}>
+          <button 
+            onClick={() => window.open('https://noviq.uz', '_blank')}
+            className={cn(
+              "flex items-center gap-4 hover:opacity-80 transition-opacity group",
+              isSidebarCollapsed && "lg:justify-center lg:gap-0"
+            )}
+            title="Noviq"
+          >
+            <img
+              src={LOGO_SRC}
+              alt="Noviq logo"
+              className={cn(
+                "h-14 w-14 rounded-[1.25rem] border border-[#E5E7EB] object-cover transition-transform group-hover:rotate-3",
+                isSidebarCollapsed && "lg:h-12 lg:w-12 lg:rounded-2xl"
+              )}
+            />
+            <h1 className={cn("font-display text-3xl font-black tracking-tighter text-[#111827]", isSidebarCollapsed && "lg:hidden")}>
+              Noviq
+            </h1>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setIsSidebarCollapsed((current) => !current)}
+            className="app-sidebar-collapse hidden h-10 w-10 items-center justify-center rounded-2xl border border-[#E5E7EB] bg-white text-[#6B7280] transition hover:border-[#3F7D58] hover:bg-[#F0FDF4] hover:text-[#111827] lg:flex"
+            aria-label={isSidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+            title={isSidebarCollapsed ? "Expand" : "Collapse"}
+          >
+            {isSidebarCollapsed ? <ChevronsRight size={17} /> : <ChevronsLeft size={17} />}
+          </button>
+          
+          <button className="text-[#6B7280] lg:hidden" onClick={() => setIsMobileMenuOpen(false)} aria-label="Close menu">
+            <X size={24} />
+          </button>
+        </div>
+
+        <nav className={cn(
+          "CustomScrollbar flex-1 space-y-2 overflow-y-auto px-6 py-4",
+          isSidebarCollapsed && "lg:px-4"
+        )}>
+          {menuItems.map((item) => (
+            <SidebarItem
+              key={item.id}
+              id={item.id}
+              label={item.label}
+              icon={item.icon}
+              active={activeTab === item.id}
+              collapsed={isSidebarCollapsed}
+              onClick={handleTabChange}
+            />
+          ))}
+        </nav>
+
+        <div className={cn("space-y-6 p-8", isSidebarCollapsed && "lg:px-4 lg:pb-6")}>
+          <div
+            className={cn(
+              "app-sidebar-card group rounded-2xl border border-[#E5E7EB] bg-white p-5 transition-all hover:border-[#3F7D58]/30",
+              isSidebarCollapsed && "lg:flex lg:h-[3.25rem] lg:w-[3.25rem] lg:items-center lg:justify-center lg:p-0"
+            )}
+            title={isSidebarCollapsed ? momentum.message : undefined}
+          >
+            <div className={cn("flex items-center gap-2 mb-3", isSidebarCollapsed && "lg:mb-0 lg:gap-0")}>
+               <Sparkles className="text-[#3F7D58]" size={14} />
+               <p className={cn("text-[10px] font-black uppercase tracking-[0.3em] text-[#3F7D58]", isSidebarCollapsed && "lg:hidden")}>Momentum</p>
+            </div>
+            <p className={cn("text-xs font-medium leading-relaxed text-[#6B7280] transition-colors group-hover:text-[#111827]", isSidebarCollapsed && "lg:hidden")}>{momentum.message}</p>
+            <p className={cn("mt-3 text-[10px] font-black uppercase tracking-[0.22em] text-[#94A3B8]", isSidebarCollapsed && "lg:hidden")}>{momentum.caption}</p>
+            <div className={cn("mt-4 h-1.5 w-full overflow-hidden rounded-full bg-[#E5E7EB]", isSidebarCollapsed && "lg:hidden")}>
+              <div className="h-full rounded-full bg-[#3F7D58] transition-all duration-500" style={{ width: `${momentum.progress}%` }} />
+            </div>
+          </div>
+          
+          <button 
+            onClick={signOut}
+            className={cn(
+              "flex w-full items-center gap-4 rounded-2xl border border-[#E5E7EB] bg-white px-5 py-4 text-[10px] font-black uppercase tracking-[0.22em] text-[#6B7280] transition-all hover:border-red-200 hover:bg-red-50 hover:text-red-600",
+              isSidebarCollapsed && "lg:mx-auto lg:h-[3.25rem] lg:w-[3.25rem] lg:justify-center lg:gap-0 lg:px-0 lg:py-0"
+            )}
+            aria-label="Sign out"
+            title={isSidebarCollapsed ? "Sign out" : undefined}
+          >
+            <LogOut size={16} />
+            <span className={cn(isSidebarCollapsed && "lg:hidden")}>Sign Out</span>
+          </button>
+        </div>
+      </aside>
+
+      {/* Main Content */}
+      <main className="relative flex-1 flex flex-col overflow-hidden pt-20 lg:pt-0">
+        <div className="app-main-surface pointer-events-none absolute inset-0 rounded-[2rem] border border-[#E5E7EB] bg-white/45" />
+        <header className="relative z-[300] hidden h-28 shrink-0 items-center justify-between px-10 xl:px-14 lg:flex">
+          <div className="space-y-1">
+            <h2 className="group flex items-center gap-3 text-3xl font-bold leading-none tracking-tight text-[#111827]">
+               Hi, {firstName}
+            </h2>
+            <p className="text-sm font-medium tracking-wide text-[#6B7280]">
+               Exam engine is <span className="font-bold text-[#3F7D58]">ready</span>
+            </p>
+          </div>
+          
+          <div className="flex items-center gap-8">
+            <div className="flex gap-8">
+               <div className="text-right">
+                  <p className="mb-1 text-[9px] font-black uppercase tracking-widest text-[#9CA3AF]">{levelName}</p>
+                  <p className="text-xl font-bold leading-none text-[#111827]">{(profile?.xp || 0).toLocaleString()}</p>
+               </div>
+               <div className="text-right">
+                  <p className="mb-1 text-[9px] font-black uppercase tracking-widest text-[#9CA3AF]">Current Streak</p>
+                  <div className="flex items-center gap-2 justify-end">
+                     <Flame size={16} className="text-orange-500 animate-pulse" />
+                     <p className="text-xl font-bold text-orange-500 leading-none">{profile?.streak || 0}</p>
+                  </div>
+               </div>
+            </div>
+
+            <div className="mx-2 h-10 w-px bg-[#E5E7EB]" />
+
+            <div className="flex items-center gap-5 translate-y-1">
+               {renderThemeToggleButton()}
+               <div className="relative z-[400]">
+                 <button
+                   onClick={() => setNotificationsOpen((current) => !current)}
+                   className="relative flex h-12 w-12 items-center justify-center rounded-[1.1rem] border border-[#E5E7EB] bg-white text-[#6B7280] transition-all hover:border-[#3F7D58] hover:bg-[#F0FDF4] hover:text-[#111827]"
+                   aria-label="Notifications"
+                 >
+                   <Bell size={18} />
+                   {unreadCount > 0 && (
+                     <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-[#3F7D58] px-1 text-[10px] font-black text-white">
+                       {Math.min(9, unreadCount)}
+                     </span>
+                   )}
+                 </button>
+                 {notificationDropdown}
+               </div>
+               <button 
+                 onClick={() => setActiveTab('profile')}
+                 className="group relative h-14 w-14 overflow-hidden rounded-[1.25rem] border border-[#E5E7EB] bg-white transition-all duration-300 hover:scale-105 hover:border-[#3F7D58]"
+               >
+                 <img src={profile?.photoURL || "https://api.dicebear.com/7.x/avataaars/svg?seed=Felix&hairColor=2c1b18&skinColor=f8d25c"} alt="Avatar" className="w-full h-full object-cover group-hover:scale-110 transition-transform" />
+                 <div className="absolute inset-0 bg-[#3F7D58]/0 transition-colors group-hover:bg-[#3F7D58]/10" />
+               </button>
+            </div>
+          </div>
+        </header>
+
+        <div className="CustomScrollbar relative flex-1 overflow-y-auto p-5 pb-32 md:p-8 lg:px-10 lg:pb-10 xl:px-14">
+          <div className="app-content-surface pointer-events-none absolute inset-0 rounded-[2rem] border border-[#E5E7EB] bg-white/35" />
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={activeTab}
+              initial={{ opacity: 0, y: 18, filter: 'blur(6px)' }}
+              animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+              exit={{ opacity: 0, y: -18, filter: 'blur(6px)' }}
+              transition={{ 
+                duration: 0.5, 
+                ease: [0.22, 1, 0.36, 1] 
+              }}
+              className="max-w-[1600px] mx-auto relative z-10"
+            >
+              {children}
+            </motion.div>
+          </AnimatePresence>
+        </div>
+        
+        {/* Mobile Floating Nav Overlay */}
+        {isMobileMenuOpen && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setIsMobileMenuOpen(false)}
+            className="fixed inset-0 z-[105] bg-[#111827]/35 backdrop-blur-sm lg:hidden"
+          />
+        )}
+        <FloatingTutor activeTab={activeTab} />
+      </main>
+    </div>
+  );
+};
