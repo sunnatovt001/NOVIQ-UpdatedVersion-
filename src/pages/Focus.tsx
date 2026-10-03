@@ -325,19 +325,19 @@ export const Focus = () => {
     >
       <audio ref={audioRef} loop />
       {verifying && (
-        <p role="status" className="relative z-10 text-sm text-blue-200">
+        <p role="status" className="relative z-10 max-w-md px-6 text-center text-sm text-slate-200">
           Timer started. Connecting to the session server...
         </p>
       )}
       {localOnly && !verifying && !sessionError && (
-        <p role="status" className="relative z-10 text-sm text-blue-200">
+        <p role="status" className="relative z-10 max-w-md px-6 text-center text-sm text-slate-200">
           Device-only session: saved locally without XP.
         </p>
       )}
       {sessionError && (
         <p
           role="alert"
-          className="relative z-10 max-w-md px-6 text-center text-sm text-red-300"
+          className="relative z-10 max-w-md px-6 text-center text-sm text-slate-200"
         >
           {sessionError}
         </p>
