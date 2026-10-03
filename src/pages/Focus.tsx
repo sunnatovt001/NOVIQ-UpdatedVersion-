@@ -22,6 +22,7 @@ import {
   CheckCircle2,
 } from "lucide-react";
 import { formatTime, cn } from "@/src/lib/utils";
+import { withFocusTimeout } from "@/src/lib/focusTimer";
 
 export const Focus = () => {
   const { user, profile } = useAuth();
@@ -31,6 +32,8 @@ export const Focus = () => {
       mode: "focus" | "break";
       sessionId?: string;
       startedAt: number;
+      localOnly?: boolean;
+      localId?: string;
     } | null>(`noviq-focus-${user?.uid}`, null),
   );
   const validCache =
@@ -59,6 +62,19 @@ export const Focus = () => {
   const completingRef = useRef(false);
   const deadlineRef = useRef(0);
   const [sessionError, setSessionError] = useState("");
+  const [localOnly, setLocalOnly] = useState(
+    Boolean(validCache && cached.localOnly),
+  );
+  const [verifying, setVerifying] = useState(false);
+  const localIdRef = useRef(validCache ? cached.localId : undefined);
+  const generationRef = useRef(0);
+
+  useEffect(
+    () => () => {
+      generationRef.current += 1;
+    },
+    [],
+  );
 
   useEffect(() => {
     if (
@@ -68,12 +84,14 @@ export const Focus = () => {
         mode,
         sessionId: sessionIdRef.current,
         startedAt: startedAtRef.current,
+        localOnly,
+        localId: localIdRef.current,
       })
     )
       setSessionError(
         "Device storage is unavailable. Keep this page open to preserve your timer.",
       );
-  }, [time, mode, isActive, user?.uid]);
+  }, [time, mode, isActive, localOnly, user?.uid]);
 
   const tracks = [
     {
@@ -144,8 +162,44 @@ export const Focus = () => {
       timestamp: completedAt.toISOString(),
     };
 
+    if (localOnly) {
+      const key = `noviq-focus-history-${user.uid}`;
+      const history = loadLocalData<
+        Array<{ id: string; duration: number; timestamp: string }>
+      >(key, []);
+      const id = localIdRef.current || crypto.randomUUID();
+      if (
+        !saveLocalData(
+          key,
+          [
+            {
+              id,
+              duration: sessionDuration,
+              timestamp: completedAt.toISOString(),
+            },
+            ...(Array.isArray(history) ? history : []).filter(
+              (entry) => entry && entry.id !== id,
+            ),
+          ].slice(0, 100),
+        )
+      ) {
+        setSessionError(
+          "Could not save on this device. Free up browser storage and try again.",
+        );
+        return false;
+      }
+      setSessionError(
+        "Session saved on this device. XP is unavailable because the server could not verify this session.",
+      );
+      return true;
+    }
+
     try {
-      await persistStudySession(sessionData, profile, [], sessionIdRef.current);
+      await withFocusTimeout(
+        () =>
+          persistStudySession(sessionData, profile, [], sessionIdRef.current),
+        10000,
+      );
       sessionIdRef.current = undefined;
       trackUserEvent(user.uid, "focus_session_completed", 0, {
         focusMinutes: Math.round(sessionDuration / 60),
@@ -165,7 +219,7 @@ export const Focus = () => {
   };
 
   const completeCurrentFocusSession = async () => {
-    if (mode !== "focus" || completingRef.current) return;
+    if (mode !== "focus" || completingRef.current || verifying) return;
     const elapsedSeconds = 25 * 60 - time;
     if (elapsedSeconds <= 0) return;
     setIsActive(false);
@@ -201,38 +255,61 @@ export const Focus = () => {
         setSessionBusy(false);
       }
     } else {
+      setLocalOnly(false);
+      localIdRef.current = undefined;
+      sessionIdRef.current = undefined;
+      setSessionError("");
       setMode("focus");
       setTime(25 * 60);
     }
   };
 
-  const toggleTimer = async () => {
-    if (startingRef.current || completingRef.current) return;
-    if (!isActive && mode === "focus" && !sessionIdRef.current) {
+  const toggleTimer = () => {
+    if (completingRef.current) return;
+    if (
+      !isActive &&
+      mode === "focus" &&
+      !sessionIdRef.current &&
+      !localOnly &&
+      !startingRef.current
+    ) {
       startingRef.current = true;
-      setSessionBusy(true);
+      setVerifying(true);
+      setLocalOnly(true);
+      localIdRef.current = crypto.randomUUID();
+      startedAtRef.current = Date.now();
       setSessionError("");
-      try {
-        sessionIdRef.current = await startStudySession("focus", "focus", true);
-        startedAtRef.current = Date.now();
-      } catch (error) {
-        setSessionError(
-          error instanceof Error
-            ? error.message
-            : "Could not start the session.",
-        );
-        return;
-      } finally {
-        startingRef.current = false;
-        setSessionBusy(false);
-      }
+      const generation = ++generationRef.current;
+      void withFocusTimeout(() => startStudySession("focus", "focus", true))
+        .then((id) => {
+          if (generation !== generationRef.current) return;
+          sessionIdRef.current = id;
+          setLocalOnly(false);
+        })
+        .catch(() => {
+          if (generation !== generationRef.current) return;
+          setSessionError(
+            "The session server is unavailable. Your timer still works; completed sessions are saved on this device without XP.",
+          );
+        })
+        .finally(() => {
+          if (generation !== generationRef.current) return;
+          startingRef.current = false;
+          setVerifying(false);
+        });
     }
     if (!isActive) deadlineRef.current = Date.now() + time * 1000;
     setIsActive((current) => !current);
   };
 
   const resetTimer = () => {
-    if (startingRef.current || completingRef.current) return;
+    if (completingRef.current) return;
+    generationRef.current += 1;
+    startingRef.current = false;
+    setVerifying(false);
+    setLocalOnly(false);
+    localIdRef.current = undefined;
+    setSessionError("");
     startedAtRef.current = Date.now();
     sessionIdRef.current = undefined;
     setIsActive(false);
@@ -247,6 +324,16 @@ export const Focus = () => {
       )}
     >
       <audio ref={audioRef} loop />
+      {verifying && (
+        <p role="status" className="relative z-10 text-sm text-blue-200">
+          Timer started. Connecting to the session server...
+        </p>
+      )}
+      {localOnly && !verifying && !sessionError && (
+        <p role="status" className="relative z-10 text-sm text-blue-200">
+          Device-only session: saved locally without XP.
+        </p>
+      )}
       {sessionError && (
         <p
           role="alert"
@@ -257,7 +344,7 @@ export const Focus = () => {
       )}
       {sessionBusy && (
         <p role="status" className="relative z-10 text-blue-200">
-          Please wait�
+          Please wait...
         </p>
       )}
       {/* Animated Orbitals */}
@@ -376,7 +463,7 @@ export const Focus = () => {
         {mode === "focus" && time < 25 * 60 && (
           <button
             type="button"
-            disabled={sessionBusy || time > 24 * 60}
+            disabled={sessionBusy || verifying || time > 24 * 60}
             onClick={(e) => {
               e.stopPropagation();
               completeCurrentFocusSession();
@@ -384,7 +471,7 @@ export const Focus = () => {
             className="mx-auto inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl border border-emerald-400/30 bg-emerald-500/15 px-5 text-sm font-black text-emerald-200 transition hover:bg-emerald-500/20"
           >
             <CheckCircle2 size={18} />
-            {sessionBusy ? "Saving session�" : "Complete focus session"}
+            {sessionBusy ? "Saving session..." : "Complete focus session"}
           </button>
         )}
       </div>

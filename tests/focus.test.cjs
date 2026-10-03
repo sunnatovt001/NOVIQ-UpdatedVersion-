@@ -1,0 +1,273 @@
+const test = require("node:test");
+const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const vm = require("node:vm");
+const ts = require("typescript");
+
+function compile(path) {
+  return ts.transpileModule(fs.readFileSync(path, "utf8"), {
+    compilerOptions: {
+      module: ts.ModuleKind.CommonJS,
+      target: ts.ScriptTarget.ES2022,
+      jsx: ts.JsxEmit.ReactJSX,
+    },
+  }).outputText;
+}
+const helper = {};
+vm.runInNewContext(compile("src/lib/focusTimer.ts"), {
+  exports: helper,
+  setTimeout,
+  clearTimeout,
+});
+
+test("session verification fails promptly when the server is unreachable", async () => {
+  await assert.rejects(
+    helper.withFocusTimeout(() => new Promise(() => {}), 10),
+    /timed out/,
+  );
+  assert.equal(await helper.withFocusTimeout(async () => "receipt"), "receipt");
+  await assert.rejects(
+    helper.withFocusTimeout(async () => {
+      throw new Error("404");
+    }),
+    /404/,
+  );
+});
+
+function focusHarness({
+  start = async () => {
+    throw new Error("404");
+  },
+  cached,
+} = {}) {
+  const slots = [],
+    effects = [],
+    intervals = new Map(),
+    storage = new Map();
+  if (cached) storage.set("noviq-focus-user", cached);
+  let index = 0,
+    dirty = false,
+    tree,
+    now = 1000000,
+    intervalId = 0,
+    starts = 0,
+    cloudWrites = 0;
+  class Clock extends Date {
+    static now() {
+      return now;
+    }
+  }
+  const react = {
+    useState(initial) {
+      const slot = index++;
+      if (!(slot in slots))
+        slots[slot] = typeof initial === "function" ? initial() : initial;
+      return [
+        slots[slot],
+        (value) => {
+          const next = typeof value === "function" ? value(slots[slot]) : value;
+          if (!Object.is(next, slots[slot])) {
+            slots[slot] = next;
+            dirty = true;
+          }
+        },
+      ];
+    },
+    useRef(initial) {
+      const slot = index++;
+      return (slots[slot] ||= { current: initial });
+    },
+    useEffect(fn, deps) {
+      const slot = index++,
+        previous = slots[slot];
+      if (
+        !previous ||
+        deps.some((dep, i) => !Object.is(dep, previous.deps[i]))
+      ) {
+        effects.push(() => {
+          previous?.cleanup?.();
+          slots[slot] = { deps, cleanup: fn() };
+        });
+      }
+    },
+  };
+  const modules = {
+    react,
+    "react/jsx-runtime": {
+      jsx: (type, props) => ({ type, props }),
+      jsxs: (type, props) => ({ type, props }),
+    },
+    "@/src/lib/localStore": {
+      loadLocalData: (key, fallback) => storage.get(key) ?? fallback,
+      trySaveLocalData: (key, value) => {
+        storage.set(key, value);
+        return true;
+      },
+    },
+    "@/src/contexts/AuthContext": {
+      useAuth: () => ({ user: { uid: "user" }, profile: {} }),
+    },
+    "@/src/lib/analytics": { trackUserEvent: async () => {} },
+    "@/src/lib/progress": {
+      calculateSessionXp: () => 10,
+      startStudySession: () => {
+        starts++;
+        return start();
+      },
+      persistStudySession: async () => {
+        cloudWrites++;
+      },
+    },
+    "@/src/lib/focusTimer": {
+      withFocusTimeout: (operation) => Promise.resolve().then(operation),
+    },
+    "motion/react": { motion: { div: "div" } },
+    "lucide-react": {},
+    "@/src/lib/utils": {
+      formatTime: (seconds) =>
+        `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`,
+      cn: (...args) => args.join(" "),
+    },
+  };
+  const exports = {};
+  vm.runInNewContext(compile("src/pages/Focus.tsx"), {
+    exports,
+    require: (name) => {
+      assert.ok(name in modules, name);
+      return modules[name];
+    },
+    Date: Clock,
+    crypto: { randomUUID: () => `local-${now}` },
+    console,
+    setInterval: (fn) => {
+      const id = ++intervalId;
+      intervals.set(id, fn);
+      return id;
+    },
+    clearInterval: (id) => intervals.delete(id),
+  });
+  function render() {
+    do {
+      dirty = false;
+      index = 0;
+      tree = exports.Focus();
+      effects.splice(0).forEach((fn) => fn());
+    } while (dirty);
+  }
+  function nodes(node) {
+    if (!node || typeof node !== "object") return [];
+    return [
+      node,
+      ...[node.props?.children].flat(Infinity).flatMap((child) => nodes(child)),
+    ];
+  }
+  render();
+  return {
+    storage,
+    click(label) {
+      const button = nodes(tree).find(
+        (node) =>
+          node.type === "button" &&
+          (node.props["aria-label"] === label ||
+            node.props.children?.includes?.(label)),
+      );
+      assert.ok(button, `Missing button: ${label}`);
+      assert.ok(!button.props.disabled, `Disabled button: ${label}`);
+      button.props.onClick({ stopPropagation() {} });
+      render();
+    },
+    async settle() {
+      for (let i = 0; i < 12; i++) {
+        await Promise.resolve();
+        render();
+      }
+    },
+    tick(seconds) {
+      now += seconds * 1000;
+      [...intervals.values()].forEach((fn) => fn());
+      render();
+    },
+    text: () => JSON.stringify(tree),
+    get starts() {
+      return starts;
+    },
+    get cloudWrites() {
+      return cloudWrites;
+    },
+  };
+}
+
+test("missing backend does not block start, pause, resume or local completion", async () => {
+  const app = focusHarness();
+  app.click("Start timer");
+  assert.match(app.text(), /Pause timer/);
+  await app.settle();
+  app.tick(60);
+  assert.match(app.text(), /24:00/);
+  app.click("Pause timer");
+  app.tick(20);
+  assert.match(app.text(), /24:00/);
+  app.click("Start timer");
+  assert.equal(app.starts, 1);
+  app.click("Complete focus session");
+  await app.settle();
+  assert.match(app.text(), /Short Break/);
+  assert.equal(app.storage.get("noviq-focus-history-user")[0].duration, 60);
+  assert.equal(app.cloudWrites, 0);
+  app.click("Start timer");
+  app.tick(300);
+  await app.settle();
+  assert.match(app.text(), /25:00/);
+  app.click("Start timer");
+  await app.settle();
+  assert.equal(app.starts, 2);
+});
+
+test("reset ignores a late server response and remains responsive during verification", async () => {
+  let resolve;
+  const app = focusHarness({
+    start: () =>
+      new Promise((done) => {
+        resolve = done;
+      }),
+  });
+  app.click("Start timer");
+  await app.settle();
+  app.click("Pause timer");
+  app.click("Reset timer");
+  resolve("late-receipt");
+  await app.settle();
+  assert.equal(app.storage.get("noviq-focus-user").sessionId, undefined);
+  assert.match(app.text(), /25:00/);
+});
+
+test("verified focus sessions still use server completion", async () => {
+  const app = focusHarness({ start: async () => "verified-receipt" });
+  app.click("Start timer");
+  await app.settle();
+  app.tick(60);
+  app.click("Complete focus session");
+  await app.settle();
+  assert.equal(app.cloudWrites, 1);
+  assert.equal(app.storage.has("noviq-focus-history-user"), false);
+  assert.match(app.text(), /Short Break/);
+});
+
+test("restored device-only session resumes without losing elapsed time", async () => {
+  const app = focusHarness({
+    cached: {
+      time: 1000,
+      mode: "focus",
+      startedAt: 999000,
+      localOnly: true,
+      localId: "restored",
+    },
+  });
+  app.click("Start timer");
+  await app.settle();
+  app.tick(10);
+  assert.equal(app.starts, 0);
+  app.click("Complete focus session");
+  await app.settle();
+  assert.equal(app.storage.get("noviq-focus-history-user")[0].duration, 510);
+});
