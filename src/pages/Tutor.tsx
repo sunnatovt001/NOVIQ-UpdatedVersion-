@@ -34,6 +34,7 @@ import { getLocalDayKey } from "@/src/lib/progress";
 import { buildStudentTutorContext } from "@/src/lib/tutorContext";
 import { makeSyncId } from "@/src/lib/localStore";
 import { writeDocWithQueue } from "@/src/lib/offlineSync";
+import { isLocalAi } from "@/src/lib/auditMode";
 
 interface TutorAttachment extends AiAttachment {
   id: string;
@@ -375,7 +376,7 @@ export const Tutor = ({ setActiveTab }: { setActiveTab: (tab: string) => void })
   };
 
   const persistMessage = async (message: Omit<Message, "id">) => {
-    if (!user) return;
+    if (!user || isLocalAi) return;
 
     const messageId = makeSyncId("tutor-message");
     await writeDocWithQueue({
@@ -412,7 +413,7 @@ export const Tutor = ({ setActiveTab }: { setActiveTab: (tab: string) => void })
   const submitPrompt = async (prompt: string, files: TutorAttachment[], retry = false) => {
     if (!user) return;
     if ((!prompt.trim() && files.length === 0) || aiRequestRef.current) return;
-    if (!activePro && tutorUsage >= tutorLimit) {
+    if (!isLocalAi && !activePro && tutorUsage >= tutorLimit) {
       setUpgradeOpen(true);
       return;
     }
@@ -445,7 +446,7 @@ export const Tutor = ({ setActiveTab }: { setActiveTab: (tab: string) => void })
     if (!retry) setMessages((current) => [...current.filter((message) => message.id !== "intro"), optimisticUserMessage]);
 
     const nextUsage = tutorUsage + 1;
-    if (user && !activePro) {
+    if (user && !activePro && !isLocalAi) {
       setTutorUsage(nextUsage);
       saveLocalDailyUsage(user.uid, "aiTutor", nextUsage, dayKey);
     }
@@ -564,7 +565,7 @@ export const Tutor = ({ setActiveTab }: { setActiveTab: (tab: string) => void })
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <div className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-black uppercase tracking-widest text-slate-300">
-            {activePro ? "Pro unlimited" : `${remainingTutorMessages} free left`}
+            {isLocalAi ? "Local AI · 10 requests/min" : activePro ? "Pro unlimited" : `${remainingTutorMessages} free left`}
           </div>
           <select
             value={voiceLanguage}

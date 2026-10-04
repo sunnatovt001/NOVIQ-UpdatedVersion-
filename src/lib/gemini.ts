@@ -1,6 +1,6 @@
 import { httpsCallable } from "firebase/functions";
-import { functions } from "@/src/lib/firebase";
-import { isReadOnlyAudit } from "./auditMode";
+import { auth, functions } from "@/src/lib/firebase";
+import { isReadOnlyAudit, isLocalAi } from "./auditMode";
 
 export interface TutorHistoryItem {
   role: "user" | "assistant";
@@ -52,10 +52,7 @@ const getCallableErrorInfo = (error: unknown) => {
 };
 
 export const models = {
-  flash: "gemini-2.5-flash",
-  fastFallback: "gemini-2.0-flash",
-  legacyFallback: "gemini-1.5-flash",
-  pro: "gemini-2.5-pro",
+  flash: "gemini-3.8-flash",
 };
 
 export const getFriendlyAiError = (error: unknown) => {
@@ -83,7 +80,7 @@ export const getFriendlyAiError = (error: unknown) => {
     return "AI service is busy or rate limited. Please try again in a moment.";
   }
 
-  if (/AI_KEY_OR_PERMISSION|api key|permission|403/i.test(searchable)) {
+  if (/AI_KEY_OR_PERMISSION|api key|permission|403|401/i.test(searchable)) {
     return "AI server key is invalid or does not have Gemini API access. Check Firebase Functions GEMINI_API_KEY and redeploy.";
   }
 
@@ -150,8 +147,16 @@ const generateWithFallback = async ({
   feature?: "tutor" | "notebook" | "planner" | "flashcards";
 }) => {
   try {
-    if (isReadOnlyAudit) throw new Error("AI requests are disabled in read-only audit mode. Use isolated tests for send flows.");
-    const response = await generateAiResponse({ contents, config, retries, feature });
+    const localAi = isLocalAi;
+    if (isReadOnlyAudit && !localAi) throw new Error("AI requests are disabled in read-only audit mode. Use isolated tests for send flows.");
+    let response;
+    if (localAi) {
+      if (!auth.currentUser) throw new Error("unauthenticated");
+      const result = await fetch("/__local-ai", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${await auth.currentUser.getIdToken()}` }, body: JSON.stringify({ contents, config, feature }), signal: AbortSignal.timeout(45000) });
+      const data = await result.json();
+      if (!result.ok) throw new Error(data.error || "AI_PROVIDER_UNAVAILABLE");
+      response = { data };
+    } else response = await generateAiResponse({ contents, config, retries, feature });
     const text = response.data?.text?.trim();
     if (!text) throw new Error("EMPTY_AI_RESPONSE");
     return text;

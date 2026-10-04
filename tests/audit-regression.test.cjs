@@ -23,6 +23,7 @@ test('malformed AI activities cannot silently acquire template questions or prom
 
 function handler(path, name, context) {
   context.Error = Error;
+  context.isLocalAi ??= false;
   const source = fs.readFileSync(path, 'utf8');
   const tree = ts.createSourceFile(path, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
   let body;
@@ -218,4 +219,9 @@ test('Notebook AI renders real handler output, blocks whitespace and parallel su
   assert.equal(writes.filter(write => write.data.role === 'user').length, 1);
   assert.equal(context.messages.at(-1).content, 'Source-grounded answer');
   assert.equal(context.messages.at(-1).role, 'assistant');
+  context.isLocalAi = true;
+  const previousWrites = writes.length;
+  await send('Local preview question');
+  assert.equal(writes.length, previousWrites);
+  assert.equal(context.messages.at(-1).content, 'Source-grounded answer');
 });

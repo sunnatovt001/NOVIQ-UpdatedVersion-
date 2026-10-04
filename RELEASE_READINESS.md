@@ -1,5 +1,13 @@
 # Local release verification — 2026-10-04
 
+Latest Nexus/Gemini follow-up: [NEXUS_AI_FIX_REPORT.md](NEXUS_AI_FIX_REPORT.md).
+The supplied Gemini key and `gemini-3.8-flash` returned real HTTP 200 responses
+for a neutral text request and a structured Planner request. The previous model
+returned 404 for this key. Development-only `npm run dev:local-ai` enables AI
+without cloud writes. Live user-context AI remains untested. Nexus member lists
+and presence still require deployment of the new callables; no deployment occurred.
+Latest verification includes 66 tests (38 frontend, 28 backend) and build.
+
 The latest audit fixes and per-item evidence are recorded in [AUDIT_FIX_REPORT.md](AUDIT_FIX_REPORT.md). This checkout is locally verified; a complete live production release is not yet verified.
 
 ## Latest verification

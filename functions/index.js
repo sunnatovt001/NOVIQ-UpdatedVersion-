@@ -96,9 +96,7 @@ const isNotificationPreferenceEnabled = (user, key) =>
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || "";
 const GEMINI_MODELS = [
-  "gemini-2.5-flash",
-  "gemini-2.0-flash",
-  "gemini-1.5-flash",
+  ...String(process.env.GEMINI_MODELS || "gemini-3.8-flash").split(",").map((model) => model.trim()).filter((model) => /^[a-zA-Z0-9._-]+$/.test(model)),
 ];
 
 const normalizeGeminiContents = (contents) => {
@@ -154,10 +152,10 @@ const callGeminiRest = async ({ model, contents, config }) => {
   };
 
   const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_API_KEY}`,
+    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
     {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "x-goog-api-key": GEMINI_API_KEY },
       body: JSON.stringify(body),
       signal: AbortSignal.timeout(25000),
     },
@@ -167,7 +165,7 @@ const callGeminiRest = async ({ model, contents, config }) => {
     const message =
       payload?.error?.message ||
       `Gemini request failed with ${response.status}`;
-    throw new Error(message);
+    throw new Error(`Gemini HTTP ${response.status}: ${String(message).replaceAll(GEMINI_API_KEY, "[redacted]")}`);
   }
 
   const text = extractGeminiText(payload);
@@ -225,7 +223,7 @@ const getAiFailureDetails = (error) => {
   } else if (
     lower.includes("api key") ||
     lower.includes("permission") ||
-    lower.includes("403")
+    lower.includes("403") || lower.includes("401") || lower.includes("unauthenticated")
   ) {
     reason = "AI_KEY_OR_PERMISSION";
   } else if (
@@ -1381,8 +1379,9 @@ exports.generateAiResponse = onCall(
             uid: request.auth.uid,
             model,
             attempt,
-            error: String(error.message || error).slice(0, 300),
+            error: getAiFailureDetails(error).reason,
           });
+          if (["AI_KEY_OR_PERMISSION", "AI_QUOTA_OR_RATE_LIMIT", "AI_REQUEST_REJECTED", "AI_UNSUPPORTED_FILE"].includes(getAiFailureDetails(error).reason)) throwAiFailure(error);
         }
       }
     }

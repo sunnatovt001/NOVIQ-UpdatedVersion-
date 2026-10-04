@@ -3,6 +3,7 @@ import {
   trySaveLocalData as saveLocalData,
 } from "@/src/lib/localStore";
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   ChevronRight,
   CircleUserRound,
@@ -37,6 +38,7 @@ import { useAuth } from "@/src/contexts/AuthContext";
 import { recordDate } from "@/src/lib/recordDate";
 import { isReadOnlyAudit } from "@/src/lib/auditMode";
 import { messageAuthor, resolveMessageAuthor } from "@/src/lib/activityEvidence";
+import { useDialogFocus } from "@/src/lib/useDialogFocus";
 
 type Room = {
   id: string;
@@ -59,12 +61,14 @@ type Message = {
   content: string;
   createdAt?: unknown;
 };
+type GroupMember = { uid: string; displayName: string; username: string | null; role: string; online: boolean; lastSeenAt: string | null };
+type MemberDirectory = { count: number; onlineCount: number | null; members: GroupMember[]; nextCursor: string | null; measuredAt: string };
 const call = async <T,>(
   name: string,
   data: Record<string, unknown>,
 ): Promise<T> => {
-  if (isReadOnlyAudit && !["getCommunityMemberCount", "getFriendInvite"].includes(name)) throw new Error("Group writes and invitations are disabled in read-only audit mode.");
-  return (await httpsCallable<Record<string, unknown>, T>(functions, name)(data)).data;
+  if (isReadOnlyAudit && !["getCommunityMemberCount", "getCommunityMembers", "getFriendInvite"].includes(name)) throw new Error("Group writes and invitations are disabled in read-only audit mode.");
+  return (await httpsCallable<Record<string, unknown>, T>(functions, name, { timeout: 20000 })(data)).data;
 };
 const errorText = (error: unknown) =>
   error instanceof Error
@@ -86,6 +90,15 @@ export const Community = () => {
   const [invites, setInvites] = useState<Invite[]>([]),
     [friends, setFriends] = useState<Room[]>([]);
   const [active, setActive] = useState("");
+  const [membersOpen, setMembersOpen] = useState(false);
+  const [directory, setDirectory] = useState<MemberDirectory | null>(null);
+  const [directoryError, setDirectoryError] = useState("");
+  const [directoryLoading, setDirectoryLoading] = useState(false);
+  const [memberSearch, setMemberSearch] = useState("");
+  const directoryRequest = useRef(false);
+  const directoryVersion = useRef(0);
+  const membersPanel = useRef<HTMLDivElement>(null);
+  useDialogFocus(membersOpen, membersPanel, () => setMembersOpen(false));
   const [groupDetails, setGroupDetails] = useState<Record<string, { count?: number; state: "loading" | "ready" | "missing" | "error" }>>({});
   const [authorLabels, setAuthorLabels] = useState<Record<string, Record<string, string | null>>>({});
   const [authorLookupState, setAuthorLookupState] = useState<Record<string, "loading" | "ready" | "error">>({});
@@ -245,6 +258,33 @@ export const Community = () => {
     return () => stop.forEach((fn) => fn());
   }, [user?.uid, socialRevision]);
   const joinedIds = joined.map((group) => group.id).sort().join(",");
+  const directoryRoom = useRef(active);
+  directoryRoom.current = active;
+  const loadMembers = async (after = "") => {
+    if (!user || !active || directoryRequest.current) return;
+    directoryRequest.current = true;
+    const version = ++directoryVersion.current;
+    const roomId = active;
+    setDirectoryLoading(true);
+    setDirectoryError("");
+    try {
+      const result = await call<MemberDirectory>("getCommunityMembers", { communityId: roomId, after });
+      if (directoryRoom.current !== roomId || directoryVersion.current !== version) return;
+      setDirectory((current) => ({ ...result, members: after && current ? [...current.members, ...result.members] : result.members }));
+      setGroupDetails((current) => ({ ...current, [roomId]: { count: result.count, state: "ready" } }));
+    } catch {
+      if (directoryRoom.current === roomId && directoryVersion.current === version) setDirectoryError("Group members could not be loaded. The members service may need updating. Please retry.");
+    } finally {
+      if (directoryVersion.current === version) { directoryRequest.current = false; setDirectoryLoading(false); }
+    }
+  };
+  useEffect(() => { directoryVersion.current++; directoryRequest.current = false; setMembersOpen(false); setDirectory(null); setDirectoryError(""); setMemberSearch(""); setDirectoryLoading(false); }, [active, user?.uid]);
+  useEffect(() => {
+    if (!active || !user) return;
+    void loadMembers();
+    const refresh = window.setInterval(() => { if (document.visibilityState === "visible" && !membersOpen) void loadMembers(); }, 45000);
+    return () => { clearInterval(refresh); directoryVersion.current++; directoryRequest.current = false; };
+  }, [membersOpen, active, user?.uid]);
   useEffect(() => {
     if (!user) return;
     let live = true;
@@ -712,14 +752,14 @@ export const Community = () => {
           </section>
         </aside>
         <section className="flex min-h-[560px] min-w-0 flex-col rounded-[26px] border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900 xl:h-[calc(100dvh-16.5rem)]">
-          <header className="flex items-center justify-between gap-3 border-b border-slate-100 pb-4 dark:border-slate-800">
-            <div className="flex min-w-0 items-center gap-3">
+          <header className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-4 dark:border-slate-800 sm:flex-nowrap">
+            <div className="flex min-w-0 flex-1 basis-full items-center gap-3 sm:basis-auto">
               <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-blue-50 text-blue-600 dark:bg-blue-500/10">
                 <GraduationCap size={23} />
               </span>
               <div className="min-w-0">
                 <h2 className="truncate text-lg font-black">
-                  {room?.name || "Study chat"}
+                  <button type="button" disabled={!membership} onClick={() => setMembersOpen(true)}>{room?.name || "Study chat"}</button>
                 </h2>
                 <p className="mt-0.5 text-sm text-slate-500">
                   {room
@@ -731,6 +771,7 @@ export const Community = () => {
               </div>
             </div>
             <div className="flex items-center gap-3">
+              {membership && <button type="button" className="rounded-xl border border-slate-200 p-2 text-blue-700" aria-label="View group members" onClick={() => setMembersOpen(true)}><UsersRound size={22} /></button>}
               {membership && membership.role !== "owner" && (
                 <button
                   className="text-sm font-semibold text-slate-500 underline hover:text-red-600"
@@ -747,6 +788,22 @@ export const Community = () => {
               )}
             </div>
           </header>
+          {directory && <p className="pt-2 text-xs text-slate-500">{directory.count} members · {directory.onlineCount === null ? "Online count unavailable for this group" : `${directory.onlineCount} online`} · Online means an active website tab within the last 2 minutes.</p>}
+          {membersOpen && createPortal(<div className="fixed inset-0 z-[150] flex items-center justify-center bg-slate-950/50 p-4" onClick={() => setMembersOpen(false)}>
+            <div ref={membersPanel} role="dialog" aria-modal="true" aria-labelledby="group-members-heading" className="flex max-h-[85dvh] w-full max-w-lg min-w-0 flex-col rounded-2xl bg-white p-5 text-slate-900 dark:bg-slate-900 dark:text-white" onClick={(event) => event.stopPropagation()}>
+              <div className="flex items-center justify-between gap-2"><h2 id="group-members-heading" className="text-xl font-bold">{room?.name} · Members</h2><button type="button" aria-label="Close group members" className="grid h-11 w-11 place-items-center" onClick={() => setMembersOpen(false)}><X /></button></div>
+              <p className="mb-3 text-sm text-slate-500">{directory ? `${directory.count} members · ${directory.onlineCount === null ? "Online count unavailable" : `${directory.onlineCount} online`}` : directoryLoading ? "Loading member directory…" : "Member directory unavailable"}</p>
+              <input className={field} aria-label="Search loaded group members" placeholder="Search loaded names or usernames" value={memberSearch} onChange={(event) => setMemberSearch(event.target.value)} />
+              {directory && <div className="mt-2 flex items-center justify-between gap-2 text-xs text-slate-500"><span>Updated {recordDate(directory.measuredAt)?.toLocaleTimeString()}</span><button type="button" className="text-blue-700 underline" disabled={directoryLoading} onClick={() => void loadMembers()}>Refresh members</button></div>}
+              {directoryError && <div role="alert" className="my-3 text-sm text-red-600">{directoryError} <button type="button" className="underline" disabled={directoryLoading} onClick={() => void loadMembers()}>Retry</button></div>}
+              <ul className="my-3 min-h-0 overflow-y-auto" aria-label="Group members">{directory?.members.filter((member) => `${member.displayName} ${member.username || ""}`.toLocaleLowerCase().includes(memberSearch.trim().toLocaleLowerCase())).map((member) => <li key={member.uid} className="flex items-center gap-3 border-b border-slate-100 py-3 dark:border-slate-800"><span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-blue-50 text-blue-700">{member.displayName.slice(0, 1).toUpperCase()}</span><div className="min-w-0 flex-1"><p className="break-words font-semibold">{member.displayName}{member.uid === user?.uid ? " (you)" : ""}</p><p className="break-words text-xs text-slate-500">{member.username ? `@${member.username.replace(/^@/, "")}` : "Username not set"} · {member.role}</p><p className="text-xs text-slate-500">{member.online ? "Online" : member.lastSeenAt && recordDate(member.lastSeenAt) ? `Last active ${recordDate(member.lastSeenAt)?.toLocaleString()}` : "Presence not available"}</p></div>{member.online && <span aria-label="Online" className="h-2 w-2 shrink-0 rounded-full bg-emerald-600" />}</li>)}</ul>
+              {directory?.nextCursor && <button type="button" className={button} disabled={directoryLoading} onClick={() => void loadMembers(directory.nextCursor || "")}>Load more members</button>}
+              {directoryLoading && <p role="status" className="mt-2 text-sm">Loading members…</p>}
+              {directory && !directory.members.length && !directoryLoading && <p>No members found.</p>}
+              {directory && directory.members.length > 0 && !directory.members.some((member) => `${member.displayName} ${member.username || ""}`.toLocaleLowerCase().includes(memberSearch.trim().toLocaleLowerCase())) && <p>No loaded members match your search.</p>}
+              <p className="mt-2 text-xs text-slate-500">Online indicates a visible website tab with a heartbeat in the last 2 minutes. Search applies to loaded members; load more to search further.</p>
+            </div>
+          </div>, document.body)}
           <div
             ref={chat}
             role="log"

@@ -36,7 +36,7 @@ import { getAppErrorMessage } from "@/src/lib/errors";
 import { isLocalId, loadLocalData, makeSyncId, saveLocalData } from "@/src/lib/localStore";
 import { useBodyScrollLock } from "@/src/lib/useBodyScrollLock";
 import { useDialogFocus } from "@/src/lib/useDialogFocus";
-import { isReadOnlyAudit } from "@/src/lib/auditMode";
+import { isReadOnlyAudit, isLocalAi } from "@/src/lib/auditMode";
 import { buildStudentTutorContext } from "@/src/lib/tutorContext";
 import { writeDocWithQueue, type SyncStatus } from "@/src/lib/offlineSync";
 import { isNotificationPreferenceEnabled } from "@/src/lib/preferences";
@@ -274,6 +274,7 @@ export const Notes = () => {
 
   useEffect(() => {
     if (!user || !localReady) return;
+    if (isLocalAi) return;
     saveLocalData(messagesKey, messages);
   }, [localReady, messages, messagesKey, user]);
 
@@ -763,10 +764,11 @@ export const Notes = () => {
         role: "user",
         content: prompt,
         createdAt: new Date().toISOString(),
-        syncStatus: "pending",
+        syncStatus: isLocalAi ? undefined : "pending",
       };
       if (saveUserMessage) {
         setMessages((current) => [...current, localUserMessage]);
+        if (!isLocalAi) {
         debugNotebookMetricsWrite(["users", user.uid, "notebookMessages", localUserMessage.id]);
         writeDocWithQueue({
           userId: user.uid,
@@ -787,6 +789,7 @@ export const Notes = () => {
             console.warn(getAppErrorMessage(error));
             setCloudSyncBlocked(true);
           });
+        }
       }
 
       const answer = await askNotebook(prompt, buildNotebookContext(activeNote, sources, notebookStudentContext), "en-US", {
@@ -798,9 +801,11 @@ export const Notes = () => {
         role: "assistant",
         content: answer,
         createdAt: new Date().toISOString(),
-        syncStatus: "pending",
+        syncStatus: isLocalAi ? undefined : "pending",
       };
       setMessages((current) => [...current, localAiMessage]);
+
+      if (isLocalAi) { setStatus("Local AI preview · chat history is not saved."); return; }
 
       debugNotebookMetricsWrite(["users", user.uid, "notebookMessages", localAiMessage.id]);
       writeDocWithQueue({

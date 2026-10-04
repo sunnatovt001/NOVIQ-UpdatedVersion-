@@ -89,6 +89,66 @@ module.exports = ({ db, onCall, HttpsError, FieldValue }) => {
     }));
     return { count: result.data().count, authors };
   });
+  // Presence leases expire even if a tab crashes or loses its connection.
+  // Separate tab leases prevent closing one tab from marking every tab offline.
+  api.updateCommunityPresence = onCall(async (request) => {
+    const uid = auth(request);
+    const sessionId = request.data?.sessionId;
+    if (typeof sessionId !== "string" || !/^[a-zA-Z0-9_-]{16,64}$/.test(sessionId) || typeof request.data?.online !== "boolean")
+      throw new HttpsError("invalid-argument", "Invalid presence update.");
+    const now = Date.now(), ref = db.doc(`users/${uid}/trusted/communityPresence`);
+    await db.runTransaction(async (tx) => {
+      const snapshot = await tx.get(ref);
+      const consume = await rate(tx, uid, "communityPresence", 40);
+      const leases = Object.fromEntries(Object.entries(snapshot.data()?.leases || {}).filter(([, expiry]) => Number(expiry) > now));
+      if (request.data.online) {
+        if (!Object.hasOwn(leases, sessionId) && Object.keys(leases).length >= 20)
+          throw new HttpsError("resource-exhausted", "Too many active tabs.");
+        leases[sessionId] = now + 120000;
+      } else delete leases[sessionId];
+      consume();
+      tx.set(ref, { leases, lastSeenAt: new Date(now).toISOString() });
+    });
+    return { ok: true };
+  });
+  api.getCommunityMembers = onCall(async (request) => {
+    const uid = auth(request), id = roomId(request);
+    if (!(await db.doc(`communities/${id}/members/${uid}`).get()).exists)
+      throw new HttpsError("permission-denied", "Join this group before viewing its members.");
+    const after = request.data?.after || "";
+    if (typeof after !== "string" || (after && !/^[a-zA-Z0-9_-]{1,128}$/.test(after)))
+      throw new HttpsError("invalid-argument", "Invalid member cursor.");
+    const collection = db.collection(`communities/${id}/members`);
+    const count = (await collection.count().get()).data().count;
+    let page = collection.orderBy("__name__");
+    if (after) page = page.startAfter(after);
+    const snapshot = await page.limit(51).get();
+    const documents = snapshot.docs.slice(0, 50);
+    const now = Date.now();
+    const isOnline = (data) => Object.values(data?.leases || {}).some((expiry) => Number(expiry) > now && Number(expiry) <= now + 120000);
+    const members = await Promise.all(documents.map(async (document) => {
+      const [profile, presence] = await Promise.all([
+        db.doc(`users/${document.id}`).get(), db.doc(`users/${document.id}/trusted/communityPresence`).get(),
+      ]);
+      const data = profile.data() || {}, membership = document.data();
+      return {
+        uid: document.id,
+        displayName: String(data.displayName || data.name || membership.displayName || "Former or unnamed member").slice(0, 120),
+        username: typeof data.username === "string" ? data.username.slice(0, 80) : null,
+        role: membership.role === "owner" ? "owner" : "member",
+        online: isOnline(presence.data()),
+        lastSeenAt: presence.data()?.lastSeenAt || null,
+      };
+    }));
+    // Avoid unbounded scans for unusually large groups. Never substitute a fake zero.
+    let onlineCount = null;
+    if (count <= 1000) {
+      const all = await collection.limit(1000).get();
+      const states = await Promise.all(all.docs.map((member) => db.doc(`users/${member.id}/trusted/communityPresence`).get()));
+      onlineCount = states.filter((state) => isOnline(state.data())).length;
+    }
+    return { count, onlineCount, members, nextCursor: snapshot.docs.length > 50 ? documents.at(-1).id : null, measuredAt: new Date(now).toISOString() };
+  });
   api.joinCommunity = onCall(async (request) => {
     const uid = auth(request),
       id = roomId(request);

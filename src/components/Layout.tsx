@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "@/src/contexts/AuthContext";
-import { isReadOnlyAudit } from "@/src/lib/auditMode";
+import { useCommunityPresence } from "@/src/lib/useCommunityPresence";
+import { isReadOnlyAudit, isLocalAi } from "@/src/lib/auditMode";
 import {
   LayoutDashboard,
   BookOpen,
@@ -210,6 +211,7 @@ export const Layout: React.FC<{
   setActiveTab: (tab: string) => void;
 }> = ({ children, activeTab, setActiveTab }) => {
   const { profile, signOut, user } = useAuth();
+  const presenceError = useCommunityPresence(user?.uid);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => {
     if (typeof window === "undefined") return false;
@@ -740,7 +742,8 @@ export const Layout: React.FC<{
             className="fixed inset-0 z-[105] bg-[#111827]/35 backdrop-blur-sm lg:hidden"
           />
         )}
-        {isReadOnlyAudit && <p role="status" className="audit-mode-notice relative z-10 shrink-0 px-4 py-1 text-xs">Read-only audit · cloud writes and telemetry disabled</p>}
+        {isReadOnlyAudit && <p role="status" className="audit-mode-notice relative z-10 shrink-0 px-4 py-1 text-xs">{isLocalAi ? "Local AI enabled · cloud writes, chat history saving and telemetry disabled" : "Read-only audit · cloud writes and telemetry disabled"}</p>}
+        {activeTab === "community" && presenceError && <p role="status" className="relative z-10 shrink-0 bg-amber-50 px-4 py-1 text-xs text-amber-900 dark:bg-amber-900 dark:text-amber-100">{presenceError}</p>}
         {activeTab !== "tutor" && <FloatingTutor activeTab={activeTab} />}
       </main>
     </div>

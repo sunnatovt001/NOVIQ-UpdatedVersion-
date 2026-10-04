@@ -4,6 +4,39 @@ const vm = require("node:vm");
 const fs = require("node:fs");
 const crypto = require("node:crypto");
 
+test("community directory is member-only, paginated and excludes private account fields", async () => {
+  const h = harness();
+  h.records.set("communities/real/members/u1", { role: "owner", displayName: "Saved name" });
+  h.records.set("users/u1", { displayName: "Current name", username: "current_username", email: "private@example.invalid", telegramId: "private" });
+  h.records.set("users/u1/trusted/communityPresence", { leases: { tab: Date.now() + 60000 }, lastSeenAt: new Date().toISOString() });
+  for (let i=0; i<52; i++) h.records.set(`communities/real/members/member${String(i).padStart(2,"0")}`, { displayName: `Stored ${i}`, role:"member" });
+  const before = h.records.size;
+  await assert.rejects(h.functions.getCommunityMembers({ auth: {uid:"outsider"}, data:{communityId:"real"} }), {code:"permission-denied"});
+  const first = await h.functions.getCommunityMembers({auth:{uid:"u1"},data:{communityId:"real"}});
+  assert.equal(first.count,53);assert.equal(first.onlineCount,1);assert.equal(first.members.length,50);assert.ok(first.nextCursor);
+  const next = await h.functions.getCommunityMembers({auth:{uid:"u1"},data:{communityId:"real",after:first.nextCursor}});
+  assert.equal(next.members.length,3);assert.equal(next.nextCursor,null);
+  const self=next.members.find(member=>member.uid==="u1");assert.equal(self.username,"current_username");assert.equal(self.displayName,"Current name");assert.equal(self.online,true);
+  assert.ok(!JSON.stringify(next).includes("private"));assert.equal(h.records.size,before);
+});
+test("presence leases preserve other tabs, expire and require authentication", async()=>{
+  const h=harness();
+  await assert.rejects(h.functions.updateCommunityPresence({data:{sessionId:"isolated_tab_123456",online:true}}),{code:"unauthenticated"});
+  await assert.rejects(h.functions.updateCommunityPresence({auth:{uid:"u1"},data:{sessionId:"../invalid",online:true}}),{code:"invalid-argument"});
+  const path="users/u1/trusted/communityPresence";
+  h.records.set(path,{leases:{expired:Date.now()-1,other:Date.now()+60000}});
+  await h.functions.updateCommunityPresence({auth:{uid:"u1"},data:{sessionId:"isolated_tab_123456",online:true}});
+  assert.equal(h.records.get(path).leases.expired,undefined);assert.ok(h.records.get(path).leases.other);
+  await h.functions.updateCommunityPresence({auth:{uid:"u1"},data:{sessionId:"isolated_tab_123456",online:false}});
+  assert.equal(h.records.get(path).leases.isolated_tab_123456,undefined);assert.ok(h.records.get(path).leases.other);
+});
+test("AI uses the available model and header-only key, and does not retry credential rejection", async()=>{
+  const calls=[];
+  const h=harness({}, {fetch:async(url,options)=>{calls.push({url,options});return {ok:false,status:403,json:async()=>({error:{message:"API key forbidden"}})};}});
+  await assert.rejects(h.functions.generateAiResponse({auth:{uid:"u1"},data:{contents:"Isolated question",feature:"tutor",retries:1}}),error=>error.details.reason==="AI_KEY_OR_PERMISSION");
+  assert.equal(calls.length,1);assert.ok(calls[0].url.includes("gemini-3.8-flash"));assert.ok(!calls[0].url.includes("test-key"));assert.equal(calls[0].options.headers["x-goog-api-key"],"test-key");
+});
+
 // Exercise the exported handlers against an isolated transaction store. No
 // Firebase credentials, Gemini calls, Telegram messages or payments are made.
 function harness(env = {}, overrides = {}) {
@@ -38,6 +71,14 @@ function harness(env = {}, overrides = {}) {
   });
   const collection = (path) => ({
     path,
+    orderBy: () => {
+      let after = "";
+      const sorted = {
+        startAfter(value) { after = value; return sorted; },
+        limit(count) { return { get: async () => ({ docs: [...records.entries()].filter(([key]) => key.startsWith(`${path}/`) && key.split("/").length === path.split("/").length + 1 && key.split("/").at(-1) > after).sort(([a], [b]) => a.localeCompare(b)).slice(0, count).map(([key, data]) => ({ id: key.split("/").at(-1), data: () => data })) }) }; },
+      };
+      return sorted;
+    },
     count: () => ({ get: async () => ({ data: () => ({ count: [...records.keys()].filter((key) => key.startsWith(`${path}/`) && key.split("/").length === path.split("/").length + 1).length }) }) }),
     where: (field, operator, value) => ({
       limit: (count) => ({
@@ -51,7 +92,7 @@ function harness(env = {}, overrides = {}) {
       }),
     }),
     doc: (id = crypto.randomBytes(8).toString("hex")) => ref(`${path}/${id}`),
-    limit: () => ({ queryPath: path }),
+    limit: (count) => ({ queryPath: path, get: async () => ({ docs: [...records.entries()].filter(([key]) => key.startsWith(`${path}/`) && key.split("/").length === path.split("/").length + 1).slice(0, count).map(([key, data]) => ({ id: key.split("/").at(-1), data: () => data })) }) }),
   });
   const snapshot = (path) => ({
     exists: records.has(path),

@@ -23,6 +23,27 @@ blocks queued writes/flushes and session starts, and does not clear stored data.
 Test send/save/provider flows with isolated fixtures rather than a live account.
 Normal development and production builds keep their existing behavior.
 
+For local Gemini testing without cloud data writes, run `npm run dev:local-ai`
+and open `http://localhost:3000`. This mode reads the Gemini key only from
+`functions/.env` on the Vite server, verifies Firebase ID tokens, restricts
+requests to the local machine/origin and applies a 10-request/minute limit.
+AI answers are available but chat history, telemetry and progress are not saved.
+This development-only proxy is excluded from production builds. Normal builds
+continue to use authenticated Firebase Functions and their existing quotas.
+The server defaults to `gemini-3.8-flash`; `GEMINI_MODELS` can configure server
+models. The old 2.5 Flash model returned 404 for the supplied account in live tests.
+
+Nexus member directories use `getCommunityMembers` (50 members per page),
+and normal-mode presence uses `updateCommunityPresence` with per-tab 120-second
+leases. Only actual group members may read the directory. Online means a visible
+website tab reported activity in the last two minutes; it is not Telegram presence.
+Existing display names and usernames are used, with no fabricated usernames.
+Directory responses omit private account fields. Online summaries are unavailable
+for groups above 1,000 members to avoid unbounded reads; larger-group aggregation
+needs a separate scaling design. Audit/local-AI modes do not write presence.
+These new callables must be deployed later before live Nexus counts/presence
+can work; this local task did not deploy them.
+
 ## Verification
 
 Run `npm run verify` before pushing. It runs TypeScript, Functions syntax checks,
