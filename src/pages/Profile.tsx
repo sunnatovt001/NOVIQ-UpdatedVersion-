@@ -30,6 +30,7 @@ import { calculateLevelName } from "@/src/lib/progress";
 import { useBodyScrollLock } from "@/src/lib/useBodyScrollLock";
 import { getNotificationPreferences, type NotificationPreferenceKey } from "@/src/lib/preferences";
 import { writeDocWithQueue } from "@/src/lib/offlineSync";
+import { isReadOnlyAudit } from "@/src/lib/auditMode";
 
 const AVATAR_SIZE = 512;
 const TELEGRAM_BOT_USERNAME = "noviqq_bot";
@@ -70,6 +71,7 @@ export const Profile = () => {
   const [avatarError, setAvatarError] = useState("");
   const [telegramLinking, setTelegramLinking] = useState(false);
   const handleTelegramConnect = async () => {
+    if (isReadOnlyAudit) { setStatus("Bot linking is disabled in read-only audit mode."); return; }
     if (!user || !TELEGRAM_BOT_USERNAME || telegramLinking) return;
     setTelegramLinking(true);
     try {
@@ -102,6 +104,7 @@ export const Profile = () => {
   }, [avatarPreview]);
 
   const handleSave = async () => {
+    if (isReadOnlyAudit) { setStatus("Saving is disabled in read-only audit mode."); return; }
     if (!user) return;
     setIsSaving(true);
     setStatus("");
@@ -133,8 +136,9 @@ export const Profile = () => {
   };
 
   const handleTelegramTest = async () => {
-    if (!user) return;
-    const chatId = formData.telegramId.trim();
+    if (isReadOnlyAudit) { setStatus("Telegram sends are disabled in read-only audit mode."); return; }
+    if (!user || telegramTesting || !profile?.telegramId?.trim()) return;
+    const chatId = profile.telegramId.trim();
     if (!chatId) {
       setStatus("Telegram ID kiriting.");
       return;
@@ -164,6 +168,7 @@ export const Profile = () => {
   ];
 
   const handlePreferenceToggle = async (key: NotificationPreferenceKey) => {
+    if (isReadOnlyAudit) { setStatus("Preferences cannot be changed in read-only audit mode."); return; }
     if (!user || savingPreference) return;
 
     const nextNotifications = {
@@ -248,6 +253,7 @@ export const Profile = () => {
   };
 
   const handleSaveAvatar = async () => {
+    if (isReadOnlyAudit) { setStatus("Avatar uploads are disabled in read-only audit mode."); return; }
     if (!user || !avatarFile) return;
     setIsAvatarSaving(true);
     setAvatarError("");
@@ -432,7 +438,7 @@ export const Profile = () => {
                 <button
                   type="button"
                   onClick={handleTelegramTest}
-                  disabled={!formData.telegramId.trim() || telegramTesting}
+                  disabled={!profile?.telegramId?.trim() || telegramTesting}
                   className="inline-flex min-h-10 items-center justify-center gap-2 rounded-2xl bg-emerald-500/15 px-4 text-[10px] font-black uppercase tracking-[0.18em] text-emerald-300 transition hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   {telegramTesting ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}

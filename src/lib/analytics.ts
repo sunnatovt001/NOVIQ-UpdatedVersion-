@@ -1,7 +1,9 @@
 import { makeSyncId } from "@/src/lib/localStore";
+import { isReadOnlyAudit } from "./auditMode";
 import { writeDocWithQueue } from "@/src/lib/offlineSync";
 
 export const trackSiteVisit = async (page: string, userId?: string) => {
+  if (isReadOnlyAudit) return;
   if (!userId) {
     return;
   }
@@ -28,6 +30,7 @@ export const trackUserEvent = async (
   xp: number,
   details: Record<string, unknown> = {}
 ) => {
+  if (isReadOnlyAudit) return;
   const eventId = makeSyncId("analytics-event");
   await writeDocWithQueue({
     userId,

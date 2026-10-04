@@ -1,5 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, PieChart, Pie, Cell } from "recharts";
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, PieChart, Pie, Cell } from "recharts";
+import { MeasuredChart } from "@/src/components/MeasuredChart";
+import { isMeaningfulSession, missionCompletion } from "@/src/lib/activityEvidence";
 import { Calendar, Zap, Brain, Clock, ShieldCheck } from "lucide-react";
 import { cn } from "@/src/lib/utils";
 import { collection, limit, onSnapshot, orderBy, query } from "firebase/firestore";
@@ -27,17 +29,17 @@ const formatDuration = (seconds: number) => {
   return `${minutes}m`;
 };
 
-const getWeekStart = () => {
+const getWeekStart = (weekOffset = 0) => {
   const now = new Date();
   const mondayOffset = (now.getDay() + 6) % 7;
   const start = new Date(now);
   start.setHours(0, 0, 0, 0);
-  start.setDate(now.getDate() - mondayOffset);
+  start.setDate(now.getDate() - mondayOffset + weekOffset * 7);
   return start;
 };
 
-const buildWeeklyData = (sessions: AnalyticsStudySession[]) => {
-  const weekStart = getWeekStart();
+const buildWeeklyData = (sessions: AnalyticsStudySession[], weekOffset = 0) => {
+  const weekStart = getWeekStart(weekOffset);
 
   return DAY_LABELS.map((name, index) => {
     const date = new Date(weekStart);
@@ -48,7 +50,7 @@ const buildWeeklyData = (sessions: AnalyticsStudySession[]) => {
 
     return {
       name,
-      hours: Number((seconds / 3600).toFixed(1)),
+      hours: Number((seconds / 3600).toFixed(2)),
       sessions: daySessions.length,
       seconds,
     };
@@ -82,9 +84,9 @@ const buildCategoryData = (sessions: AnalyticsStudySession[]) => {
   });
 
   return Array.from(totals.entries())
-    .map(([name, seconds]) => ({ name, value: Math.max(1, Math.round(seconds / 60)) }))
-    .sort((a, b) => b.value - a.value)
-    .slice(0, 4);
+    .filter(([, seconds]) => seconds > 0)
+    .map(([name, seconds]) => ({ name, value: seconds / 60 }))
+    .sort((a, b) => b.value - a.value);
 };
 
 const heatmapClass = (intensity: number) => {
@@ -99,6 +101,10 @@ export const Analytics = ({ setActiveTab }: { setActiveTab?: (t: string) => void
   const { user, profile } = useAuth();
   const activityMetrics = useUserActivityMetrics(user?.uid);
   const [studySessions, setStudySessions] = useState<AnalyticsStudySession[]>([]);
+  const [weekOffset, setWeekOffset] = useState(0);
+  const [sessionError, setSessionError] = useState("");
+  const [sessionLoading, setSessionLoading] = useState(true);
+  const [sessionRevision, setSessionRevision] = useState(0);
 
   useEffect(() => {
     if (!user) {
@@ -111,6 +117,8 @@ export const Analytics = ({ setActiveTab }: { setActiveTab?: (t: string) => void
       orderBy("timestamp", "desc"),
       limit(300)
     );
+    setSessionLoading(true);
+    setSessionError("");
     return onSnapshot(
       sessionsQuery,
       (snapshot) => {
@@ -124,19 +132,23 @@ export const Analytics = ({ setActiveTab }: { setActiveTab?: (t: string) => void
               subject: data.subject || "Study",
               category: data.category || "focus",
               xpEarned: Number(data.xpEarned) || 0,
+              status: data.status,
               timestamp: timestampToIso(data.timestamp) || timestampToIso(data.createdAt),
             } as AnalyticsStudySession;
-          }).filter((session) => Boolean(session.timestamp))
+          }).filter(isMeaningfulSession)
         );
+        setSessionLoading(false);
       },
       (error) => {
         console.warn("Analytics session listener failed", error);
+        setSessionError("Study history could not be loaded. Check your connection and retry.");
+        setSessionLoading(false);
       }
     );
-  }, [user]);
+  }, [user?.uid, sessionRevision]);
 
   const dailyTargetMinutes = profile?.dailyTargetMinutes || 30;
-  const weeklyData = useMemo(() => buildWeeklyData(studySessions), [studySessions]);
+  const weeklyData = useMemo(() => buildWeeklyData(studySessions, weekOffset), [studySessions, weekOffset]);
   const heatmapData = useMemo(() => buildHeatmapData(studySessions, dailyTargetMinutes), [studySessions, dailyTargetMinutes]);
   const categoryData = useMemo(() => buildCategoryData(studySessions), [studySessions]);
   const totalStudySeconds = useMemo(
@@ -149,21 +161,21 @@ export const Analytics = ({ setActiveTab }: { setActiveTab?: (t: string) => void
   const activeDaysThisWeek = weeklyData.filter((day) => day.seconds > 0).length;
   const totalXp = activityMetrics.xp;
   const latestSession = studySessions[0];
-  const retentionConfidence = activityMetrics.examReadiness || (studySessions.length ? Math.min(96, Math.max(45, 48 + weeklyGoalProgress)) : 0);
+  const reviewCoverage = missionCompletion(activityMetrics.flashcardsCreated, activityMetrics.reviewedCards);
   const totalCategoryMinutes = categoryData.reduce((total, item) => total + item.value, 0);
   const levelName = profile?.levelName || calculateLevelName(totalXp);
 
   const metricCards = [
     {
-      label: "Study Time",
+      label: "Recent Study Time",
       value: formatDuration(totalStudySeconds),
-      trend: `${studySessions.length} session${studySessions.length === 1 ? "" : "s"}`,
+      trend: `${studySessions.length} completed · last 300 records`,
       icon: Clock,
       color: "text-blue-400",
       bg: "bg-blue-500/5",
     },
     {
-      label: "This Week",
+      label: weekOffset === 0 ? "This Week" : "Last Week",
       value: formatDuration(weeklyStudySeconds),
       trend: `${weeklyGoalProgress}% goal`,
       icon: Zap,
@@ -179,9 +191,9 @@ export const Analytics = ({ setActiveTab }: { setActiveTab?: (t: string) => void
       bg: "bg-pink-500/5",
     },
     {
-      label: "Retention",
-      value: `${retentionConfidence}%`,
-      trend: "Live",
+      label: "Card review coverage",
+      value: reviewCoverage === null ? "Not measured" : `${reviewCoverage}%`,
+      trend: "Reviewed at least once",
       icon: Calendar,
       color: "text-orange-400",
       bg: "bg-orange-500/5",
@@ -190,6 +202,8 @@ export const Analytics = ({ setActiveTab }: { setActiveTab?: (t: string) => void
 
   return (
     <div className="space-y-12 pb-24 px-2 sm:px-0">
+      {sessionLoading && <p role="status">Loading study history…</p>}
+      {(sessionError || activityMetrics.error) && <div role="alert" className="rounded-xl border border-amber-300 p-4 text-sm text-amber-700">{sessionError || activityMetrics.error} <button type="button" className="ml-2 underline" onClick={() => { setSessionRevision((current) => current + 1); activityMetrics.retry(); }}>Retry</button></div>}
       <header className="flex flex-col xl:flex-row xl:items-center justify-between gap-8">
         <div className="space-y-3">
           <div className="flex items-center gap-2">
@@ -234,16 +248,16 @@ export const Analytics = ({ setActiveTab }: { setActiveTab?: (t: string) => void
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6 mb-8 sm:mb-10">
             <div className="space-y-1">
                <h3 className="text-xl sm:text-2xl font-bold text-white tracking-tight">Productivity Flow</h3>
-               <p className="text-[10px] sm:text-xs font-medium text-slate-500">Hourly engagement across the week</p>
+               <p className="text-[10px] sm:text-xs font-medium text-slate-500">Daily study hours, Monday–Sunday · {weekOffset === 0 ? "current week" : "last week"}</p>
             </div>
-            <select className="bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-slate-400 self-start sm:self-center">
-               <option>Current Week</option>
-               <option>Last Week</option>
+            <select aria-label="Study week" value={weekOffset} onChange={(event) => setWeekOffset(Number(event.target.value))} className="bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-slate-400 self-start sm:self-center">
+               <option value={0}>Current Week</option>
+               <option value={-1}>Last Week</option>
             </select>
           </div>
           
           <div className="h-[250px] sm:h-[300px] w-full mt-4">
-            <ResponsiveContainer width="100%" height="100%">
+            <MeasuredChart>
               <AreaChart data={weeklyData}>
                 <defs>
                   <linearGradient id="colorHours" x1="0" y1="0" x2="0" y2="1">
@@ -279,7 +293,7 @@ export const Analytics = ({ setActiveTab }: { setActiveTab?: (t: string) => void
                   fill="url(#colorHours)" 
                 />
               </AreaChart>
-            </ResponsiveContainer>
+            </MeasuredChart>
           </div>
         </section>
 
@@ -287,7 +301,7 @@ export const Analytics = ({ setActiveTab }: { setActiveTab?: (t: string) => void
         <section className="glass p-10 border-white/5 flex flex-col bg-white/[0.01]">
           <div className="space-y-1 mb-10">
              <h3 className="text-2xl font-bold text-white tracking-tight">Consistency</h3>
-             <p className="text-xs font-medium text-slate-500">Your daily exam-prep frequency</p>
+             <p className="text-xs font-medium text-slate-500">Daily study minutes · last 35 calendar days</p>
           </div>
           
           <div className="flex-1 grid grid-cols-7 gap-2.5">
@@ -305,7 +319,7 @@ export const Analytics = ({ setActiveTab }: { setActiveTab?: (t: string) => void
 
           <div className="mt-8 pt-8 border-t border-white/5 flex items-center justify-between">
              <div className="flex flex-col">
-                <span className="text-[10px] font-black text-slate-600 uppercase tracking-widest mb-1">Weekly Goal</span>
+                <span className="text-[10px] font-black text-slate-600 uppercase tracking-widest mb-1">{weekOffset === 0 ? "Current week goal" : "Last week · current goal reference"}</span>
                 <span className="text-lg font-bold text-white leading-none">{formatDuration(weeklyStudySeconds)} / {formatDuration(weeklyTargetSeconds)}</span>
              </div>
              <div className="w-14 h-14 rounded-full border-4 border-blue-600/20 border-t-blue-600 flex items-center justify-center">
@@ -318,11 +332,12 @@ export const Analytics = ({ setActiveTab }: { setActiveTab?: (t: string) => void
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         {/* Category Breakdown */}
         <section className="glass p-10 border-white/5 bg-white/[0.01]">
-          <h3 className="text-2xl font-bold text-white tracking-tight mb-10">Study Focus</h3>
+          <h3 className="text-2xl font-bold text-white tracking-tight mb-2">Study Focus</h3>
+          <p className="mb-8 text-xs text-slate-500">Share of study minutes · last 300 session records</p>
           {categoryData.length ? (
             <div className="flex flex-col md:flex-row items-center gap-12">
               <div className="w-full h-[220px]">
-                <ResponsiveContainer width="100%" height="100%">
+                <MeasuredChart>
                   <PieChart>
                     <Pie
                       data={categoryData}
@@ -339,13 +354,13 @@ export const Analytics = ({ setActiveTab }: { setActiveTab?: (t: string) => void
                       contentStyle={{ backgroundColor: "#0f172a", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "16px" }}
                     />
                   </PieChart>
-                </ResponsiveContainer>
+                </MeasuredChart>
               </div>
               <div className="space-y-5 w-full">
                 {categoryData.map((item, i) => (
                   <div key={item.name} className="flex items-center justify-between group">
                     <div className="flex items-center gap-4">
-                      <div className="w-3 h-3 rounded-full shadow-lg" style={{ backgroundColor: COLORS[i], boxShadow: `0 0 10px ${COLORS[i]}44` }} />
+                      <div className="w-3 h-3 rounded-full shadow-lg" style={{ backgroundColor: COLORS[i % COLORS.length], boxShadow: `0 0 10px ${COLORS[i % COLORS.length]}44` }} />
                       <span className="text-sm font-bold text-slate-400 group-hover:text-white transition-colors">{item.name}</span>
                     </div>
                     <span className="text-sm font-black font-display text-white">{Math.round((item.value / Math.max(totalCategoryMinutes, 1)) * 100)}%</span>
@@ -366,23 +381,23 @@ export const Analytics = ({ setActiveTab }: { setActiveTab?: (t: string) => void
           
           <div className="flex items-center gap-3 mb-8">
              <ShieldCheck className="text-orange-400" size={24} />
-             <h3 className="text-2xl font-bold text-orange-400 tracking-tight">AI Retention Shield</h3>
+             <h3 className="text-2xl font-bold text-orange-400 tracking-tight">Recall guidance</h3>
           </div>
           
           <div className="space-y-3 mb-10">
             <p className="text-slate-300 leading-relaxed font-medium">
               {latestSession
                 ? `Your latest ${Math.round(latestSession.duration / 60)} minute ${latestSession.subject} session is ready for review. Convert it into recall cards before starting the next topic.`
-                : "Complete a focus session to unlock retention guidance from your own activity."}
+                : "No completed study session is available to guide your next review."}
             </p>
-            <p className="text-xs text-slate-500 font-bold uppercase tracking-widest">Confidence Score: {retentionConfidence}%</p>
+            <p className="text-xs text-slate-500 font-bold">Retention and confidence are not measured without repeated recall assessments.</p>
           </div>
 
           <button 
             onClick={() => setActiveTab?.('flashcards')}
-            className="w-full py-5 rounded-[2rem] bg-orange-500 hover:bg-orange-400 text-white font-black uppercase tracking-[0.2em] text-xs transition-all shadow-2xl shadow-orange-500/30 active:scale-95 text-center"
+            className="w-full py-5 rounded-[2rem] bg-orange-700 hover:bg-orange-800 text-white font-black uppercase tracking-[0.2em] text-xs transition-all shadow-2xl shadow-orange-500/30 active:scale-95 text-center"
           >
-             Intervene Now: Flashcard Sprint
+             {activityMetrics.dueCards > 0 ? `Review ${activityMetrics.dueCards} due cards` : "Open Decks"}
           </button>
         </section>
       </div>

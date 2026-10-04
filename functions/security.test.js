@@ -6,7 +6,7 @@ const crypto = require("node:crypto");
 
 // Exercise the exported handlers against an isolated transaction store. No
 // Firebase credentials, Gemini calls, Telegram messages or payments are made.
-function harness(env = {}) {
+function harness(env = {}, overrides = {}) {
   const records = new Map();
   const stamp = (date) => ({ toDate: () => new Date(date) });
   const merge = (base, patch) => {
@@ -38,6 +38,7 @@ function harness(env = {}) {
   });
   const collection = (path) => ({
     path,
+    count: () => ({ get: async () => ({ data: () => ({ count: [...records.keys()].filter((key) => key.startsWith(`${path}/`) && key.split("/").length === path.split("/").length + 1).length }) }) }),
     where: (field, operator, value) => ({
       limit: (count) => ({
         get: async () => {
@@ -94,9 +95,10 @@ function harness(env = {}) {
     },
   };
   class HttpsError extends Error {
-    constructor(code, message) {
+    constructor(code, message, details) {
       super(message);
       this.code = code;
+      this.details = details;
     }
   }
   const handler = (...args) => args.at(-1);
@@ -146,14 +148,14 @@ function harness(env = {}) {
     Intl,
     URL,
     AbortSignal,
-    fetch: async () => ({
+    fetch: overrides.fetch || (async () => ({
       ok: true,
       json: async () => ({
         ok: true,
         result: { username: "noviqq_bot" },
         candidates: [{ content: { parts: [{ text: "answer" }] } }],
       }),
-    }),
+    })),
   };
   vm.runInNewContext(fs.readFileSync(`${__dirname}/index.js`, "utf8"), context);
   records.set("users/u1", {
@@ -178,6 +180,45 @@ function harness(env = {}) {
   return { functions: context.exports, records, snapshot, response, stamp };
 }
 const auth = { uid: "u1", token: {} };
+
+test("community counts are read-only and available only to actual group members", async () => {
+  const h = harness();
+  h.records.set("communities/g1/members/u1", { uid: "u1" });
+  h.records.set("communities/g1/members/u2", { uid: "u2" });
+  const before = h.records.size;
+  const result = await h.functions.getCommunityMemberCount({ auth, data: { communityId: "g1" } });
+  assert.equal(result.count, 2); assert.equal(h.records.size, before);
+  await assert.rejects(h.functions.getCommunityMemberCount({ auth: { uid: "stranger" }, data: { communityId: "g1" } }), { code: "permission-denied" });
+});
+
+test("legacy author lookup reveals only real group message authors' display names", async () => {
+  const h = harness();
+  h.records.set("communities/g1/members/u1", { uid: "u1" });
+  h.records.set("communities/g1/messages/m1", { userId: "u2", content: "isolated test" });
+  h.records.set("communities/g1/messages/m2", { userId: "deleted" });
+  h.records.set("users/u2", { displayName: "Existing profile name", email: "private@example.invalid" });
+  h.records.set("users/outsider", { displayName: "Private outsider" });
+  const before = h.records.size;
+  const result = await h.functions.getCommunityMemberCount({ auth, data: { communityId: "g1", authorIds: ["u2", "deleted", "outsider"] } });
+  assert.equal(result.authors.u2, "Existing profile name");
+  assert.equal(result.authors.deleted, null);assert.equal(result.authors.outsider, null);
+  assert.equal(JSON.stringify(result).includes("private@example.invalid"), false);assert.equal(h.records.size, before);
+  await assert.rejects(h.functions.getCommunityMemberCount({ auth: {uid:"outsider"}, data:{communityId:"g1",authorIds:["u2"]} }), {code:"permission-denied"});
+  await assert.rejects(h.functions.getCommunityMemberCount({ auth, data:{communityId:"g1",authorIds:["../private"]} }), {code:"invalid-argument"});
+});
+
+test("AI backend reports missing credentials, timeout, empty answer and rate errors without exposing secrets", async () => {
+  const missing = harness({ GEMINI_API_KEY: "" });
+  await assert.rejects(missing.functions.generateAiResponse({ auth, data: { contents: "test", feature: "planner" } }), { code: "failed-precondition" });
+  for (const [fetch, reason] of [
+    [async () => { throw new Error("The operation timed out"); }, "AI_TIMEOUT"],
+    [async () => ({ ok: true, json: async () => ({ candidates: [] }) }), "AI_EMPTY_RESPONSE"],
+    [async () => ({ ok: false, status: 429, json: async () => ({ error: { message: "quota 429" } }) }), "AI_QUOTA_OR_RATE_LIMIT"],
+  ]) {
+    const h = harness({}, { fetch });
+    await assert.rejects(h.functions.generateAiResponse({ auth, data: { contents: "test", feature: "planner", retries: 0 } }), (error) => error.code === "unavailable" && error.details?.reason === reason);
+  }
+});
 
 test("AI requires authentication and rejects concurrent quota overflow", async () => {
   const h = harness();

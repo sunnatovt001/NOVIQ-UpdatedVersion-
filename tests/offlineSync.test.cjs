@@ -5,7 +5,7 @@ const vm = require("node:vm");
 const ts = require("typescript");
 const crypto = require("node:crypto");
 
-function harness(online = true) {
+function harness(online = true, audit = false) {
   let queue = [];
   const writes = [];
   let block = null;
@@ -40,7 +40,7 @@ function harness(online = true) {
           ? { useEffect() {} }
           : name.endsWith("/firebase")
             ? { db: {} }
-            : store,
+            : name === "./auditMode" ? { isReadOnlyAudit: audit } : store,
   };
   const code = ts.transpileModule(
     fs.readFileSync(`${__dirname}/../src/lib/offlineSync.ts`, "utf8"),
@@ -73,6 +73,15 @@ const operation = (data) => ({
   userId: "u1",
   path: ["users", "u1", "notes", "n1"],
   data,
+});
+test("read-only audit preserves pending changes and never sends or queues new writes", async () => {
+  const h = harness(true, true);
+  h.api.queueFirestoreOperation(operation({ title: "existing pending edit" }));
+  const before = JSON.stringify(h.queue());
+  await h.api.flushOfflineSyncQueue("u1");
+  await assert.rejects(h.api.writeDocWithQueue(operation({ title: "blocked" })), /audit/i);
+  assert.equal(h.writes.length, 0);
+  assert.equal(JSON.stringify(h.queue()), before);
 });
 test("offline changes are saved before any network request", async () => {
   const h = harness(false);

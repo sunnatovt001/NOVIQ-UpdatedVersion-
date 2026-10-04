@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "@/src/contexts/AuthContext";
+import { isReadOnlyAudit } from "@/src/lib/auditMode";
 import {
   LayoutDashboard,
   BookOpen,
@@ -286,7 +287,7 @@ export const Layout: React.FC<{
   }, [user]);
 
   useEffect(() => {
-    if (!user || !profile) return;
+    if (!user || !profile || isReadOnlyAudit) return;
 
     const seedDailyNotifications = async () => {
       const key = todayKey();
@@ -699,6 +700,7 @@ export const Layout: React.FC<{
                  {notificationDropdown}
                </div>
                <button 
+                 aria-label="Open profile"
                  onClick={() => setActiveTab('profile')}
                  className="group relative h-14 w-14 overflow-hidden rounded-[1.25rem] border border-[#E5E7EB] bg-white transition-all duration-300 hover:scale-105 hover:border-[#3F7D58]"
                >
@@ -709,7 +711,7 @@ export const Layout: React.FC<{
           </div>
         </header>
 
-        <div className="CustomScrollbar relative flex-1 overflow-y-auto p-5 pb-32 md:p-8 lg:px-10 lg:pb-10 xl:px-14">
+        <div data-page-scroll className="CustomScrollbar relative min-h-0 min-w-0 flex-1 overflow-y-auto p-5 md:p-8 lg:px-10 xl:px-14">
           <div className="app-content-surface pointer-events-none absolute inset-0 rounded-[2rem] border border-[#E5E7EB] bg-white/35" />
           <AnimatePresence mode="wait">
             <motion.div
@@ -738,7 +740,8 @@ export const Layout: React.FC<{
             className="fixed inset-0 z-[105] bg-[#111827]/35 backdrop-blur-sm lg:hidden"
           />
         )}
-        <FloatingTutor activeTab={activeTab} />
+        {isReadOnlyAudit && <p role="status" className="audit-mode-notice relative z-10 shrink-0 px-4 py-1 text-xs">Read-only audit · cloud writes and telemetry disabled</p>}
+        {activeTab !== "tutor" && <FloatingTutor activeTab={activeTab} />}
       </main>
     </div>
   );

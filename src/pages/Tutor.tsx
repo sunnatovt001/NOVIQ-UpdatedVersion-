@@ -211,6 +211,7 @@ export const Tutor = ({ setActiveTab }: { setActiveTab: (tab: string) => void })
   const [messages, setMessages] = useState<Message[]>([INTRO_MESSAGE]);
   const [input, setInput] = useState("");
   const [isTyping, setIsTyping] = useState(false);
+  const aiRequestRef = useRef(false);
   const [isListening, setIsListening] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [autoSpeak, setAutoSpeak] = useState(false);
@@ -408,15 +409,16 @@ export const Tutor = ({ setActiveTab }: { setActiveTab: (tab: string) => void })
     setAttachedFiles((current) => current.filter((file) => file.id !== id));
   };
 
-  const submitPrompt = async (prompt: string, files: TutorAttachment[]) => {
+  const submitPrompt = async (prompt: string, files: TutorAttachment[], retry = false) => {
     if (!user) return;
-    if ((!prompt.trim() && files.length === 0) || isTyping) return;
+    if ((!prompt.trim() && files.length === 0) || aiRequestRef.current) return;
     if (!activePro && tutorUsage >= tutorLimit) {
       setUpgradeOpen(true);
       return;
     }
 
     const cleanPrompt = prompt.trim() || "Analyze the uploaded file and explain the most important points.";
+    aiRequestRef.current = true;
     const attachmentMeta = files.map(({ id, name, mimeType, size, previewUrl, text }) => ({
       id,
       name,
@@ -440,7 +442,7 @@ export const Tutor = ({ setActiveTab }: { setActiveTab: (tab: string) => void })
       content: cleanPrompt,
       attachments: attachmentMeta,
     };
-    setMessages((current) => [...current.filter((message) => message.id !== "intro"), optimisticUserMessage]);
+    if (!retry) setMessages((current) => [...current.filter((message) => message.id !== "intro"), optimisticUserMessage]);
 
     const nextUsage = tutorUsage + 1;
     if (user && !activePro) {
@@ -450,7 +452,7 @@ export const Tutor = ({ setActiveTab }: { setActiveTab: (tab: string) => void })
 
     try {
       trackUserEvent(user.uid, "tutor_message_sent", 0, { tutorMessagesSent: 1 }).catch(() => undefined);
-      persistMessage({
+      if (!retry) persistMessage({
         role: "user",
         content: cleanPrompt,
         attachments: attachmentMeta,
@@ -497,6 +499,7 @@ export const Tutor = ({ setActiveTab }: { setActiveTab: (tab: string) => void })
         },
       ]);
     } finally {
+      aiRequestRef.current = false;
       setIsTyping(false);
     }
   };
@@ -606,7 +609,7 @@ export const Tutor = ({ setActiveTab }: { setActiveTab: (tab: string) => void })
                 "max-w-[88%] rounded-[1.5rem] p-4 text-sm leading-relaxed sm:p-5 sm:text-base",
                 message.role === "assistant"
                   ? "border border-white/10 bg-white/[0.04] text-slate-200"
-                  : "bg-blue-600 text-white shadow-xl shadow-blue-600/20"
+                  : "chat-user-message bg-blue-600 text-white shadow-xl shadow-blue-600/20"
               )}
             >
               {message.attachments && message.attachments.length > 0 && (
@@ -703,7 +706,7 @@ export const Tutor = ({ setActiveTab }: { setActiveTab: (tab: string) => void })
                   <span className="font-semibold">{aiError}</span>
                   <button
                     type="button"
-                    onClick={() => submitPrompt(lastRequest.prompt, lastRequest.attachments)}
+                    onClick={() => submitPrompt(lastRequest.prompt, lastRequest.attachments, true)}
                     disabled={isTyping}
                     className="inline-flex items-center justify-center gap-2 rounded-xl bg-white px-3 py-2 text-xs font-black text-slate-950 transition hover:bg-red-50 disabled:opacity-50"
                   >

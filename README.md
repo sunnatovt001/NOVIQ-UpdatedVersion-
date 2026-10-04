@@ -17,6 +17,12 @@ Firestore, Storage, Gemini tutoring, planner, notes, flashcards and focus sessio
 Gemini and Telegram keys belong only in Functions configuration, never `VITE_*`.
 Local frontend development uses deployed Firebase services, not automatic emulators.
 
+For an audit of an existing account, use `npm run dev -- --mode audit`.
+This opt-in mode skips telemetry, notification creation and planner autosave,
+blocks queued writes/flushes and session starts, and does not clear stored data.
+Test send/save/provider flows with isolated fixtures rather than a live account.
+Normal development and production builds keep their existing behavior.
+
 ## Verification
 
 Run `npm run verify` before pushing. It runs TypeScript, Functions syntax checks,

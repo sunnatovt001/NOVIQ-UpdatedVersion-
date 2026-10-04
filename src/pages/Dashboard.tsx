@@ -1,4 +1,5 @@
 import React from "react";
+import { missionCompletion, reviewGuidance, isMeaningfulSession } from "@/src/lib/activityEvidence";
 import { useAuth } from "@/src/contexts/AuthContext";
 import { ProgressRing } from "@/src/components/Dashboard/ProgressRing";
 import { TaskStarterModal } from "@/src/components/TaskStarterModal";
@@ -188,7 +189,6 @@ const StatCard = ({ icon: Icon, label, value, trend, color, accentColor }: StatC
               {trend}
             </span>
           )}
-          <MiniSparkline direction={trendDirection} seed={label.length * 3} />
         </div>
       </div>
       <p className="relative z-10 mb-1 text-[10px] font-black uppercase tracking-[0.22em] text-slate-500">{label}</p>
@@ -212,6 +212,9 @@ export const Dashboard = ({ setActiveTab }: { setActiveTab: (tab: string) => voi
   const [notebookNotes, setNotebookNotes] = React.useState<NotebookNotePreview[]>([]);
   const [roadmapTasks, setRoadmapTasks] = React.useState<DashboardMissionTask[]>([]);
   const [plannerTasks, setPlannerTasks] = React.useState<DashboardMissionTask[]>([]);
+  const [tasksLoading, setTasksLoading] = React.useState(true);
+  const [tasksError, setTasksError] = React.useState("");
+  const [tasksRevision, setTasksRevision] = React.useState(0);
   const [journalStatus, setJournalStatus] = React.useState<string>("");
   const [missionCelebrationOpen, setMissionCelebrationOpen] = React.useState(false);
   useBodyScrollLock(missionCelebrationOpen || journalOpen);
@@ -233,6 +236,7 @@ export const Dashboard = ({ setActiveTab }: { setActiveTab: (tab: string) => voi
   const selectedDayStamp = selectedDayDate.toDateString();
   const selectedDayIsFuture = selectedDayDate.getTime() > dashboardToday.getTime();
   const activityMetrics = useUserActivityMetrics(user?.uid, { scopeDate: selectedDayDate });
+  const libraryMetrics = useUserActivityMetrics(user?.uid);
 
   React.useEffect(() => {
     if (!user) {
@@ -291,7 +295,7 @@ export const Dashboard = ({ setActiveTab }: { setActiveTab: (tab: string) => voi
           } as DashboardStudySession;
         });
 
-        setStudySessions(remoteSessions);
+        setStudySessions(remoteSessions.filter(isMeaningfulSession));
       },
       (error) => {
         console.warn("Cloud study session listener failed", error);
@@ -424,8 +428,15 @@ export const Dashboard = ({ setActiveTab }: { setActiveTab: (tab: string) => voi
     if (!user) {
       setRoadmapTasks([]);
       setPlannerTasks([]);
+      setTasksLoading(false);
       return undefined;
     }
+
+    setTasksLoading(true);
+    setTasksError("");
+    const pending = new Set(["roadmap", "planner"]);
+    const receivedTasks = (part: string) => { pending.delete(part); setTasksLoading(pending.size > 0); };
+    const failedTasks = (part: string) => { receivedTasks(part); setTasksError("Saved mission tasks could not be refreshed. Your records are unchanged."); };
 
     const tasksQuery = query(
       collection(db, "users", user.uid, "roadmapTasks"),
@@ -458,10 +469,11 @@ export const Dashboard = ({ setActiveTab }: { setActiveTab: (tab: string) => voi
         });
 
         setRoadmapTasks(tasks);
+        receivedTasks("roadmap");
       },
       (error) => {
         console.warn("Cloud roadmap task listener failed", error);
-        setRoadmapTasks([]);
+        failedTasks("roadmap");
       }
     );
 
@@ -492,10 +504,11 @@ export const Dashboard = ({ setActiveTab }: { setActiveTab: (tab: string) => voi
             order: index,
           };
         }));
+        receivedTasks("planner");
       },
       (error) => {
         console.warn("Planner state listener failed", error);
-        setPlannerTasks([]);
+        failedTasks("planner");
       }
     );
 
@@ -503,7 +516,7 @@ export const Dashboard = ({ setActiveTab }: { setActiveTab: (tab: string) => voi
       unsubscribe();
       unsubscribePlanner();
     };
-  }, [user]);
+  }, [user, tasksRevision]);
 
   const completeRoadmapTask = async (id: string) => {
     const existingTask = roadmapTasks.find((task) => task.id === id);
@@ -536,9 +549,9 @@ export const Dashboard = ({ setActiveTab }: { setActiveTab: (tab: string) => voi
     [plannerTasks, roadmapTasks]
   );
   const progressXp = activityMetrics.xp;
-  const completedTaskCount = activityMetrics.tasksDone;
-  const taskTotalCount = selectedDayIsFuture ? 0 : completedTaskCount;
-  const pendingTaskCount: number = 0;
+  const completedTaskCount = dashboardTasks.filter((task) => task.done).length;
+  const taskTotalCount = dashboardTasks.length;
+  const pendingTaskCount = dashboardTasks.filter((task) => !task.done).length;
   const nextOpenTask = dashboardTasks.find((task) => !task.done);
   const dailyCompletion = taskTotalCount ? Math.round((completedTaskCount / taskTotalCount) * 100) : 0;
   const dailyTargetMinutes = profile?.dailyTargetMinutes || 30;
@@ -552,7 +565,7 @@ export const Dashboard = ({ setActiveTab }: { setActiveTab: (tab: string) => voi
       ? `${Math.floor(focusMinutes / 60)}h ${focusMinutes % 60 ? `${focusMinutes % 60}m` : ""}`.trim()
       : `${focusMinutes}m`;
   const focusTargetProgress = Math.min(100, Math.round((focusMinutes / Math.max(dailyTargetMinutes, 1)) * 100));
-  const notesCount = activityMetrics.notesCreated;
+  const notesCount = libraryMetrics.notesCreated;
   const recentNotebookNotes = notebookNotes.slice(0, 5);
   const latestNotebookTitle = recentNotebookNotes[0]?.title || "No notebook notes yet";
   const notebookActivityCount = activityMetrics.notesCreated + activityMetrics.sourcesUploaded + activityMetrics.notebookMessages;
@@ -564,18 +577,14 @@ export const Dashboard = ({ setActiveTab }: { setActiveTab: (tab: string) => voi
     activityMetrics.decksCreated > 0 ||
     activityMetrics.flashcardsCreated > 0 ||
     activityMetrics.xp > 0;
-  const reviewRate = taskTotalCount ? dailyCompletion : 0;
-  const retentionBoost = hasRealActivity
-    ? Math.min(100, Math.round((Math.min(notesCount, 10) / 10) * 35 + Math.min(completedTaskCount, 10) * 4 + focusTargetProgress * 0.25))
-    : 0;
-  const revisionVelocity = hasRealActivity
-    ? Math.min(100, Math.round(focusTargetProgress * 0.45 + Math.min(completedTaskCount, 10) * 5 + Math.min(notesCount, 10) * 2))
-    : 0;
-  const predictiveMastery = hasRealActivity ? Math.min(100, Math.round((dailyCompletion + retentionBoost + revisionVelocity) / 3)) : 0;
-  const examReadinessScore = activityMetrics.examReadiness;
+  const reviewRate = missionCompletion(libraryMetrics.flashcardsCreated, libraryMetrics.reviewedCards) ?? 0;
+  const retentionBoost = reviewRate;
+  const revisionVelocity = focusTargetProgress;
+  const predictiveMastery = dailyCompletion;
+  const examReadinessScore = dailyCompletion;
   const activePro = isPro(profile);
-  const successProbability = hasRealActivity ? Math.min(96, Math.round(examReadinessScore * 0.72 + dailyCompletion * 0.18 + focusTargetProgress * 0.1)) : 0;
-  const improvedProbability = hasRealActivity ? Math.min(98, successProbability + Math.max(1, Math.round((100 - revisionVelocity) * 0.08))) : 0;
+  const successProbability = missionCompletion(libraryMetrics.missionTotal, libraryMetrics.missionCompleted);
+  const missionEmptyText = tasksLoading ? "Loading saved mission tasks…" : tasksError || "No mission created yet. Create your first study mission.";
   const weakAreas = dashboardTasks
     .filter((task) => !task.done)
     .slice(0, 3)
@@ -584,10 +593,7 @@ export const Dashboard = ({ setActiveTab }: { setActiveTab: (tab: string) => voi
       score: Math.max(1, 100 - dailyCompletion),
       task: task.title,
     }));
-  const studyPulseScore = hasRealActivity
-    ? Math.min(100, Math.round(focusTargetProgress * 0.35 + reviewRate * 0.25 + retentionBoost * 0.2 + revisionVelocity * 0.2))
-    : 0;
-  const retentionGap = Math.max(0, reviewRate - retentionBoost);
+  const studyPulseScore = libraryMetrics.dueCards;
   const targetCardCount = notesCount > 0 ? Math.min(20, pendingTaskCount * 5 + notesCount * 3) : 0;
   const focusWindowLabel = selectedDaySessions[0]
     ? new Date(selectedDaySessions[0].timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
@@ -812,8 +818,8 @@ export const Dashboard = ({ setActiveTab }: { setActiveTab: (tab: string) => voi
             </form>
             <div className="grid max-w-3xl gap-3 sm:grid-cols-3">
               {[
-                { label: "Daily progress", value: `${dailyCompletion}%`, icon: Target },
-                { label: "Reviews pending", value: `${pendingTaskCount}`, icon: Brain },
+                { label: "Saved task completion", value: `${dailyCompletion}%`, icon: Target },
+                { label: "Cards due · all decks", value: libraryMetrics.loading ? "Loading…" : libraryMetrics.error ? "Unavailable" : `${libraryMetrics.dueCards}`, icon: Brain },
                 { label: "Focus points", value: `${progressXp}`, icon: Zap },
               ].map((item) => (
                 <div key={item.label} className="dashboard-card rounded-2xl p-3">
@@ -845,7 +851,8 @@ export const Dashboard = ({ setActiveTab }: { setActiveTab: (tab: string) => voi
           </div>
         </div>
 
-        {(activityMetrics.loading || activityMetrics.error) && (
+        {tasksError && <div role="alert" className="rounded-2xl border border-red-300 p-4 text-sm">{tasksError} <button type="button" className="underline" onClick={() => setTasksRevision((value) => value + 1)}>Retry saved mission</button></div>}
+        {(activityMetrics.loading || activityMetrics.error || libraryMetrics.error) && (
           <div
             className={cn(
               "rounded-[1.5rem] border px-5 py-4 text-sm font-bold",
@@ -854,9 +861,10 @@ export const Dashboard = ({ setActiveTab }: { setActiveTab: (tab: string) => voi
                 : "border-cyan-300/20 bg-cyan-300/10 text-cyan-100"
             )}
           >
-            {activityMetrics.error
-              ? `Live stats sync issue: ${activityMetrics.error}`
+            {activityMetrics.error || libraryMetrics.error
+              ? `Live stats sync issue: ${activityMetrics.error || libraryMetrics.error}`
               : "Loading live stats from your study sessions, notebooks, and progress history..."}
+            {(activityMetrics.error || libraryMetrics.error) && <button type="button" className="ml-3 underline" onClick={() => { activityMetrics.retry(); libraryMetrics.retry(); }}>Retry statistics</button>}
           </div>
         )}
 
@@ -872,7 +880,7 @@ export const Dashboard = ({ setActiveTab }: { setActiveTab: (tab: string) => voi
                   {activePro ? "Active" : "Real data only"}
                 </span>
               </div>
-              <h2 className="mt-3 text-2xl font-black tracking-tight text-white">Weakness Intelligence and Success Probability</h2>
+              <h2 className="mt-3 text-2xl font-black tracking-tight text-white">Open Tasks and Mission Completion</h2>
               <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-400">
                 Noviq Pro uses mistakes, reviews, writing, and speaking practice to decide what you should study next.
               </p>
@@ -885,12 +893,10 @@ export const Dashboard = ({ setActiveTab }: { setActiveTab: (tab: string) => voi
                 <p className="mt-2 text-xs leading-5 text-slate-400">Taken from your profile and onboarding data.</p>
               </div>
               <div className="dashboard-card rounded-[1.5rem] p-5">
-                <p className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-500">Success Probability</p>
-                <p className="mt-3 text-3xl font-black text-white">{successProbability}%</p>
+                <p className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-500">Mission completion</p>
+                <p className="mt-3 text-3xl font-black text-white">{libraryMetrics.loading ? "Loading…" : libraryMetrics.error ? "Unavailable" : successProbability === null ? "Not enough data" : `${successProbability}%`}</p>
                 <p className="mt-2 text-xs leading-5 text-slate-400">
-                  {hasRealActivity
-                    ? `Completing open mission tasks could raise this to ${improvedProbability}%.`
-                    : "Not enough activity yet. Complete your first session."}
+                  {libraryMetrics.missionCompleted} of {libraryMetrics.missionTotal} saved mission tasks completed. This measures task completion, not exam success probability.
                 </p>
               </div>
             </div>
@@ -900,7 +906,7 @@ export const Dashboard = ({ setActiveTab }: { setActiveTab: (tab: string) => voi
                 weakAreas.map((area, index) => (
                   <div key={`${area.label}-${index}`} className="dashboard-card rounded-[1.5rem] p-5">
                     <div className="flex items-center justify-between">
-                      <p className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-500">Weak Area {index + 1}</p>
+                      <p className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-500">Open Task {index + 1}</p>
                     </div>
                     <p className="mt-3 text-xl font-black text-white">{area.label}</p>
                     <p className="mt-2 text-sm leading-6 text-slate-400">{area.task}</p>
@@ -908,7 +914,7 @@ export const Dashboard = ({ setActiveTab }: { setActiveTab: (tab: string) => voi
                 ))
               ) : (
                 <div className="dashboard-card rounded-[1.5rem] p-5 md:col-span-3">
-                  <p className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-500">Weak Areas</p>
+                  <p className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-500">Open Tasks</p>
                   <p className="mt-3 text-xl font-black text-white">Not enough activity yet</p>
                   <p className="mt-2 text-sm leading-6 text-slate-400">Complete real mission tasks or study sessions to surface weak topics.</p>
                 </div>
@@ -979,7 +985,7 @@ export const Dashboard = ({ setActiveTab }: { setActiveTab: (tab: string) => voi
                     ))}
                   </div>
                 ) : (
-                  <p className="text-sm text-slate-400">No notes yet. Create your first notebook.</p>
+                  <p className="text-sm text-slate-400">{libraryMetrics.loading ? "Loading notes…" : libraryMetrics.error ? "Notes could not be refreshed. Open Notebook to retry." : "No notes yet. Create your first note."}</p>
                 )}
               </div>
             </div>
@@ -1014,11 +1020,11 @@ export const Dashboard = ({ setActiveTab }: { setActiveTab: (tab: string) => voi
 
       {/* Main Stats - Clean Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-5">
-        <StatCard icon={Clock} label="Focus Time" value={focusTimeLabel} trend={`${focusTargetProgress >= 50 ? "+" : ""}${focusTargetProgress}%`} color="bg-blue-500" accentColor="bg-blue-400" />
-        <StatCard icon={CheckCircle2} label="Tasks Done" value={`${activityMetrics.tasksDone}`} trend={`${dailyCompletion >= 50 ? "+" : ""}${dailyCompletion}%`} color="bg-purple-500" accentColor="bg-purple-400" />
-        <StatCard icon={Brain} label="Notes Created" value={`${activityMetrics.notesCreated}`} trend={activityMetrics.notesCreated > 0 ? `+${activityMetrics.notesCreated * 10}%` : "0%"} color="bg-pink-500" accentColor="bg-pink-400" />
-        <StatCard icon={Sparkles} label="Tutor Questions" value={`${activityMetrics.tutorMessages}`} trend={activityMetrics.tutorMessages > 0 ? `+${activityMetrics.tutorMessages * 5}%` : "0%"} color="bg-emerald-500" accentColor="bg-emerald-400" />
-        <StatCard icon={Target} label="Exam Readiness" value={`${examReadinessScore}%`} trend={`${examReadinessScore >= 50 ? "+" : "-"}${Math.abs(examReadinessScore - 50)}%`} color="bg-cyan-500" accentColor="bg-cyan-400" />
+        <StatCard icon={Clock} label="Focus time · selected day" value={focusTimeLabel} color="bg-blue-500" accentColor="bg-blue-400" />
+        <StatCard icon={CheckCircle2} label="Tasks done · selected day" value={`${activityMetrics.tasksDone}`} color="bg-purple-500" accentColor="bg-purple-400" />
+        <StatCard icon={Brain} label="Notes · total" value={libraryMetrics.loading ? "Loading…" : libraryMetrics.error ? "Unavailable" : `${notesCount}`} color="bg-pink-500" accentColor="bg-pink-400" />
+        <StatCard icon={Sparkles} label="Tutor questions · selected day" value={`${activityMetrics.tutorMessages}`} color="bg-emerald-500" accentColor="bg-emerald-400" />
+        <StatCard icon={Target} label="Saved task completion" value={`${dailyCompletion}%`} color="bg-cyan-500" accentColor="bg-cyan-400" />
       </div>
 
       {/* Daily Study Momentum */}
@@ -1034,8 +1040,8 @@ export const Dashboard = ({ setActiveTab }: { setActiveTab: (tab: string) => voi
           <div className="space-y-6">
             {[
               { title: 'Active Study Time', value: focusTimeLabel, detail: `${selectedDaySessions.length} study session${selectedDaySessions.length === 1 ? "" : "s"} logged on ${selectedDay}` },
-              { title: 'Review Rate', value: `${reviewRate}%`, detail: taskTotalCount ? `${completedTaskCount} of ${taskTotalCount} real mission tasks completed` : "No mission created yet" },
-              { title: 'Retention Boost', value: `${retentionBoost}%`, detail: 'Estimated from notes, reviews, and focus time' },
+              { title: 'Saved task completion', value: `${dailyCompletion}%`, detail: taskTotalCount ? `${completedTaskCount} of ${taskTotalCount} saved tasks completed` : "No saved tasks yet" },
+              { title: 'Card review coverage', value: libraryMetrics.flashcardsCreated ? `${reviewRate}%` : "Not enough data", detail: `${libraryMetrics.reviewedCards} of ${libraryMetrics.flashcardsCreated} cards reviewed at least once across all decks` },
             ].map((item) => (
               <div key={item.title} className="dashboard-card rounded-3xl p-5">
                 <div className="flex items-center justify-between gap-4 mb-3">
@@ -1050,14 +1056,14 @@ export const Dashboard = ({ setActiveTab }: { setActiveTab: (tab: string) => voi
               <div className="mb-4 flex items-center justify-between gap-4">
                 <div>
                   <p className="text-[10px] font-black uppercase tracking-[0.24em] text-cyan-300">Highest leverage</p>
-                  <h4 className="mt-2 text-lg font-black text-white">Retention is lagging review rate</h4>
+                  <h4 className="mt-2 text-lg font-black text-white">{libraryMetrics.dueCards > 0 ? "Cards ready for review" : "Build your recall history"}</h4>
                 </div>
                 <span className="rounded-full border border-amber-300/20 bg-amber-300/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-amber-200">
-                  Gap {retentionGap}%
+                  {libraryMetrics.dueCards} cards due
                 </span>
               </div>
               <p className="text-sm leading-6 text-slate-400">
-                Review coverage is solid, but memory retention is lower. Convert the last study note into recall cards before adding new content.
+                {libraryMetrics.loading ? "Loading card review records…" : libraryMetrics.error ? "Review records could not be refreshed. Open Decks to retry." : reviewGuidance(libraryMetrics.flashcardsCreated, libraryMetrics.reviewedCards, libraryMetrics.dueCards)}
               </p>
               <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-1 2xl:grid-cols-2">
                 <button
@@ -1078,7 +1084,7 @@ export const Dashboard = ({ setActiveTab }: { setActiveTab: (tab: string) => voi
             <div className="grid gap-3">
               {[
                 { label: "Next task", value: nextOpenTask?.title || "No mission yet", action: nextOpenTask ? "Continue the next real mission task." : "Create your study plan to unlock task guidance." },
-                { label: "Best source", value: latestNotebookTitle, action: notesCount > 0 ? "Use it as flashcard input." : "Create your first notebook before generating cards." },
+                { label: "Latest note", value: latestNotebookTitle, action: notesCount > 0 ? "Use it as flashcard input." : "Create your first note before generating cards." },
               ].map((item) => (
                 <div key={item.label} className="rounded-3xl border border-white/10 bg-white/[0.035] p-4">
                   <p className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-500">{item.label}</p>
@@ -1104,16 +1110,15 @@ export const Dashboard = ({ setActiveTab }: { setActiveTab: (tab: string) => voi
             <div className="grid gap-4 sm:grid-cols-2">
               {[
                 { label: 'Card Review', progress: reviewRate },
-                { label: 'Concept Practice', progress: dailyCompletion },
-                { label: 'Quiz Readiness', progress: examReadinessScore },
-                { label: 'Session Consistency', progress: focusTargetProgress },
+                { label: 'Saved task completion', progress: examReadinessScore },
+                { label: 'Selected day focus goal', progress: focusTargetProgress },
               ].map((item) => (
                 <div key={item.label} className="dashboard-card rounded-3xl p-5">
                   <p className="text-sm font-bold text-white mb-3">{item.label}</p>
                   <div className="mb-3 h-3 overflow-hidden rounded-full border border-white/10 bg-white/10">
                     <div className="dashboard-progress h-full rounded-full bg-gradient-to-r from-blue-500 to-cyan-400" style={{ width: `${item.progress}%` }} />
                   </div>
-                  <p className="text-[11px] text-slate-400">{item.progress}% of today’s premium target</p>
+                  <p className="text-[11px] text-slate-400">{item.progress}% · recorded completion or coverage</p>
                 </div>
               ))}
             </div>
@@ -1123,9 +1128,9 @@ export const Dashboard = ({ setActiveTab }: { setActiveTab: (tab: string) => voi
             <div className="flex items-center justify-between mb-6">
               <div>
                 <p className="text-xs uppercase tracking-[0.3em] text-slate-500 font-black">Focus roadmap</p>
-                <h3 className="mt-3 text-3xl font-black text-white">Daily mastery loop</h3>
+                <h3 className="mt-3 text-3xl font-black text-white">Saved mission tasks</h3>
               </div>
-              <div className="rounded-full bg-blue-500/10 px-3 py-1 text-[10px] uppercase tracking-[0.3em] text-blue-300 font-black">Today</div>
+              <div className="rounded-full bg-blue-500/10 px-3 py-1 text-[10px] uppercase tracking-[0.3em] text-blue-300 font-black">Saved</div>
             </div>
             <div className="space-y-4">
               {dashboardTasks.length > 0 ? (
@@ -1147,8 +1152,7 @@ export const Dashboard = ({ setActiveTab }: { setActiveTab: (tab: string) => voi
                 ))
               ) : (
                 <div className="dashboard-card rounded-3xl p-5">
-                  <p className="text-sm font-bold text-white">No mission created yet.</p>
-                  <p className="mt-2 text-sm text-slate-400">Create your first study mission.</p>
+                  <p className="text-sm font-bold text-white">{missionEmptyText}</p>
                   <button onClick={() => setActiveTab("planner")} className="btn-secondary mt-4 min-h-10 rounded-xl px-4 py-2 text-xs">
                     Create mission
                   </button>
@@ -1225,7 +1229,7 @@ export const Dashboard = ({ setActiveTab }: { setActiveTab: (tab: string) => voi
                 ))
               ) : (
                 <div className="dashboard-card rounded-[1.5rem] p-6">
-                  <p className="font-bold text-white">No mission created yet. Create your first study mission.</p>
+                  <p className="font-bold text-white">{missionEmptyText}</p>
                   <button onClick={() => setActiveTab("planner")} className="btn-primary mt-5 min-h-11 rounded-xl px-5 py-3 text-xs uppercase tracking-wider">
                     Create mission
                   </button>
@@ -1298,8 +1302,8 @@ export const Dashboard = ({ setActiveTab }: { setActiveTab: (tab: string) => voi
                 </div>
 
                 <div className="mt-6 rounded-2xl border border-cyan-300/15 bg-cyan-300/10 p-4">
-                  <p className="text-sm font-bold text-white">Best focus window: {focusWindowLabel}</p>
-                  <p className="mt-1 text-xs leading-5 text-slate-400">Use this slot for review-heavy tasks and tutor follow-ups.</p>
+                  <p className="text-sm font-bold text-white">Latest focus session: {focusWindowLabel}</p>
+                  <p className="mt-1 text-xs leading-5 text-slate-400">{selectedDaySessions.length ? "Time recorded by your latest completed focus session on the selected day." : "No completed focus session is available for the selected day."}</p>
                 </div>
               </div>
             </motion.section>
@@ -1314,8 +1318,8 @@ export const Dashboard = ({ setActiveTab }: { setActiveTab: (tab: string) => voi
               <div className="relative z-10">
                 <div className="mb-7 flex items-center justify-between gap-4">
                   <div>
-                    <p className="text-xs font-black uppercase tracking-[0.28em] text-blue-300">Forecast</p>
-                    <h3 className="mt-2 text-2xl font-black text-white">Exam forecast</h3>
+                    <p className="text-xs font-black uppercase tracking-[0.28em] text-blue-300">Recorded progress</p>
+                    <h3 className="mt-2 text-2xl font-black text-white">Recorded progress</h3>
                   </div>
                   <div className="rounded-2xl border border-white/10 bg-white/[0.05] p-3 text-blue-200">
                     <Target size={19} />
@@ -1324,9 +1328,9 @@ export const Dashboard = ({ setActiveTab }: { setActiveTab: (tab: string) => voi
 
                 <div className="space-y-4">
                   {[
-                    { label: "Recall stability", value: retentionBoost, color: "from-cyan-400 to-blue-500" },
-                    { label: "Review pressure", value: taskTotalCount ? Math.round((pendingTaskCount / Math.max(taskTotalCount, 1)) * 100) : 0, color: "from-violet-400 to-blue-500" },
-                    { label: "Session confidence", value: focusTargetProgress, color: "from-emerald-300 to-cyan-400" },
+                    { label: "Cards reviewed at least once", value: retentionBoost, color: "from-cyan-400 to-blue-500" },
+                    { label: "Saved tasks pending", value: taskTotalCount ? Math.round((pendingTaskCount / Math.max(taskTotalCount, 1)) * 100) : 0, color: "from-violet-400 to-blue-500" },
+                    { label: "Selected day focus goal", value: focusTargetProgress, color: "from-emerald-300 to-cyan-400" },
                   ].map((item) => (
                     <div key={item.label} className="space-y-2">
                       <div className="flex items-center justify-between text-xs font-black uppercase tracking-[0.18em]">
@@ -1379,7 +1383,7 @@ export const Dashboard = ({ setActiveTab }: { setActiveTab: (tab: string) => voi
                 {[
                   { label: "Focus", value: "Recall first", detail: "Do not open a new topic until one review pass is done." },
                   { label: "Input", value: latestNotebookTitle, detail: notesCount > 0 ? "Use the freshest note as the flashcard source." : "No notebook source is available yet." },
-                  { label: "Win condition", value: targetCardCount ? `${targetCardCount} cards` : "No cards yet", detail: notesCount > 0 ? "Enough to raise revision velocity without overloading." : "Generate flashcards from a real note first." },
+                  { label: "Recall cards · all decks", value: libraryMetrics.loading ? "Loading…" : libraryMetrics.error ? "Unavailable" : `${libraryMetrics.flashcardsCreated} cards`, detail: libraryMetrics.loading ? "Loading saved cards…" : libraryMetrics.error ? "Card records could not be refreshed." : libraryMetrics.flashcardsCreated > 0 ? `${libraryMetrics.dueCards} cards due for review.` : "Generate flashcards from a real note first." },
                 ].map((item) => (
                   <div key={item.label} className="dashboard-card rounded-[1.5rem] p-5">
                     <p className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-500">{item.label}</p>
@@ -1446,19 +1450,19 @@ export const Dashboard = ({ setActiveTab }: { setActiveTab: (tab: string) => voi
             <div className="relative z-10 space-y-6">
               <div className="flex items-center gap-3 text-xs uppercase tracking-[0.3em] text-cyan-300 font-black">
                 <span className="block h-6 w-1 rounded-full bg-cyan-300" />
-                Study Pulse
+                Cards due · all decks
               </div>
               <div className="space-y-2">
-                <p className="text-5xl font-black text-white">{studyPulseScore}</p>
-                <p className="text-sm text-slate-400 max-w-lg">Track your focus, recall, and confidence from the latest study session.</p>
+                <p className="text-5xl font-black text-white">{libraryMetrics.loading ? "Loading…" : libraryMetrics.error ? "Unavailable" : studyPulseScore}</p>
+                <p className="text-sm text-slate-400 max-w-lg">Due cards across your saved decks. The indicators below show their own recorded scopes.</p>
               </div>
 
               <div className="grid gap-4">
                 {[
-                  { label: 'Focus', value: focusTargetProgress, color: 'bg-cyan-400' },
-                  { label: 'Recall', value: reviewRate, color: 'bg-blue-500' },
-                  { label: 'Preparedness', value: examReadinessScore, color: 'bg-emerald-400' },
-                  { label: 'Confidence', value: retentionBoost, color: 'bg-violet-500' },
+                  { label: 'Selected day focus goal', value: focusTargetProgress, color: 'bg-cyan-400' },
+                  { label: 'Card review coverage · all decks', value: reviewRate, color: 'bg-blue-500' },
+                  { label: 'Tasks completed', value: examReadinessScore, color: 'bg-emerald-400' },
+                  { label: 'Cards reviewed', value: retentionBoost, color: 'bg-violet-500' },
                 ].map((item) => (
                   <div key={item.label} className="space-y-2">
                     <div className="flex items-center justify-between text-xs uppercase tracking-[0.24em] text-slate-500">
@@ -1523,10 +1527,10 @@ export const Dashboard = ({ setActiveTab }: { setActiveTab: (tab: string) => voi
                   action: () => setActiveTab("flashcards"),
                 },
                 {
-                  title: "Review pending tasks",
-                  detail: `${pendingTaskCount} focused item${pendingTaskCount === 1 ? "" : "s"} waiting in your sprint.`,
+                  title: "Review due cards",
+                  detail: `${libraryMetrics.dueCards} cards waiting across all decks.`,
                   icon: CheckCircle2,
-                  action: () => setActiveTab("planner"),
+                  action: () => setActiveTab("flashcards"),
                 },
               ].map((item) => (
                 <button
@@ -1559,7 +1563,7 @@ export const Dashboard = ({ setActiveTab }: { setActiveTab: (tab: string) => voi
               "relative z-10 mt-4 text-xs font-black uppercase tracking-[0.25em] transition-all duration-500",
               "text-cyan-300"
             )}>
-              {hasRealActivity ? "AI queue ready" : "Waiting for real activity"}
+              {taskTotalCount > 0 ? "Saved mission evidence" : tasksLoading ? "Loading saved tasks" : "No saved mission tasks"}
             </p>
           </motion.section>
 
@@ -1570,7 +1574,7 @@ export const Dashboard = ({ setActiveTab }: { setActiveTab: (tab: string) => voi
             transition={{ delay: 0.3 }}
             className="dashboard-panel rounded-[2.5rem] p-10 [--glow-x:50%] [--glow-y:0%]"
           >
-            <h2 className="text-xs font-black text-slate-500 uppercase tracking-[0.3em] mb-8">Exam Readiness</h2>
+            <h2 className="text-xs font-black text-slate-500 uppercase tracking-[0.3em] mb-8">Saved task completion</h2>
 
             {/* Progress Ring */}
             <div className="flex justify-center mb-10">
@@ -1578,7 +1582,7 @@ export const Dashboard = ({ setActiveTab }: { setActiveTab: (tab: string) => voi
                 <ProgressRing progress={examReadinessScore} size={160} strokeWidth={10} color="#3b82f6" showValue={false} />
                 <div className="absolute inset-0 flex flex-col items-center justify-center">
                   <p className="text-4xl font-black font-display text-white">{examReadinessScore}</p>
-                  <p className="text-xs font-bold text-blue-400 mt-1">{examReadinessScore > 0 ? "REAL DATA" : "NO DATA"}</p>
+                  <p className="text-xs font-bold text-blue-400 mt-1">{taskTotalCount > 0 ? "RECORDED" : "NO TASKS"}</p>
                 </div>
               </div>
             </div>
@@ -1586,9 +1590,9 @@ export const Dashboard = ({ setActiveTab }: { setActiveTab: (tab: string) => voi
             {/* Metrics */}
             <div className="space-y-4">
               {[
-                { label: "Predictive Mastery", score: predictiveMastery },
-                { label: "Revision Velocity", score: revisionVelocity },
-                { label: "Retention Rate", score: retentionBoost },
+                { label: "Saved tasks completed", score: predictiveMastery },
+                { label: "Selected day focus goal", score: revisionVelocity },
+                { label: "Cards reviewed at least once", score: retentionBoost },
               ].map((item) => (
                 <div key={item.label} className="space-y-2">
                   <div className="flex justify-between items-center text-xs font-bold uppercase tracking-wider">
@@ -1610,9 +1614,9 @@ export const Dashboard = ({ setActiveTab }: { setActiveTab: (tab: string) => voi
             <div className="mt-7 rounded-[1.75rem] border border-amber-300/20 bg-amber-300/10 p-5">
               <div className="flex items-start justify-between gap-4">
                 <div>
-                  <p className="text-[10px] font-black uppercase tracking-[0.24em] text-amber-200">Weakest lever</p>
+                  <p className="text-[10px] font-black uppercase tracking-[0.24em] text-amber-200">Next saved task</p>
                   <h4 className="mt-2 text-lg font-black text-white">
-                    {hasRealActivity ? "Lowest real metric needs attention" : "Not enough activity yet"}
+                    {nextOpenTask ? nextOpenTask.title : "No unfinished mission tasks"}
                   </h4>
                 </div>
                 <span className="rounded-full border border-amber-300/20 bg-slate-950/45 px-3 py-1 text-xs font-black text-amber-200">
@@ -1620,9 +1624,7 @@ export const Dashboard = ({ setActiveTab }: { setActiveTab: (tab: string) => voi
                 </span>
               </div>
               <p className="mt-3 text-sm leading-6 text-slate-400">
-                {hasRealActivity
-                  ? (nextOpenTask ? `Continue "${nextOpenTask.title}" to improve this metric.` : "Create a new mission task to keep readiness moving.")
-                  : "Complete your first focus session or mission task to calculate readiness."}
+                {nextOpenTask ? "Open the saved task to view its instructions, then start it when you are ready." : "Create a mission in Planner when you are ready to study."}
               </p>
               <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
                 <button

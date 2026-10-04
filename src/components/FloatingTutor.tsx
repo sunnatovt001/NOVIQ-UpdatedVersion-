@@ -44,6 +44,15 @@ export const FloatingTutor = ({ activeTab }: { activeTab?: string }) => {
   const [isTyping, setIsTyping] = useState(false);
   const [error, setError] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
+  const launcherRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (!isOpen) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") { setIsOpen(false); requestAnimationFrame(() => launcherRef.current?.focus()); }
+    };
+    document.addEventListener("keydown", closeOnEscape);
+    return () => document.removeEventListener("keydown", closeOnEscape);
+  }, [isOpen]);
 
   const history = useMemo(
     () =>
@@ -165,7 +174,7 @@ export const FloatingTutor = ({ activeTab }: { activeTab?: string }) => {
   return (
     <div
       className={cn(
-        "fixed bottom-3 left-3 right-3 z-[180] flex flex-col items-end gap-3 sm:bottom-7 sm:left-auto sm:right-7",
+        "relative z-[100] flex shrink-0 flex-col items-end gap-2 border-t border-[#E5E7EB] bg-white px-3 py-2 sm:px-7",
         activeTab === "admin" && "max-sm:hidden"
       )}
     >
@@ -232,7 +241,7 @@ export const FloatingTutor = ({ activeTab }: { activeTab?: string }) => {
                       className={cn(
                         "max-w-[82%] rounded-[1.35rem] px-4 py-3 text-sm leading-6 shadow-xl",
                         isUser
-                          ? "rounded-br-md bg-[#3F7D58] text-white shadow-none"
+                          ? "chat-user-message rounded-br-md bg-[#3F7D58] text-white shadow-none"
                           : "rounded-bl-md border border-[#E5E7EB] bg-[#FAFAF8] text-[#111827] shadow-none"
                       )}
                     >
@@ -310,11 +319,12 @@ export const FloatingTutor = ({ activeTab }: { activeTab?: string }) => {
           animate={{ scale: 1, opacity: 1 }}
           whileHover={{ scale: 1.04 }}
           whileTap={{ scale: 0.96 }}
-          onClick={() => setIsOpen(true)}
+            ref={launcherRef}
+            onClick={() => setIsOpen(true)}
           className="group relative flex items-center gap-3 rounded-full border border-[#E5E7EB] bg-white p-2 pr-4 text-left text-[#111827] shadow-[0_18px_50px_rgba(17,24,39,0.12)]"
           aria-label="Open Saidamin Noviq Tutor"
         >
-          <span className="relative h-16 w-16 overflow-hidden rounded-full border-4 border-[#3F7D58]/30 bg-white">
+          <span className="relative h-10 w-10 overflow-hidden rounded-full border-2 border-[#3F7D58]/30 bg-white">
             <img src={SAIDAMIN_AVATAR} alt="Saidamin" className="h-full w-full object-cover object-top" />
           </span>
           <span className="relative hidden sm:block">
@@ -328,19 +338,6 @@ export const FloatingTutor = ({ activeTab }: { activeTab?: string }) => {
         </motion.button>
       )}
 
-      {!isOpen && activeTab !== "tutor" && (
-        <motion.div
-          initial={{ opacity: 0, x: 16 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={{ delay: 0.4 }}
-          className="pointer-events-none hidden rounded-2xl border border-[#E5E7EB] bg-white px-4 py-3 text-xs font-bold text-[#6B7280] shadow-[0_18px_50px_rgba(17,24,39,0.10)] sm:block"
-        >
-          <span className="inline-flex items-center gap-2">
-            <MessageCircle size={14} className="text-[#3F7D58]" />
-            Stuck? Saidamindan so'rang.
-          </span>
-        </motion.div>
-      )}
     </div>
   );
 };

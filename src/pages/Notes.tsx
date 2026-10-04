@@ -35,6 +35,8 @@ import ReactMarkdown from "react-markdown";
 import { getAppErrorMessage } from "@/src/lib/errors";
 import { isLocalId, loadLocalData, makeSyncId, saveLocalData } from "@/src/lib/localStore";
 import { useBodyScrollLock } from "@/src/lib/useBodyScrollLock";
+import { useDialogFocus } from "@/src/lib/useDialogFocus";
+import { isReadOnlyAudit } from "@/src/lib/auditMode";
 import { buildStudentTutorContext } from "@/src/lib/tutorContext";
 import { writeDocWithQueue, type SyncStatus } from "@/src/lib/offlineSync";
 import { isNotificationPreferenceEnabled } from "@/src/lib/preferences";
@@ -167,10 +169,32 @@ export const Notes = () => {
   const [chatInput, setChatInput] = useState("");
   const [isSavingNote, setIsSavingNote] = useState(false);
   const [isAiLoading, setIsAiLoading] = useState(false);
+  const aiRequestRef = useRef(false);
+  const [aiError, setAiError] = useState("");
+  const [lastAiPrompt, setLastAiPrompt] = useState("");
   const [isSourceLoading, setIsSourceLoading] = useState(false);
   const [status, setStatus] = useState("");
   const [mobileView, setMobileView] = useState<"notes" | "editor" | "sources" | "chat">("notes");
+  const editorOpenerRef = useRef<HTMLElement | null>(null);
+  const aiOpenerRef = useRef<HTMLElement | null>(null);
+  const aiPanelRef = useRef<HTMLElement>(null);
+  const sourceDialogRef = useRef<HTMLDivElement>(null);
+  const restorePanelFocusRef = useRef<HTMLElement | null>(null);
+  const saveNoteRequestRef = useRef(false);
+  const openEditor = () => {
+    editorOpenerRef.current = document.activeElement as HTMLElement;
+    setMobileView("editor");
+  };
+  const closeEditor = () => {
+    setMobileView("notes");
+    requestAnimationFrame(() => editorOpenerRef.current?.focus());
+  };
+  const closeAiPanel = () => {
+    restorePanelFocusRef.current = aiOpenerRef.current;
+    setMobileView("editor");
+  };
   const [showSourceModal, setShowSourceModal] = useState(false);
+  useDialogFocus(showSourceModal, sourceDialogRef, () => setShowSourceModal(false));
   useBodyScrollLock(showSourceModal);
   const [sourceUrl, setSourceUrl] = useState("");
   const [youtubeUrl, setYoutubeUrl] = useState("");
@@ -182,6 +206,23 @@ export const Notes = () => {
 
   const sourceInputRef = useRef<HTMLInputElement>(null);
   const editorRef = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => {
+    if (!window.matchMedia("(max-width: 1279px)").matches) return;
+    const frame = requestAnimationFrame(() => {
+      if (restorePanelFocusRef.current) {
+        restorePanelFocusRef.current.focus();
+        restorePanelFocusRef.current = null;
+      } else if (mobileView === "editor") editorRef.current?.focus();
+      if (mobileView === "chat") aiPanelRef.current?.querySelector<HTMLTextAreaElement>("textarea")?.focus();
+    });
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || showSourceModal) return;
+      if (mobileView === "editor") closeEditor();
+      if (mobileView === "chat") closeAiPanel();
+    };
+    document.addEventListener("keydown", handleEscape);
+    return () => { cancelAnimationFrame(frame); document.removeEventListener("keydown", handleEscape); };
+  }, [mobileView, showSourceModal]);
 
   const activeNote = useMemo(() => notes.find((note) => note.id === activeNoteId) || null, [activeNoteId, notes]);
   const showAiSourcePreviews = isNotificationPreferenceEnabled(profile, "aiSourcePreviews");
@@ -337,7 +378,7 @@ export const Notes = () => {
     setActiveNoteId(localNote.id);
     setDraftTitle(localNote.title);
     setDraftContent(localNote.content);
-    setMobileView("editor");
+    openEditor();
     setStatus("");
 
     try {
@@ -364,7 +405,9 @@ export const Notes = () => {
   };
 
   const handleSaveNote = async () => {
-    if (!user || !activeNote) return;
+    if (!user || !activeNote || isSavingNote || saveNoteRequestRef.current) return;
+    if (isReadOnlyAudit) { setStatus("Saving is disabled in read-only audit mode."); return; }
+    saveNoteRequestRef.current = true;
     setIsSavingNote(true);
     setStatus("");
 
@@ -400,6 +443,7 @@ export const Notes = () => {
       setCloudSyncBlocked(true);
       setStatus("Note saved on this device. Cloud sync is waiting for Firebase rules.");
     } finally {
+      saveNoteRequestRef.current = false;
       setIsSavingNote(false);
     }
   };
@@ -456,6 +500,7 @@ export const Notes = () => {
   };
 
   const handleUploadSources = async (files: FileList | null) => {
+    if (isReadOnlyAudit) { setStatus("Uploads are disabled in read-only audit mode."); return; }
     if (!user || !files?.length) return;
     setIsSourceLoading(true);
     setStatus("");
@@ -704,7 +749,11 @@ export const Notes = () => {
   };
 
   const runNotebookAi = async (prompt: string, saveUserMessage = true) => {
-    if (!user) return;
+    if (!user || !prompt.trim() || aiRequestRef.current) return;
+    prompt = prompt.trim();
+    aiRequestRef.current = true;
+    setAiError("");
+    setLastAiPrompt(prompt);
     setIsAiLoading(true);
     setStatus("");
 
@@ -773,8 +822,9 @@ export const Notes = () => {
           setCloudSyncBlocked(true);
         });
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : "Notebook engine failed.");
+      setAiError(error instanceof Error ? error.message : "Notebook engine failed. Please retry.");
     } finally {
+      aiRequestRef.current = false;
       setIsAiLoading(false);
     }
   };
@@ -892,7 +942,7 @@ export const Notes = () => {
               type="button"
               onClick={() => {
                 setActiveNoteId(note.id);
-                setMobileView("editor");
+                openEditor();
               }}
               className={cn(
                 "w-full rounded-2xl border p-4 text-left transition",
@@ -915,7 +965,7 @@ export const Notes = () => {
           {filteredNotes.length === 0 && (
             <div className="rounded-2xl border border-dashed border-white/15 p-5 text-center">
               <FileText className="mx-auto text-slate-600" size={28} />
-              <p className="mt-3 text-sm font-bold text-white">No notes yet. Create your first notebook.</p>
+              <p className="mt-3 text-sm font-bold text-white">{search.trim() ? "No notes match your search." : "No notes yet. Create your first note."}</p>
             </div>
           )}
           </section>
@@ -929,6 +979,7 @@ export const Notes = () => {
               <div className="flex min-w-0 flex-col gap-4 2xl:flex-row 2xl:items-start 2xl:justify-between">
               <div className="min-w-0 flex-1 space-y-2">
                 <input
+                  aria-label="Note title"
                   value={draftTitle}
                   onChange={(event) => setDraftTitle(event.target.value)}
                   className="w-full truncate bg-transparent font-display text-2xl font-bold text-white outline-none"
@@ -943,7 +994,7 @@ export const Notes = () => {
                 )}
               </div>
               <div className="flex shrink-0 flex-wrap gap-2">
-                <button type="button" onClick={() => setMobileView("notes")} className="rounded-xl bg-white/5 p-3 text-slate-400 xl:hidden">
+                <button type="button" aria-label="Close editor" onClick={closeEditor} className="min-h-11 min-w-11 rounded-xl bg-white/5 p-3 text-slate-400 xl:hidden">
                   <X size={16} />
                 </button>
                 <button
@@ -963,7 +1014,7 @@ export const Notes = () => {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setMobileView("chat")}
+                  onClick={() => { aiOpenerRef.current = document.activeElement as HTMLElement; setMobileView("chat"); }}
                   className="rounded-2xl bg-blue-600 px-4 py-3 text-xs font-bold text-white xl:hidden"
                 >
                   AI
@@ -980,7 +1031,7 @@ export const Notes = () => {
                 <button
                   type="button"
                   onClick={() => handleDeleteNote(activeNote)}
-                  aria-label="Delete notebook"
+                  aria-label="Delete note"
                   className="rounded-2xl border border-red-400/20 bg-red-400/10 p-3 text-red-200 hover:bg-red-400/15"
                 >
                   <Trash2 size={16} />
@@ -991,6 +1042,7 @@ export const Notes = () => {
 
             <textarea
               ref={editorRef}
+              aria-label="Note content"
               value={draftContent}
               onChange={(event) => setDraftContent(event.target.value)}
               placeholder="Write notes, paste highlights, or ask Noviq to turn sources into exam-ready notes..."
@@ -1006,7 +1058,7 @@ export const Notes = () => {
         )}
       </main>
 
-      <aside className={cn("glass flex h-full min-w-0 flex-col overflow-hidden border-white/10 bg-white/[0.02]", mobileView !== "chat" && "hidden xl:flex")}>
+      <aside ref={aiPanelRef} aria-label="Notebook AI panel" className={cn("glass flex h-full min-w-0 flex-col overflow-hidden border-white/10 bg-white/[0.02]", mobileView !== "chat" && "hidden xl:flex")}>
         <header className="shrink-0 border-b border-white/10 p-4">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
@@ -1014,7 +1066,7 @@ export const Notes = () => {
               <h3 className="mt-1 text-xl font-bold text-white">Build mastery</h3>
               <p className="mt-1 text-xs leading-5 text-slate-500">{sources.length} source{sources.length === 1 ? "" : "s"} available</p>
             </div>
-            <button type="button" onClick={() => setMobileView("editor")} className="rounded-xl bg-white/5 p-2 text-slate-400 hover:text-white xl:hidden">
+            <button type="button" aria-label="Close AI panel" onClick={closeAiPanel} className="min-h-11 min-w-11 rounded-xl bg-white/5 p-2 text-slate-400 hover:text-white xl:hidden">
               <X size={16} />
             </button>
           </div>
@@ -1065,7 +1117,7 @@ export const Notes = () => {
                       )}
                     </div>
 
-                    <div className={cn("min-w-0 max-w-[82%] rounded-2xl p-3 text-sm leading-6", isUser ? "bg-blue-600 text-white" : "border border-white/10 bg-white/[0.04] text-slate-200")}> 
+                    <div className={cn("min-w-0 max-w-[82%] rounded-2xl p-3 text-sm leading-6", isUser ? "chat-user-message bg-blue-600 text-white" : "border border-white/10 bg-white/[0.04] text-slate-200")}> 
                       {!isUser && (
                         <div className="mb-2 flex items-center justify-between">
                           <div className="flex items-center gap-3">
@@ -1107,7 +1159,9 @@ export const Notes = () => {
             </div>
 
             <div className="border-t border-white/10 p-3">
+              {aiError && <div role="alert" className="mb-3 rounded-xl border border-amber-300 p-3 text-sm text-amber-700"><p>{aiError}</p><button type="button" disabled={isAiLoading} className="mt-2 underline" onClick={() => void runNotebookAi(lastAiPrompt, false)}>Retry AI response</button></div>}
               <textarea
+                aria-label="Notebook AI message"
                 value={chatInput}
                 onChange={(event) => setChatInput(event.target.value)}
                 onKeyDown={(event) => {
@@ -1162,6 +1216,11 @@ export const Notes = () => {
               exit={{ opacity: 0, scale: 0.96 }}
               transition={{ duration: 0.2, ease: "easeOut" }}
               className="noviq-modal-panel CustomScrollbar glass border-white/10 bg-[#0B1020] p-5 sm:p-6"
+              ref={sourceDialogRef}
+              role="dialog"
+              aria-modal="true"
+              aria-label="Add notebook source"
+              tabIndex={-1}
             >
               <div className="mb-6 flex items-start justify-between">
                 <div>

@@ -72,6 +72,23 @@ module.exports = ({ db, onCall, HttpsError, FieldValue }) => {
     });
     return { communityId: id };
   });
+  api.getCommunityMemberCount = onCall(async (request) => {
+    const uid = auth(request), id = roomId(request);
+    const member = await db.doc(`communities/${id}/members/${uid}`).get();
+    if (!member.exists) throw new HttpsError("permission-denied", "Join this group before viewing its members.");
+    const authorIds = request.data?.authorIds ?? [];
+    if (!Array.isArray(authorIds) || authorIds.length > 10 || authorIds.some((value) => typeof value !== "string" || !/^[a-zA-Z0-9_-]{1,128}$/.test(value))) throw new HttpsError("invalid-argument", "Invalid message authors.");
+    const result = await db.collection(`communities/${id}/members`).count().get();
+    const authors = Object.create(null);
+    await Promise.all([...new Set(authorIds)].map(async (authorId) => {
+      const messages = await db.collection(`communities/${id}/messages`).where("userId", "==", authorId).limit(1).get();
+      if (messages.empty) { authors[authorId] = null; return; }
+      const profile = await db.doc(`users/${authorId}`).get();
+      const name = profile.exists ? profile.data().displayName || profile.data().name : null;
+      authors[authorId] = typeof name === "string" && name.trim() ? name.trim().slice(0, 120) : null;
+    }));
+    return { count: result.data().count, authors };
+  });
   api.joinCommunity = onCall(async (request) => {
     const uid = auth(request),
       id = roomId(request);

@@ -248,7 +248,10 @@ const getAiFailureDetails = (error) => {
     reason = "AI_REQUEST_REJECTED";
   }
 
-  return { reason, message };
+  if (/timeout|timed out|aborted/i.test(message)) reason = "AI_TIMEOUT";
+  if (message.includes("EMPTY_AI_RESPONSE")) reason = "AI_EMPTY_RESPONSE";
+
+  return { reason, message: GEMINI_API_KEY ? message.replaceAll(GEMINI_API_KEY, "[redacted]") : message };
 };
 
 const throwAiFailure = (error) => {

@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
+import { isReadOnlyAudit } from "@/src/lib/auditMode";
 import { onAuthStateChanged, User } from "firebase/auth";
 import { doc, onSnapshot, runTransaction } from "firebase/firestore";
 import { auth, authPersistenceReady, db } from "@/src/lib/firebase";
@@ -241,6 +242,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           const resolvedProfile = await runTransaction(db, async (transaction) => {
             const existing = await transaction.get(userDocRef);
             if (existing.exists()) return existing.data() as UserProfile;
+            if (isReadOnlyAudit) throw new Error("Create profiles outside read-only audit mode.");
             transaction.set(userDocRef, newProfile);
             return newProfile;
           }).catch((error) => {

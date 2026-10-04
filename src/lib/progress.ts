@@ -3,6 +3,7 @@ import { writeDocWithQueue, type SyncStatus } from "@/src/lib/offlineSync";
 import type { StudySession, UserProfile } from "@/src/types";
 import { httpsCallable } from "firebase/functions";
 import { functions } from "@/src/lib/firebase";
+import { isReadOnlyAudit } from "./auditMode";
 
 export const startStudySession = async (
   category: StudySessionPayload["category"],
@@ -10,6 +11,7 @@ export const startStudySession = async (
   restart = false,
   onNewSession?: () => void,
 ) => {
+  if (isReadOnlyAudit) throw new Error("Starting sessions is disabled in read-only audit mode.");
   const start = httpsCallable<
     { category: string; context: string; restart: boolean },
     { sessionId: string; resumed?: boolean }
@@ -442,6 +444,7 @@ export const persistStudySession = async (
 ) => {
   void fallbackProfile;
   void awards;
+  if (isReadOnlyAudit) throw new Error("Session completion is disabled in read-only audit mode.");
   if (!verifiedSessionId)
     throw new Error("Start an online study session before recording progress.");
   const complete = httpsCallable<

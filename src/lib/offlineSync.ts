@@ -1,5 +1,6 @@
 import { deleteDoc, doc, setDoc, updateDoc } from "firebase/firestore";
 import { useEffect } from "react";
+import { isReadOnlyAudit } from "./auditMode";
 import { db } from "@/src/lib/firebase";
 import { loadLocalData, saveLocalData } from "@/src/lib/localStore";
 
@@ -179,6 +180,7 @@ export const writeDocWithQueue = async ({
   merge?: boolean;
   kind?: SyncOperationKind;
 }): Promise<SyncStatus> => {
+  if (isReadOnlyAudit) throw new Error("Saving is disabled in read-only audit mode.");
   const existing = getQueuedOperation(kind, path);
   const operation = buildOperation({
     userId,
@@ -200,6 +202,7 @@ export const writeDocWithQueue = async ({
 };
 
 export const flushOfflineSyncQueue = async (userId?: string | null) => {
+  if (isReadOnlyAudit) return;
   if (!userId || (typeof navigator !== "undefined" && !navigator.onLine))
     return;
   const current = activeFlushes.get(userId);

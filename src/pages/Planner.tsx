@@ -43,6 +43,11 @@ import {
 import { cn } from "@/src/lib/utils";
 import { useBodyScrollLock } from "@/src/lib/useBodyScrollLock";
 import { writeDocWithQueue } from "@/src/lib/offlineSync";
+import { withDeadline } from "@/src/lib/asyncRequest";
+import { isReadOnlyAudit } from "@/src/lib/auditMode";
+import { validateActivityResponse } from "@/src/lib/plannerActivity";
+import { missionCompletion } from "@/src/lib/activityEvidence";
+import { useUserActivityMetrics } from "@/src/lib/useUserActivityMetrics";
 
 type ExamMode = "ielts" | "sat" | "hsk" | "cefr" | "school" | "entrance";
 type EnergyProfile = "morning" | "balanced" | "night";
@@ -100,6 +105,7 @@ type FlashcardItem = {
 };
 
 type GeneratedActivity = {
+  origin?: "ai";
   taskId: string;
   type: TaskKind;
   title: string;
@@ -1045,95 +1051,6 @@ const getWeaknessDashboard = (
     .slice(0, 3);
 };
 
-const getSuccessProbability = (
-  state: PlannerState,
-  sections: FocusSection[],
-) => {
-  const form = state.form;
-  const current = parseNumber(
-    form.currentScore,
-    parseNumber(EXAM_OPTIONS[form.mode].current),
-  );
-  const target = parseNumber(
-    form.targetScore,
-    parseNumber(EXAM_OPTIONS[form.mode].target),
-  );
-  const gap = Math.max(0.1, target - current);
-  const remaining = daysUntil(form.examDate);
-  const weeks = Math.max(1, remaining / 7);
-  const weeklyHours =
-    parseNumber(form.hoursPerDay, 3) * parseNumber(form.daysPerWeek, 6);
-  const availableHours = weeklyHours * weeks;
-  const neededHours =
-    form.mode === "ielts"
-      ? gap * 90
-      : form.mode === "sat"
-        ? gap * 0.32
-        : form.mode === "hsk"
-          ? gap * 0.9
-          : form.mode === "cefr"
-            ? gap * 2.4
-            : form.mode === "entrance"
-              ? gap * 3.1
-              : gap * 2.7;
-  const timeFit = clamp(availableHours / Math.max(neededHours, 1), 0, 1.35);
-  const completionRate = getCompletionRate(state);
-  const weaknessPenalty = clamp(
-    sections.reduce(
-      (total, section) => total + section.gap * (section.weight / 100),
-      0,
-    ),
-    0,
-    22,
-  );
-  const streakBoost = clamp(state.daily.dailyStreak * 0.8, 0, 10);
-  const recoveryPenalty = state.recoveryMode?.active ? 4 : 0;
-  const probability = Math.round(
-    clamp(
-      34 +
-        timeFit * 34 +
-        completionRate * 18 +
-        streakBoost -
-        weaknessPenalty -
-        recoveryPenalty,
-      8,
-      94,
-    ),
-  );
-  return {
-    current: probability,
-    afterMission: Math.round(
-      clamp(probability + 4 + completionRate * 2, 0, 96),
-    ),
-    ifSkip: Math.round(
-      clamp(probability - 3 - (state.recoveryMode?.active ? 1 : 0), 3, 95),
-    ),
-    extra30: Math.round(
-      clamp(probability + 8 + (timeFit < 0.75 ? 4 : 0), 0, 97),
-    ),
-  };
-};
-
-const getJourneyProgress = (state: PlannerState, probability: number) => {
-  const current = parseNumber(
-    state.form.currentScore,
-    parseNumber(EXAM_OPTIONS[state.form.mode].current),
-  );
-  const target = parseNumber(
-    state.form.targetScore,
-    parseNumber(EXAM_OPTIONS[state.form.mode].target),
-  );
-  const scoreProgress = target > 0 ? current / target : 0.5;
-  const dailyProgress = state.tasks.length
-    ? state.tasks.filter(
-        (task) => state.taskProgress[task.id]?.status === "completed",
-      ).length / state.tasks.length
-    : 0;
-  return Math.round(
-    clamp(scoreProgress * 28 + probability * 0.45 + dailyProgress * 12, 8, 88),
-  );
-};
-
 const buildRoadmapPhases = (state: PlannerState, weakest: FocusSection) => {
   const remaining = daysUntil(state.form.examDate);
   const foundationWeeks = Math.max(1, Math.ceil((remaining * 0.25) / 7));
@@ -1528,7 +1445,7 @@ const buildReflection = (
     xpEarned: state.daily.xpEarned,
     strongestArea,
     needsImprovement,
-    recommendation: `Spend 15 extra minutes on ${needsImprovement} tomorrow so the roadmap can increase your success probability.`,
+    recommendation: `Review ${needsImprovement} tomorrow and use your next assessment to check improvement.`,
   };
 };
 
@@ -1583,7 +1500,7 @@ const calculateNewAchievements = (state: PlannerState) => {
   add(
     "fast-improver",
     "Fast Improver",
-    "Maintained strong completion and improved probability.",
+    "Completed at least six activities with strong mission completion.",
     getCompletionRate(state) >= 0.8 && completed.length >= 6,
   );
   add(
@@ -1646,6 +1563,11 @@ export const Planner = () => {
   const [recommendationLoading, setRecommendationLoading] = useState(false);
   const [activeTaskId, setActiveTaskId] = useState<string | null>(null);
   const [generatingTaskId, setGeneratingTaskId] = useState<string | null>(null);
+  const [activityError, setActivityError] = useState("");
+  const [startingTimer, setStartingTimer] = useState(false);
+  const startingTimerRef = useRef(false);
+  const activityViewRef = useRef({ taskId: activeTaskId, view });
+  activityViewRef.current = { taskId: activeTaskId, view };
   const [timerRunning, setTimerRunning] = useState(false);
   const [validationMessage, setValidationMessage] = useState("");
   const [planValidationMessage, setPlanValidationMessage] = useState("");
@@ -1679,20 +1601,10 @@ export const Planner = () => {
   );
   const hasPlannerActivity =
     plannerState.tasks.length > 0 || plannerState.history.length > 0;
-  const probability = useMemo(
-    () =>
-      hasPlannerActivity
-        ? getSuccessProbability(plannerState, sections)
-        : { current: 0, afterMission: 0, extra30: 0, ifSkip: 0 },
-    [hasPlannerActivity, plannerState, sections],
-  );
-  const journeyProgress = useMemo(
-    () =>
-      hasPlannerActivity
-        ? getJourneyProgress(plannerState, probability.current)
-        : 0,
-    [hasPlannerActivity, plannerState, probability.current],
-  );
+  const sharedMetrics = useUserActivityMetrics(user?.uid);
+  const missionPercent = missionCompletion(sharedMetrics.missionTotal, sharedMetrics.missionCompleted);
+  const missionEvidence = { percent: missionPercent, total: sharedMetrics.missionTotal, completed: sharedMetrics.missionCompleted };
+  const journeyProgress = missionPercent ?? 0;
   const completedTasks = plannerState.tasks.filter(
     (task) => plannerState.taskProgress[task.id]?.status === "completed",
   );
@@ -1797,7 +1709,7 @@ export const Planner = () => {
   }, [user?.uid]);
 
   useEffect(() => {
-    if (!hydrated || loadBlocked) return;
+    if (!hydrated || loadBlocked || isReadOnlyAudit) return;
     if (!user) return;
     const plannerStateJson = JSON.stringify(plannerState);
     if (plannerStateJson === lastCloudPlannerStateRef.current) return;
@@ -1831,7 +1743,7 @@ export const Planner = () => {
   useEffect(
     () => () => {
       if (cloudSaveRef.current) window.clearTimeout(cloudSaveRef.current);
-      if (user && plannerDirtyRef.current)
+      if (user && plannerDirtyRef.current && !isReadOnlyAudit)
         void writeDocWithQueue({
           userId: user.uid,
           path: ["users", user.uid, "planner", "state"],
@@ -2059,23 +1971,20 @@ export const Planner = () => {
       "For flashcards: flashcards must have front, back, weaknessTag.",
     ].join("\n");
 
-    try {
-      const response = await askTutor(
+      const response = await withDeadline(askTutor(
         `Create the activity for this student context:\n${JSON.stringify(context, null, 2)}`,
         system,
         "en-US",
-        { retries: 1, feature: "planner" },
-      );
-      return normalizeActivity(
+        { retries: 0, feature: "planner" },
+      ), 135000);
+      const parsed = extractJson(response);
+      validateActivityResponse(task.kind, parsed);
+      return { ...normalizeActivity(
         task,
         plannerState.form,
-        extractJson(response),
+        parsed,
         weaknessLabels,
-      );
-    } catch (error) {
-      console.warn("Planner AI activity generation failed", error);
-      return fallbackActivity(task, plannerState.form, weaknessLabels);
-    }
+      ), origin: "ai" as const };
   };
 
   const openActivity = async (task: MissionTask) => {
@@ -2090,7 +1999,29 @@ export const Planner = () => {
     setValidationMessage("");
     setActiveTaskId(task.id);
     setView("activity");
-    void startStudySession(
+    if (plannerState.activities[task.id]) { openingTaskRef.current = false; return; }
+    setActivityError("");
+    setGeneratingTaskId(task.id);
+    try {
+      const activity = await generateActivity(task);
+      setPlannerState((current) => ({ ...current, activities: { ...current.activities, [task.id]: activity } }));
+    } catch (error) {
+      setActivityError(error instanceof Error ? error.message : "Could not generate this activity. Please retry.");
+    } finally {
+      openingTaskRef.current = false;
+      setGeneratingTaskId(null);
+    }
+  };
+
+  const toggleTaskTimer = async () => {
+    if (timerRunning) { setTimerRunning(false); return; }
+    if (!activeTask || !activeActivity || startingTimerRef.current) return;
+    const task = activeTask;
+    startingTimerRef.current = true;
+    setStartingTimer(true);
+    setValidationMessage("");
+    try {
+      const sessionId = await withDeadline(startStudySession(
         task.kind === "quiz"
           ? "quiz"
           : task.kind === "flashcards"
@@ -2106,48 +2037,18 @@ export const Planner = () => {
             );
           }
         },
-      ).then((sessionId) => {
-        studyReceiptsRef.current[task.id] = sessionId;
-      }).catch((error) => {
+      ), 15000);
+      studyReceiptsRef.current[task.id] = sessionId;
+      if (activityViewRef.current.taskId !== task.id || activityViewRef.current.view !== "activity") return;
+      updateProgress(task.id, { status: "inProgress" });
+      setTimerRunning(true);
+    } catch (error) {
       setValidationMessage(
         error instanceof Error
           ? error.message
           : "Connect to the internet to start this task.",
       );
-      });
-    openingTaskRef.current = false;
-
-    if (plannerState.activities[task.id]) {
-      setPlannerState((current) => ({
-        ...current,
-        taskProgress: {
-          ...current.taskProgress,
-          [task.id]: {
-            ...normalizeTaskProgress(current.taskProgress[task.id]),
-            status: "inProgress",
-          },
-        },
-      }));
-      return;
-    }
-
-    setGeneratingTaskId(task.id);
-    const activity = await generateActivity(task);
-    setPlannerState((current) => ({
-      ...current,
-      activities: {
-        ...current.activities,
-        [task.id]: activity,
-      },
-      taskProgress: {
-        ...current.taskProgress,
-        [task.id]: {
-          ...normalizeTaskProgress(current.taskProgress[task.id]),
-          status: "inProgress",
-        },
-      },
-    }));
-    setGeneratingTaskId(null);
+    } finally { startingTimerRef.current = false; setStartingTimer(false); }
   };
 
   const updateProgress = (taskId: string, patch: Partial<TaskProgress>) => {
@@ -2428,7 +2329,7 @@ export const Planner = () => {
             current: plannerState.form.currentScore,
             target: plannerState.form.targetScore,
             weaknesses: weaknessDashboard,
-            probability,
+            missionCompletion: missionEvidence,
             remainingDays: daysUntil(plannerState.form.examDate),
           },
           null,
@@ -2662,8 +2563,8 @@ export const Planner = () => {
               </div>
               <button
                 type="button"
-                onClick={() => setTimerRunning((current) => !current)}
-                disabled={elapsed >= requiredSeconds}
+                onClick={() => void toggleTaskTimer()}
+                disabled={elapsed >= requiredSeconds || startingTimer || !activeActivity}
                 className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-[#3F7D58] px-5 text-sm font-black text-white transition hover:bg-[#356B4B] disabled:cursor-not-allowed disabled:bg-[#94A3B8]"
               >
                 {timerRunning ? (
@@ -2674,8 +2575,8 @@ export const Planner = () => {
                 {elapsed >= requiredSeconds
                   ? "Time Reached"
                   : timerRunning
-                    ? "Timer Running"
-                    : "Start Timer"}
+                    ? "Pause Timer"
+                    : startingTimer ? "Starting…" : "Start Timer"}
               </button>
             </div>
             <div className="mt-4 h-2 overflow-hidden rounded-full bg-[#E2E8F0]">
@@ -2688,6 +2589,12 @@ export const Planner = () => {
         </section>
 
         <section className="mt-6 rounded-[1.75rem] border border-[#E2E8F0] bg-white p-6 sm:p-8">
+          {activityError && (
+            <div role="alert" className="mb-4 rounded-2xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
+              <p>{activityError}</p>
+              <button type="button" className="mt-3 rounded-xl bg-blue-700 px-4 py-2 font-bold text-white" disabled={generatingTaskId !== null} onClick={() => void openActivity(activeTask)}>Retry activity</button>
+            </div>
+          )}
           {validationMessage && !activeActivity && (
             <p role="status" className="mb-4 text-sm text-amber-700">{validationMessage}</p>
           )}
@@ -2702,6 +2609,7 @@ export const Planner = () => {
 
           {activeActivity && activeProgress && (
             <div>
+              <p className="mb-3 text-xs text-[#64748B]">{activeActivity.origin === "ai" ? "AI-generated activity" : "Saved activity · personalization source not recorded"}</p>
               <div className="mb-6">
                 <h2 className="text-2xl font-black">{activeActivity.title}</h2>
                 <p className="mt-2 max-w-3xl text-sm leading-6 text-[#64748B]">
@@ -2985,7 +2893,7 @@ export const Planner = () => {
                 {journeyProgress}% Complete
               </p>
               <p className="text-sm font-semibold text-[#64748B]">
-                Journey progress
+                Saved mission completion
               </p>
             </div>
           </div>
@@ -3003,10 +2911,10 @@ export const Planner = () => {
           <div className="flex items-start justify-between gap-4">
             <div>
               <p className="text-xs font-black uppercase tracking-[0.18em] text-[#64748B]">
-                Success Probability
+                Mission completion
               </p>
               <p className="mt-2 text-4xl font-black text-[#0F172A]">
-                {probability.current}%
+                {sharedMetrics.loading ? "Loading…" : sharedMetrics.error ? "Unavailable" : missionPercent === null ? "Not enough data" : `${missionPercent}%`}
               </p>
             </div>
             <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#ECFDF3] text-[#3F7D58]">
@@ -3014,14 +2922,11 @@ export const Planner = () => {
             </div>
           </div>
           <p className="mt-4 text-sm leading-6 text-[#64748B]">
-            Completing today's mission could raise this to{" "}
-            <span className="font-black text-[#3F7D58]">
-              {probability.afterMission}%
-            </span>
-            . Skipping today may lower it to {probability.ifSkip}%.
+            {sharedMetrics.missionCompleted} of {sharedMetrics.missionTotal} saved mission tasks completed. This measures task completion, not exam success probability.
           </p>
+          {sharedMetrics.error && <p role="alert" className="mt-3 text-sm">{sharedMetrics.error} <button type="button" className="underline" onClick={sharedMetrics.retry}>Retry statistics</button></p>}
           <div className="mt-4 rounded-2xl bg-[#F8FAFC] px-4 py-3 text-sm font-bold text-[#334155]">
-            +30 min daily: {probability.extra30}%
+            An exam success prediction needs validated score and assessment history.
           </div>
         </section>
       </div>

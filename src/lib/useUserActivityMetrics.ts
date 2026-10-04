@@ -14,8 +14,10 @@ import {
 } from "firebase/firestore";
 import { db } from "@/src/lib/firebase";
 import { calculateLevel, getCurrentStreak } from "@/src/lib/progress";
+import { summarizeCards, isMeaningfulSession } from "./activityEvidence";
 
 export type UserActivityMetrics = {
+  retry: () => void;
   focusMinutes: number;
   tasksDone: number;
   notesCreated: number;
@@ -24,6 +26,10 @@ export type UserActivityMetrics = {
   tutorMessages: number;
   decksCreated: number;
   flashcardsCreated: number;
+  dueCards: number;
+  reviewedCards: number;
+  missionTotal: number;
+  missionCompleted: number;
   examReadiness: number;
   xp: number;
   level: number;
@@ -33,6 +39,7 @@ export type UserActivityMetrics = {
 };
 
 const EMPTY_METRICS: UserActivityMetrics = {
+  retry: () => undefined,
   focusMinutes: 0,
   tasksDone: 0,
   notesCreated: 0,
@@ -41,6 +48,10 @@ const EMPTY_METRICS: UserActivityMetrics = {
   tutorMessages: 0,
   decksCreated: 0,
   flashcardsCreated: 0,
+  dueCards: 0,
+  reviewedCards: 0,
+  missionTotal: 0,
+  missionCompleted: 0,
   examReadiness: 0,
   xp: 0,
   level: 1,
@@ -241,12 +252,14 @@ const calculateExamReadiness = ({
   );
 };
 
-// Aggregate reads keep message/card contents off statistics screens. Only the
-// profile, trusted progress, planner state and deck metadata use live listeners.
+// Message totals use aggregate reads; card due dates and completed-session
+// evidence are checked against the existing records without creating statistics.
 export const useUserActivityMetrics = (
   uid?: string | null,
   options: UserActivityMetricsOptions = {},
 ): UserActivityMetrics => {
+  const [refreshRevision, setRefreshRevision] = React.useState(0);
+  const retry = React.useCallback(() => setRefreshRevision((current) => current + 1), []);
   const dayScope = React.useMemo(
     () => createDayScope(options.scopeDate),
     [options.scopeDate],
@@ -258,6 +271,7 @@ export const useUserActivityMetrics = (
     if (!uid) return;
     let active = true,
       refreshing = false,
+      refreshAgain = false,
       deckIds: string[] = [],
       roadmapDone = 0,
       plannerDone = 0;
@@ -302,7 +316,8 @@ export const useUserActivityMetrics = (
           ).length,
       );
     const refresh = async () => {
-      if (!active || refreshing || document.hidden) return;
+      if (!active || document.hidden) return;
+      if (refreshing) { refreshAgain = true; return; }
       if (!navigator.onLine) {
         update({
           loading: false,
@@ -328,26 +343,14 @@ export const useUserActivityMetrics = (
           cards,
           dailyXp,
         ] = await Promise.all([
-          withIndexFallback(
-            async () =>
-              toNumber(
-                (
-                  await getAggregateFromServer(
-                    query(sessions, where("category", "==", "focus")),
-                    { seconds: sum("duration") },
-                  )
-                ).data().seconds,
-              ),
-            async () =>
-              (await getDocsFromServer(sessions)).docs.reduce(
+          getDocsFromServer(sessions).then((snapshot) => snapshot.docs.reduce(
                 (total, entry) =>
                   total +
-                  (entry.data().category === "focus"
+                    (entry.data().category === "focus" && isMeaningfulSession(entry.data())
                     ? toNumber(entry.data().duration)
                     : 0),
                 0,
-              ),
-          ),
+              )),
           count(scoped(target("notebookNotes"))),
           count(scoped(target("notebookSources"))),
           countRole("notebookMessages"),
@@ -376,9 +379,11 @@ export const useUserActivityMetrics = (
               ).docs.filter((entry) => isCompleted(entry.data())).length,
           ),
           Promise.all(
-            deckIds.map((id) =>
-              count(scoped(collection(db, "users", uid, "decks", id, "cards"))),
-            ),
+            deckIds.map(async (id) => {
+              const snapshot = await getDocsFromServer(collection(db, "users", uid, "decks", id, "cards"));
+              const records = snapshot.docs.map((entry) => entry.data());
+              return { ...summarizeCards(records), created: records.filter((record) => isWithinDayScope(pickRecordDate(record, ["createdAt"]), dayScope)).length };
+            }),
           ),
           dayScope
             ? withIndexFallback(
@@ -406,7 +411,9 @@ export const useUserActivityMetrics = (
           notebookMessages: notebook,
           tutorMessages: tutor,
           decksCreated: decks,
-          flashcardsCreated: cards.reduce((total, value) => total + value, 0),
+          flashcardsCreated: cards.reduce((total, value) => total + value.created, 0),
+          dueCards: cards.reduce((total, value) => total + value.due, 0),
+          reviewedCards: cards.reduce((total, value) => total + value.reviewed, 0),
           tasksDone: roadmapDone + plannerDone,
           ...(dailyXp !== null ? { xp: dailyXp } : {}),
           loading: false,
@@ -416,6 +423,7 @@ export const useUserActivityMetrics = (
         failure(error);
       } finally {
         refreshing = false;
+        if (refreshAgain && active) { refreshAgain = false; void refresh(); }
       }
     };
     const profile = (snapshot: {
@@ -457,7 +465,11 @@ export const useUserActivityMetrics = (
           plannerDone = snap.exists()
             ? countPlannerTasksDone(snap.data(), dayScope)
             : 0;
-          update({ tasksDone: roadmapDone + plannerDone });
+          const state = snap.data()?.state || snap.data() || {};
+          update({ tasksDone: roadmapDone + plannerDone,
+            missionTotal: Array.isArray(state.tasks) ? state.tasks.length : 0,
+            missionCompleted: countPlannerTasksDone(snap.exists() ? snap.data() : null, null),
+          });
         },
         failure,
       ),
@@ -483,10 +495,10 @@ export const useUserActivityMetrics = (
       window.removeEventListener("online", resume);
       window.removeEventListener("focus", resume);
     };
-  }, [uid, dayScope]);
+  }, [uid, dayScope, refreshRevision]);
   const examReadiness = React.useMemo(
     () => calculateExamReadiness(metrics),
     [metrics],
   );
-  return uid ? { ...metrics, examReadiness } : EMPTY_METRICS;
+  return uid ? { ...metrics, examReadiness, retry } : EMPTY_METRICS;
 };

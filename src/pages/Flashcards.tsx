@@ -29,6 +29,7 @@ import {
 } from "@/src/lib/progress";
 import { collection, onSnapshot, orderBy, query } from "firebase/firestore";
 import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
+import { isReadOnlyAudit } from "@/src/lib/auditMode";
 import { db, storage } from "@/src/lib/firebase";
 import ReactMarkdown from "react-markdown";
 import { getAppErrorMessage } from "@/src/lib/errors";
@@ -222,6 +223,7 @@ export const Flashcards = () => {
   const [editingCardId, setEditingCardId] = useState("");
   const [search, setSearch] = useState("");
   const [isSaving, setIsSaving] = useState(false);
+  const saveRequestRef = useRef(false);
   const [status, setStatus] = useState("");
   const [practiceOpen, setPracticeOpen] = useState(false);
   useBodyScrollLock(showDeckModal || practiceOpen);
@@ -229,6 +231,9 @@ export const Flashcards = () => {
   const [practiceIndex, setPracticeIndex] = useState(0);
   const [isFlipped, setIsFlipped] = useState(false);
   const [reviewedCount, setReviewedCount] = useState(0);
+  const gradeRequestRef = useRef(false);
+  const lastGradedCardRef = useRef<string | null>(null);
+  const [isGrading, setIsGrading] = useState(false);
   const [shuffleMode, setShuffleMode] = useState(true);
   const [previewMode, setPreviewMode] = useState(false);
   const [cacheReady, setCacheReady] = useState({ decks: false, cards: false });
@@ -391,7 +396,9 @@ export const Flashcards = () => {
   const deckCards = (deckId: string) => cardsByDeck[deckId] || [];
 
   const handleCreateDeck = async () => {
-    if (!user || !deckForm.title.trim()) return;
+    if (!user || !deckForm.title.trim() || saveRequestRef.current) return;
+    if (isReadOnlyAudit) { setStatus("Saving is disabled in read-only audit mode."); return; }
+    saveRequestRef.current = true;
 
     setIsSaving(true);
     setStatus("");
@@ -441,6 +448,7 @@ export const Flashcards = () => {
         "Deck created on this device. Cloud sync is waiting for Firebase rules.",
       );
     } finally {
+      saveRequestRef.current = false;
       setIsSaving(false);
     }
   };
@@ -488,6 +496,7 @@ export const Flashcards = () => {
     cardId: string,
     file: File,
   ) => {
+    if (isReadOnlyAudit) throw new Error("Uploads are disabled in read-only audit mode.");
     if (!user) return "";
     const imageRef = ref(
       storage,
@@ -509,25 +518,29 @@ export const Flashcards = () => {
       !user ||
       !selectedDeck ||
       !cardForm.front.trim() ||
-      !cardForm.back.trim()
+      !cardForm.back.trim() || saveRequestRef.current
     )
       return;
+
+    if (isReadOnlyAudit) { setStatus("Saving is disabled in read-only audit mode."); return; }
+    saveRequestRef.current = true;
 
     setIsSaving(true);
     setStatus("");
     const existingId = editingCardId || makeSyncId("card");
+    const previousCard = editingCardId ? deckCards(selectedDeck.id).find((card) => card.id === editingCardId) : undefined;
     const localCard: CardItem = {
       id: existingId,
       deckId: selectedDeck.id,
       front: cardForm.front.trim(),
       back: cardForm.back.trim(),
       imageUrl: cardForm.imageUrl,
-      dueAt: todayIso(),
-      interval: 0,
-      easeFactor: 2.5,
-      repetition: 0,
-      lapses: 0,
-      reviewCount: 0,
+      dueAt: previousCard?.dueAt ?? todayIso(),
+      interval: previousCard?.interval ?? 0,
+      easeFactor: previousCard?.easeFactor ?? 2.5,
+      repetition: previousCard?.repetition ?? 0,
+      lapses: previousCard?.lapses ?? 0,
+      reviewCount: previousCard?.reviewCount ?? 0,
       updatedAt: new Date().toISOString(),
       syncStatus: "pending",
     };
@@ -643,6 +656,7 @@ export const Flashcards = () => {
       );
       resetCardForm();
     } finally {
+      saveRequestRef.current = false;
       setIsSaving(false);
     }
   };
@@ -849,6 +863,8 @@ export const Flashcards = () => {
   }
 
   const startPractice = (onlyDue: boolean) => {
+    if (gradeRequestRef.current) return;
+    lastGradedCardRef.current = null;
     const source = onlyDue ? dueCards : selectedCards;
     const queue = shuffleMode ? shuffleCards(source) : [...source];
     setPracticeQueue(queue);
@@ -863,7 +879,12 @@ export const Flashcards = () => {
   };
 
   const gradeCurrentCard = async (grade: Grade) => {
-    if (!user || !selectedDeck || !currentPracticeCard) return;
+    if (!user || !selectedDeck || !currentPracticeCard || gradeRequestRef.current || lastGradedCardRef.current === currentPracticeCard.id) return;
+    if (isReadOnlyAudit) { setStatus("Review changes are disabled in read-only audit mode."); return; }
+    gradeRequestRef.current = true;
+    lastGradedCardRef.current = currentPracticeCard.id;
+    setIsGrading(true);
+    try {
 
     const schedule = nextSchedule(currentPracticeCard, grade);
     setCardsByDeck((current) => ({
@@ -923,6 +944,10 @@ export const Flashcards = () => {
     }
 
     setPracticeIndex((index) => index + 1);
+    } finally {
+      gradeRequestRef.current = false;
+      setIsGrading(false);
+    }
   };
 
   return (
@@ -976,7 +1001,7 @@ export const Flashcards = () => {
         </div>
       )}
 
-      <div className="grid gap-6 xl:grid-cols-[360px_1fr]">
+      <div className="grid min-w-0 gap-6 xl:grid-cols-[280px_minmax(0,1fr)] 2xl:grid-cols-[320px_minmax(0,1fr)]">
         <aside className="glass h-fit border-white/10 bg-white/[0.02] p-4">
           <div className="mb-4 flex items-center justify-between">
             <h3 className="text-sm font-black uppercase tracking-[0.2em] text-slate-500">
@@ -1044,7 +1069,7 @@ export const Flashcards = () => {
           {selectedDeck ? (
             <>
               <section className="border-b border-white/10 p-5 sm:p-6">
-                <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+                <div className="flex min-w-0 flex-col gap-5 2xl:flex-row 2xl:items-start 2xl:justify-between">
                   <div>
                     <div className="flex items-center gap-3">
                       <div
@@ -1089,7 +1114,7 @@ export const Flashcards = () => {
                           }
                         </p>
                         <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">
-                          Learned
+                          Reviewed at least once
                         </p>
                       </div>
                     </div>
@@ -1145,7 +1170,7 @@ export const Flashcards = () => {
                 />
               </section>
 
-              <section className="grid gap-6 p-5 lg:grid-cols-[minmax(320px,420px)_1fr] sm:p-6">
+              <section className="grid min-w-0 gap-6 p-5 sm:p-6 2xl:grid-cols-2">
                 <div className="rounded-3xl border border-white/10 bg-slate-950/45 p-4">
                   <div className="mb-4 flex items-center justify-between">
                     <h4 className="text-sm font-black uppercase tracking-[0.2em] text-slate-500">
@@ -1262,7 +1287,7 @@ export const Flashcards = () => {
 
                 <div className="min-w-0">
                   <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                    <div className="relative flex-1">
+                    <div className="relative min-w-0 flex-1">
                       <Search
                         className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500"
                         size={16}
@@ -1585,6 +1610,7 @@ export const Flashcards = () => {
                           type="button"
                           key={button.grade}
                           onClick={() => gradeCurrentCard(button.grade)}
+                          disabled={isGrading}
                           className={cn(
                             "rounded-3xl border bg-white/[0.04] p-5 text-center font-black uppercase tracking-widest transition",
                             button.className,

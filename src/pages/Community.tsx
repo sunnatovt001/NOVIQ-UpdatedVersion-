@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import {
   collection,
+  doc,
   getDocs,
   limit,
   onSnapshot,
@@ -34,6 +35,8 @@ import { sendEmailVerification } from "firebase/auth";
 import { db, functions } from "@/src/lib/firebase";
 import { useAuth } from "@/src/contexts/AuthContext";
 import { recordDate } from "@/src/lib/recordDate";
+import { isReadOnlyAudit } from "@/src/lib/auditMode";
+import { messageAuthor, resolveMessageAuthor } from "@/src/lib/activityEvidence";
 
 type Room = {
   id: string;
@@ -59,8 +62,10 @@ type Message = {
 const call = async <T,>(
   name: string,
   data: Record<string, unknown>,
-): Promise<T> =>
-  (await httpsCallable<Record<string, unknown>, T>(functions, name)(data)).data;
+): Promise<T> => {
+  if (isReadOnlyAudit && !["getCommunityMemberCount", "getFriendInvite"].includes(name)) throw new Error("Group writes and invitations are disabled in read-only audit mode.");
+  return (await httpsCallable<Record<string, unknown>, T>(functions, name)(data)).data;
+};
 const errorText = (error: unknown) =>
   error instanceof Error
     ? error.message
@@ -81,6 +86,10 @@ export const Community = () => {
   const [invites, setInvites] = useState<Invite[]>([]),
     [friends, setFriends] = useState<Room[]>([]);
   const [active, setActive] = useState("");
+  const [groupDetails, setGroupDetails] = useState<Record<string, { count?: number; state: "loading" | "ready" | "missing" | "error" }>>({});
+  const [authorLabels, setAuthorLabels] = useState<Record<string, Record<string, string | null>>>({});
+  const [authorLookupState, setAuthorLookupState] = useState<Record<string, "loading" | "ready" | "error">>({});
+  const [groupRevision, setGroupRevision] = useState(0);
   const [name, setName] = useState(""),
     [description, setDescription] = useState(""),
     [email, setEmail] = useState("");
@@ -97,6 +106,8 @@ export const Community = () => {
     [error, setError] = useState("");
   const [loading, setLoading] = useState(true),
     [chatLoading, setChatLoading] = useState(false);
+  const [socialState, setSocialState] = useState({ friends: "loading", invites: "loading" });
+  const [socialRevision, setSocialRevision] = useState(0);
   const [chatError, setChatError] = useState("");
   const [chatPermissionDenied, setChatPermissionDenied] = useState(false);
   const [chatRevision, setChatRevision] = useState(0);
@@ -163,9 +174,11 @@ export const Community = () => {
       setError(errorText(error));
       setLoading(false);
     };
-    const socialFail = (error: unknown) => {
+    setSocialState({ friends: "loading", invites: "loading" });
+    const socialFail = (part: "friends" | "invites", error: unknown) => {
       // Friend data is supplementary. A legacy rule must not block groups or chat.
       console.warn("Nexus social data listener failed", error);
+      setSocialState((current) => ({ ...current, [part]: "error" }));
     };
     const stop = [
       onSnapshot(
@@ -207,26 +220,55 @@ export const Community = () => {
           orderBy("createdAt", "desc"),
           limit(50),
         ),
-        (snap) =>
+        (snap) => {
           setInvites(
             snap.docs.map((d) => ({ ...d.data(), id: d.id }) as Invite),
-          ),
-        socialFail,
+          );
+          setSocialState((current) => ({ ...current, invites: "ready" }));
+        },
+        (error) => socialFail("invites", error),
       ),
       onSnapshot(
         query(collection(db, "users", user.uid, "friends"), limit(100)),
-        (snap) =>
+        (snap) => {
           setFriends(
             snap.docs.map((d) => ({
               name: d.data().displayName || d.data().email || "Friend",
               id: d.id,
             })),
-          ),
-        socialFail,
+          );
+          setSocialState((current) => ({ ...current, friends: "ready" }));
+        },
+        (error) => socialFail("friends", error),
       ),
     ];
     return () => stop.forEach((fn) => fn());
-  }, [user?.uid]);
+  }, [user?.uid, socialRevision]);
+  const joinedIds = joined.map((group) => group.id).sort().join(",");
+  useEffect(() => {
+    if (!user) return;
+    let live = true;
+    const stops = selectableGroups(joined).map((group) => {
+      setGroupDetails((current) => ({ ...current, [group.id]: { state: "loading" } }));
+      const fetchCount = () => void call<{ count: number }>("getCommunityMemberCount", { communityId: group.id }).then((result) => {
+        if (live) setGroupDetails((current) => ({ ...current, [group.id]: { state: "ready", count: result.count } }));
+      }).catch(() => {
+        if (live) setGroupDetails((current) => ({ ...current, [group.id]: { state: "error" } }));
+      });
+      return onSnapshot(doc(db, "communities", group.id), (snapshot) => {
+        // Legacy groups can have members/messages without a root metadata document.
+        // Count their actual memberships rather than interpreting missing metadata as deletion.
+        const data = snapshot.exists() ? snapshot.data() : {};
+        const count = data.membersCount ?? data.memberCount;
+        if (typeof count === "number" && Number.isFinite(count) && count > 0) {
+          setGroupDetails((current) => ({ ...current, [group.id]: { state: "ready", count } }));
+        } else {
+          fetchCount();
+        }
+      }, fetchCount);
+    });
+    return () => { live = false; stops.forEach((stop) => stop()); };
+  }, [joinedIds, user?.uid, groupRevision]);
   useEffect(() => {
     setMessages([]);
     setOlder([]);
@@ -345,6 +387,28 @@ export const Community = () => {
       (recordDate(a.createdAt)?.getTime() || 0) -
       (recordDate(b.createdAt)?.getTime() || 0),
   );
+  const unresolvedAuthorIds = Array.from(new Set(allMessages.filter((message) =>
+    message.userId && message.userId !== user?.uid &&
+    messageAuthor(message) === "Former or unnamed member" &&
+    !Object.prototype.hasOwnProperty.call(authorLabels[active] || {}, message.userId)
+  ).map((message) => message.userId))).slice(0, 10);
+  const authorLookupKey = unresolvedAuthorIds.join(",");
+  useEffect(() => {
+    if (!user || !active || !authorLookupKey) return;
+    let live = true;
+    setAuthorLookupState((current) => ({ ...current, [active]: "loading" }));
+    void call<{ count: number; authors?: Record<string, string | null> }>("getCommunityMemberCount", { communityId: active, authorIds: authorLookupKey.split(",") }).then((result) => {
+      if (!result.authors || authorLookupKey.split(",").some((id) => !Object.prototype.hasOwnProperty.call(result.authors, id) || (result.authors?.[id] !== null && typeof result.authors?.[id] !== "string"))) throw new Error("Member name lookup returned an incomplete response.");
+      if (live) {
+        setAuthorLabels((current) => ({ ...current, [active]: { ...current[active], ...result.authors } }));
+        setAuthorLookupState((current) => ({ ...current, [active]: "ready" }));
+      }
+    }).catch((error: unknown) => {
+      console.warn("Nexus author lookup failed", { code: (error as { code?: string })?.code || "unknown" });
+      if (live) setAuthorLookupState((current) => ({ ...current, [active]: "error" }));
+    });
+    return () => { live = false; };
+  }, [active, authorLookupKey, user?.uid, groupRevision]);
   const normalizedSearch = groupSearch.trim().toLocaleLowerCase();
   const visibleJoined = useMemo(
     () =>
@@ -358,10 +422,14 @@ export const Community = () => {
       rooms.filter((room) => !joined.some((member) => member.id === room.id)),
     [rooms, joined],
   );
-  const memberCountLabel = (entry: Room) =>
-    typeof entry.membersCount === "number"
-      ? `${entry.membersCount} members`
-      : "Member count unavailable";
+  const memberCountLabel = (entry: Room) => {
+    const detail = groupDetails[entry.id];
+    if (detail?.state === "loading") return "Loading members…";
+    if (detail?.state === "error") return "Could not load member count";
+    if (detail?.state === "missing") return "Member count not recorded";
+    const count = detail?.count ?? entry.membersCount;
+    return typeof count === "number" ? `${count} member${count === 1 ? "" : "s"}` : "Member count not recorded";
+  };
   if (!user)
     return (
       <div className={panel}>
@@ -658,6 +726,8 @@ export const Community = () => {
                     ? `${memberCountLabel(room)} · Messages are visible to group members.`
                     : "Choose or join a group to start chatting."}
                 </p>
+                {groupDetails[active]?.state === "error" && <button type="button" className="mt-2 text-sm text-blue-700 underline" onClick={() => setGroupRevision((current) => current + 1)}>Retry member count</button>}
+                {authorLookupState[active] === "error" && <p role="alert" className="mt-2 text-sm text-slate-500">Some author names could not be loaded. <button type="button" className="underline" onClick={() => setGroupRevision((value) => value + 1)}>Retry author names</button></p>}
               </div>
             </div>
             <div className="flex items-center gap-3">
@@ -770,12 +840,12 @@ export const Community = () => {
               allMessages.map((m) => (
                 <article
                   key={m.id}
-                  className={`max-w-[88%] rounded-2xl p-3.5 ${m.userId === user.uid ? "ml-auto bg-blue-600 text-white shadow-sm" : "mr-auto bg-slate-50 dark:bg-slate-800"}`}
+                  className={`max-w-[88%] rounded-2xl p-3.5 ${m.userId === user.uid ? "chat-user-message ml-auto bg-blue-600 text-white shadow-sm" : "mr-auto bg-slate-50 dark:bg-slate-800"}`}
                 >
                   <p
                     className={`text-xs font-semibold ${m.userId === user.uid ? "text-blue-100" : "text-slate-500"}`}
                   >
-                    {m.userId === user.uid ? "You" : m.displayName}
+                    {m.userId === user.uid ? "You" : resolveMessageAuthor(m, authorLabels[active]?.[m.userId], authorLookupState[active])}
                     <time
                       className="ml-2 font-normal"
                       dateTime={recordDate(m.createdAt)?.toISOString()}
@@ -910,7 +980,9 @@ export const Community = () => {
             <h2 className="flex items-center gap-2 text-lg font-black">
               <Sparkles className="text-amber-500" size={21} /> Sent invitations
             </h2>
-            {!invites.length && (
+            {socialState.invites === "loading" && <p role="status" className="text-sm text-slate-500">Loading invitations…</p>}
+            {socialState.invites === "error" && <p role="alert" className="text-sm text-slate-500">Invitations could not be loaded. <button type="button" className="underline" onClick={() => setSocialRevision((value) => value + 1)}>Retry invitations</button></p>}
+            {socialState.invites === "ready" && !invites.length && (
               <p className="text-sm text-slate-500">No invitations sent yet.</p>
             )}
             {invites.map((invite) => {
@@ -966,6 +1038,8 @@ export const Community = () => {
             <h2 className="flex items-center gap-2 text-lg font-black">
               <CircleUserRound className="text-emerald-600" size={21} /> Friends
             </h2>
+            {socialState.friends === "loading" && <p role="status" className="text-sm text-slate-500">Loading friends…</p>}
+            {socialState.friends === "error" && <p role="alert" className="text-sm text-slate-500">Friends could not be loaded. <button type="button" className="underline" onClick={() => setSocialRevision((value) => value + 1)}>Retry friends</button></p>}
             {friends.length ? (
               friends.map((friend) => (
                 <p
@@ -978,9 +1052,9 @@ export const Community = () => {
                   {friend.name}
                 </p>
               ))
-            ) : (
+            ) : socialState.friends === "ready" ? (
               <p className="text-sm text-slate-500">No friends here yet.</p>
-            )}
+            ) : null}
           </section>
         </aside>
       </div>

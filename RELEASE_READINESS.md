@@ -1,45 +1,29 @@
 # Local release verification — 2026-10-04
 
-## Fixed in this checkout
+The latest audit fixes and per-item evidence are recorded in [AUDIT_FIX_REPORT.md](AUDIT_FIX_REPORT.md). This checkout is locally verified; a complete live production release is not yet verified.
 
-- General/IELTS chat crashed on legacy ISO-string dates. Chat now accepts ISO strings, Date values, and Firestore timestamps without changing stored records.
-- Chat reconnect now starts a new listener after a permission failure. Other loading failures offer retry instead of incorrectly requesting membership changes.
-- Removed the inactive Nexus options button.
-- Missing statistics indexes fall back to reads of actual account records. Permission/network failures still remain failures; fallback never fabricates values.
-- Focus help opens instructions; new accounts show a proper empty task state instead of a sample biology task.
-- Added accessible names to modal close controls and bounded website-source downloads to 15 seconds.
-- Rejoining preserves existing membership metadata and the original joined date.
-- Profile bootstrap now returns the existing document if it appears during the transaction, preventing temporary progress resets. Stale account callbacks are ignored.
-- Focus task completion persists across navigation and reloads.
-- `npm run verify` runs the complete local checks; GitHub Actions additionally schedules the isolated Firestore rules suite with Java 21.
+## Latest verification
 
-## Verification evidence
+- `npm run verify` passed: TypeScript, Functions syntax, 34 frontend tests, 25 backend tests, and production build.
+- A final production build passed after the last CSS change.
+- Ten routes were checked at 390×844, 768×1024, 1366×768 and 1920×1080. Visible enabled button centers were unobstructed and no horizontal overflow was detected.
+- Tutor Send remained visible and clickable at all four sizes. Notebook close controls, Escape and focus restoration were checked.
+- Metrics charts had positive measured sizes, week switching worked, and the reported chart sizing warnings were absent. Runtime exception checks returned no new JavaScript exceptions; external backend errors remain separate release gates.
+- Existing records were displayed: five mission tasks, one note, seven cards and seven due cards. Viewing a Planner activity no longer starts it. Isolated tests cover start, pause, retry, completion, statistics and AI success/failure flows without production writes.
 
-- Browser: General displays its existing messages, IELTS displays its existing messages, and the legacy SAT group shows its real empty state.
-- Browser: Focus help and focus/break mode switches; Planner settings close and roadmap/back navigation; Notebook source tabs; deck form open/close and review-card flip/end; billing monthly/yearly and Continue Free; mobile menu navigation were exercised.
-- Dashboard statistics refresh message disappeared after the index fallback change.
-- 38 isolated tests pass, covering profile creation races, old chat dates, missing indexes, permissions, sync, session verification, memberships, invitations, payment validation, and private Telegram command authorization.
-- Production build passes. TypeScript and Functions syntax checks pass.
-- Frontend and Functions dependency audits, including development dependencies, returned zero known vulnerabilities on 2026-10-04.
+## Release gates
 
-## Remaining release gates
+- The updated `getCommunityMemberCount` callable has not been deployed. Real member counts and authorized legacy author-name resolution need live backend verification; the UI now distinguishes loading, failure and missing data and provides retry. Group messages remain restricted to members.
+- Real AI provider/authentication/quota operation needs verification with configured backend services. Local isolated tests verify success, timeout, malformed output, error and retry behavior; they do not establish live provider availability.
+- Cloud saves, message sending, invitations, payments and Telegram delivery were not exercised against the real account.
+- Invitation-link functionality does not currently send email. An email provider is still unidentified, and separate friend chat functionality is not implemented.
+- Profile links to @noviqq_bot; existing private-chat /planner and /metrics handlers require live token/webhook and account-link verification.
+- The Firestore emulator rules suite was not rerun; this machine has Java 8. Compatible runtime setup is still needed. Existing security rules were not widened.
 
-This is not yet a verified complete live release. A rendered button alone does not prove its server operation succeeds.
+## Read-only audit mode
 
-- The separate new SAT group still rejects reads for the current account. Its membership repair requires the updated joinCommunity function to be deployed and successfully called by the member.
-- Planner Recommendations returned an AI service error during browser verification. The deployed AI callable/provider configuration still needs successful verification.
-- Deploy the matching Functions, Firestore rules/indexes and Storage rules together with the client, then verify real membership repair, message send, invitation acceptance and verified session completion.
-- Payment settlement and Telegram delivery were not performed against the user's account. They require working provider credentials and webhooks. No payment or message was sent during this audit.
-- The separate Firestore emulator rules suite needs a newer Java runtime than the installed Java 8; it has not been executed on this machine.
-- Delete/reset actions and cloud writes were not exercised against production data. Existing user records and progress must remain intact.
+The current localhost server uses `npm run dev -- --mode audit`. This opt-in mode blocks cloud writes, AI requests, automatic visit telemetry, notification creation and offline queue flushing. Existing queued writes are preserved. Ordinary `npm run dev` restores normal backend-connected behavior.
 
-No GitHub push or deployment was performed.
+Initial browser navigation occurred in ordinary development mode before its automatic visit tracking and notification initialization were identified. Those automatic routines may have written telemetry or notifications. No intentional user message, invitation, payment, data reset or deletion was performed; no rollback was attempted.
 
-## Latest requested fixes
-
-- Planner opens existing activities immediately while requesting the server study proof independently. Verified completion still requires the server proof.
-- The earlier duplicate SAT entry is hidden from the joined-group list; no group, message, or membership was deleted.
-- Metrics accepts legacy and Firestore timestamps and excludes sessions whose dates cannot be parsed.
-- Profile links to @noviqq_bot. The server checks the configured token using Telegram getMe before issuing a link.
-- Telegram supports /planner and /metrics for linked private chats using the existing user and planner records. Live token/webhook configuration and delivery remain unverified.
-- Invitation delivery still needs an identified email provider. The current invitation-link flow does not send email, and a separate friend chat has not yet been implemented.
+No Git commands, push or deployment were performed. Production deployment requires a separate instruction and the live checks above.

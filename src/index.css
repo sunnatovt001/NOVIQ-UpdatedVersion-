@@ -622,8 +622,35 @@
 
 .noviq-app:not(.dark) [class*="placeholder:text-slate-"]::placeholder,
 .noviq-app:not(.dark) [class*="placeholder:text-gray-"]::placeholder {
-  color: var(--dashboard-faint);
+  color: var(--noviq-muted);
 }
+
+/* Theme text remapping must never turn user messages dark on blue. */
+.noviq-app .chat-user-message,
+.noviq-app .chat-user-message :is(p, span, a, li, strong, code, h1, h2, h3, h4, h5, h6, blockquote, em, small, time, pre) {
+  color: #fff !important;
+}
+.noviq-app .chat-user-message { background-color: #2563eb !important; }
+.noviq-app .chat-user-message a { text-decoration: underline; }
+.noviq-app .chat-user-message .opacity-70 { opacity: 1; }
+.noviq-app button.bg-blue-600:hover { background-color: #1d4ed8; }
+.noviq-app button.bg-orange-700 { color: #fff !important; }
+.noviq-app .audit-mode-notice { color: #52627a !important; }
+.noviq-app.dark .audit-mode-notice { color: #b8c6dc !important; }
+.noviq-app:not(.dark) :is(.text-cyan-300, .text-cyan-400) { color: #0e7490 !important; }
+.noviq-app:not(.dark) :is(.text-emerald-300, .text-emerald-400) { color: #047857 !important; }
+.noviq-app:not(.dark) :is(.text-red-200, .text-red-300) { color: #b91c1c !important; }
+.noviq-app:not(.dark) :is(.text-amber-100, .text-amber-200, .text-amber-300) { color: #92400e !important; }
+.noviq-app:not(.dark) button[class*="bg-[#3F7D58]"],
+.noviq-app:not(.dark) button[class*="bg-[#3F7D58]"] :is(span, svg) { color: #fff !important; }
+.noviq-app .glass { min-width: 0; }
+.noviq-app :is(button, a, input, textarea, select):focus-visible {
+  outline: 3px solid #2563eb;
+  outline-offset: 3px;
+}
+.noviq-app.dark :is(input, textarea)::placeholder { color: #aab9d1; }
+.noviq-app:not(.dark) button:is(.bg-blue-600, .bg-blue-700),
+.noviq-app:not(.dark) button:is(.bg-blue-600, .bg-blue-700) :is(span, svg) { color: #fff; }
 
 .noviq-app:not(.dark) [class*="border-white/"],
 .noviq-app:not(.dark) [class*="border-white["],

@@ -1,5 +1,6 @@
 import { httpsCallable } from "firebase/functions";
 import { functions } from "@/src/lib/firebase";
+import { isReadOnlyAudit } from "./auditMode";
 
 export interface TutorHistoryItem {
   role: "user" | "assistant";
@@ -57,9 +58,15 @@ export const models = {
   pro: "gemini-2.5-pro",
 };
 
-const getFriendlyAiError = (error: unknown) => {
+export const getFriendlyAiError = (error: unknown) => {
   const { code, message, reason } = getCallableErrorInfo(error);
   const searchable = `${reason} ${code} ${message}`;
+
+  if (/read-only audit/i.test(searchable)) return "AI requests are disabled in read-only audit mode.";
+
+  if (/unauthenticated|sign in/i.test(searchable)) return "Your session expired. Sign in again to use AI.";
+  if (/deadline-exceeded|timeout|timed out|aborted/i.test(searchable)) return "The AI request timed out. Please retry.";
+  if (/EMPTY_AI_RESPONSE|AI_EMPTY_RESPONSE/i.test(searchable)) return "AI returned an empty response. Please retry.";
 
   if (/AI_DAILY_LIMIT/i.test(searchable)) return "Your daily AI allowance is used. Try again tomorrow or upgrade your plan.";
   if (/AI_RATE_LIMIT/i.test(searchable)) return "Too many AI requests. Please wait a minute and try again.";
@@ -143,6 +150,7 @@ const generateWithFallback = async ({
   feature?: "tutor" | "notebook" | "planner" | "flashcards";
 }) => {
   try {
+    if (isReadOnlyAudit) throw new Error("AI requests are disabled in read-only audit mode. Use isolated tests for send flows.");
     const response = await generateAiResponse({ contents, config, retries, feature });
     const text = response.data?.text?.trim();
     if (!text) throw new Error("EMPTY_AI_RESPONSE");
