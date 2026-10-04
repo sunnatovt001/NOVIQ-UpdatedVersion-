@@ -1441,6 +1441,12 @@ exports.createTelegramLink = onCall(async (request) => {
     throw new HttpsError("unauthenticated", "Sign in first.");
   if (!TELEGRAM_WEBHOOK_SECRET || !TELEGRAM_BOT_TOKEN)
     throw new HttpsError("failed-precondition", "Telegram is not configured.");
+  const botResponse = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/getMe`, {
+    signal: AbortSignal.timeout(10000),
+  });
+  const bot = await botResponse.json();
+  if (!botResponse.ok || !bot.ok || bot.result?.username?.toLowerCase() !== "noviqq_bot")
+    throw new HttpsError("failed-precondition", "Configure the token for @noviqq_bot.");
   const token = randomBytes(24).toString("hex");
   const hash = createHash("sha256").update(token).digest("hex");
   // One active token per account; issuing a new link invalidates the previous one.
@@ -1538,9 +1544,28 @@ exports.telegramWebhook = onRequest(async (request, response) => {
     }
   }
 
+  if (message.chat?.type !== "private") {
+    response.json({ ok: true, ignored: true });
+    return;
+  }
+  const command = text.split(/\s/)[0].split("@")[0].toLowerCase();
+  if (["/planner", "/metrics"].includes(command)) {
+    const accounts = await db.collection("users")
+      .where("telegramId", "==", String(chatId)).limit(1).get();
+    if (!accounts.empty && accounts.docs.length) {
+      const account = accounts.docs[0];
+      const user = account.data();
+      const summary = command === "/planner"
+        ? await buildTelegramDailySummary(account.id, user)
+        : `NOVIQ Metrics\nXP: ${Math.max(0, Number(user.xp) || 0)}\nStreak: ${Math.max(0, Number(user.streak) || 0)} kun\nKunlik maqsad: ${Math.max(0, Number(user.dailyTargetMinutes) || 0)} min`;
+      await sendTelegramMessage(chatId, summary);
+      response.json({ ok: true, linked: true });
+      return;
+    }
+  }
   await sendTelegramMessage(
     chatId,
-    "Noviq profilingizdagi Connect bot tugmasini bosing. Havola 10 daqiqa amal qiladi va bir marta ishlatiladi.",
+    "Planner: /planner. Metrics: /metrics. Profilni ulash uchun Noviq profilingizdagi Connect bot tugmasini bosing. Havola 10 daqiqa amal qiladi va bir marta ishlatiladi.",
   ).catch((error) =>
     logger.warn("Telegram webhook help failed", { chatId, error }),
   );

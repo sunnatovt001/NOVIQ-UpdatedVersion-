@@ -68,6 +68,7 @@ export const TaskStarterModal = ({ task, onClose, onComplete }: TaskStarterModal
           {/* Close Button */}
           <button
             onClick={onClose}
+            aria-label="Close task"
             className="absolute top-6 right-6 p-2 hover:bg-white/10 rounded-lg transition-colors"
           >
             <X size={20} className="text-slate-400" />

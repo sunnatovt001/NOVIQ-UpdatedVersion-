@@ -1409,6 +1409,7 @@ export const Flashcards = () => {
                   <button
                     type="button"
                     onClick={() => setShowDeckModal(false)}
+                    aria-label="Close deck form"
                     className="rounded-xl bg-white/5 p-2 text-slate-400 hover:text-white"
                   >
                     <X size={18} />

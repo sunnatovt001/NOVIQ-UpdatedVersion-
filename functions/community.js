@@ -77,17 +77,20 @@ module.exports = ({ db, onCall, HttpsError, FieldValue }) => {
       id = roomId(request);
     await db.runTransaction(async (tx) => {
       const ref = db.doc(`communities/${id}`),
-        memberRef = db.doc(`communities/${id}/members/${uid}`);
-      const [room, member, profile] = await Promise.all([
+        memberRef = db.doc(`communities/${id}/members/${uid}`),
+        joinedRef = db.doc(`users/${uid}/joinedCommunities/${id}`);
+      const [room, member, profile, existingJoin] = await Promise.all([
         tx.get(ref),
         tx.get(memberRef),
         tx.get(db.doc(`users/${uid}`)),
+        tx.get(joinedRef),
       ]);
       if (
         !room.exists ||
         (!room.data().isPublic &&
           room.data().createdBy !== uid &&
-          !member.exists)
+          !member.exists &&
+          !existingJoin.exists)
       )
         throw new HttpsError("permission-denied", "This group is unavailable.");
       if (!profile.exists)
@@ -96,19 +99,26 @@ module.exports = ({ db, onCall, HttpsError, FieldValue }) => {
           "Create your profile first.",
         );
       const consume = await rate(tx, uid, "communityJoin", 20);
-      const role = room.data().createdBy === uid ? "owner" : "member";
+      const role =
+        room.data().createdBy === uid || existingJoin.data()?.role === "owner"
+          ? "owner"
+          : "member";
+      const joinedAt =
+        member.data()?.joinedAt ||
+        existingJoin.data()?.joinedAt ||
+        new Date().toISOString();
       consume();
       tx.set(memberRef, {
         uid,
         displayName: profile.data().displayName || "Noviq student",
         role,
-        joinedAt: member.data()?.joinedAt || new Date().toISOString(),
-      });
-      tx.set(db.doc(`users/${uid}/joinedCommunities/${id}`), {
+        joinedAt,
+      }, { merge: true });
+      tx.set(joinedRef, {
         name: room.data().name,
         role,
-        joinedAt: new Date().toISOString(),
-      });
+        joinedAt: existingJoin.data()?.joinedAt || joinedAt,
+      }, { merge: true });
       if (!member.exists)
         tx.update(ref, {
           membersCount: (Number(room.data().membersCount) || 0) + 1,

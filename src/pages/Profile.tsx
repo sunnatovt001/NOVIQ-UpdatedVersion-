@@ -32,7 +32,7 @@ import { getNotificationPreferences, type NotificationPreferenceKey } from "@/sr
 import { writeDocWithQueue } from "@/src/lib/offlineSync";
 
 const AVATAR_SIZE = 512;
-const TELEGRAM_BOT_USERNAME = String(import.meta.env.VITE_TELEGRAM_BOT_USERNAME || "").replace(/^@/, "");
+const TELEGRAM_BOT_USERNAME = "noviqq_bot";
 
 const blobToDataUrl = (blob: Blob) =>
   new Promise<string>((resolve, reject) => {
@@ -600,6 +600,7 @@ export const Profile = () => {
                 <button
                   type="button"
                   onClick={() => setShowAvatarModal(false)}
+                  aria-label="Close avatar editor"
                   className="rounded-xl bg-white/5 p-2 text-slate-400 hover:text-white"
                 >
                   <X size={18} />

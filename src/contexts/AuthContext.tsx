@@ -181,6 +181,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       latestResolvedAdmin = false;
       setUser(firebaseUser);
       setAuthError("");
+      setProfile(null);
+      setIsAdmin(false);
+      setLoading(Boolean(firebaseUser));
 
       if (!firebaseUser) {
         setProfile(null);
@@ -195,6 +198,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       unsubscribeTrustedProgress = onSnapshot(
         trustedProgressRef,
         (snapshot) => {
+          if (isDisposed || auth.currentUser?.uid !== firebaseUser.uid) return;
           latestTrustedProgress = snapshot.exists()
             ? buildTrustedProgressPatch(snapshot.data() as Record<string, unknown>)
             : {};
@@ -208,6 +212,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       unsubscribeProfile = onSnapshot(
         userDocRef,
         async (snapshot) => {
+          if (isDisposed || auth.currentUser?.uid !== firebaseUser.uid) return;
           if (snapshot.exists()) {
             const rawProfile = snapshot.data() as UserProfile;
             const profileData = { ...rawProfile, displayName: rawProfile.displayName || firebaseUser.displayName || "" };
@@ -233,19 +238,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           await firebaseUser.reload().catch(() => undefined);
           if (isDisposed || auth.currentUser?.uid !== firebaseUser.uid) return;
           const newProfile = createInitialProfile(firebaseUser);
-          await runTransaction(db, async (transaction) => {
+          const resolvedProfile = await runTransaction(db, async (transaction) => {
             const existing = await transaction.get(userDocRef);
-            if (!existing.exists()) transaction.set(userDocRef, newProfile);
+            if (existing.exists()) return existing.data() as UserProfile;
+            transaction.set(userDocRef, newProfile);
+            return newProfile;
           }).catch((error) => {
             setAuthError(getAppErrorMessage(error));
+            return cached;
           });
           if (isDisposed || auth.currentUser?.uid !== firebaseUser.uid) return;
-          latestBaseProfile = newProfile;
-          latestResolvedAdmin = false;
+          latestBaseProfile = resolvedProfile;
+          latestResolvedAdmin = Boolean(resolvedProfile?.isAdmin);
           publishProfile();
           setLoading(false);
         },
         (error) => {
+          if (isDisposed || auth.currentUser?.uid !== firebaseUser.uid) return;
           console.warn("Cloud profile listener failed", error);
           const cached = loadLocalData<UserProfile | null>(profileCacheKey(firebaseUser.uid), null);
           if (!cached || error.code === "permission-denied") setAuthError(getAppErrorMessage(error));

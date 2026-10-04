@@ -1,5 +1,9 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&display=swap');
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&display=swap");
 @import "tailwindcss";
+
+/* The app theme is controlled by Layout's .noviq-app.dark class, not by the
+   operating system's colour preference. */
+@custom-variant dark (&:where(.noviq-app.dark, .noviq-app.dark *));
 
 /*
   Noviq visual identity v2.
@@ -11,75 +15,88 @@
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
   --font-display: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
 
-  --color-bg: #FAFAF8;
-  --color-card: #FFFFFF;
-  --color-border: #E5E7EB;
-  --color-accent-blue: #2E5EAA;
-  --color-accent-purple: #7C6BE8;
+  --color-bg: #fafaf8;
+  --color-card: #ffffff;
+  --color-border: #e5e7eb;
+  --color-accent-blue: #2e5eaa;
+  --color-accent-purple: #7c6be8;
 
-  --color-blue-300: #93C5FD;
-  --color-blue-400: #60A5FA;
-  --color-blue-500: #3B82F6;
-  --color-blue-600: #2563EB;
-  --color-blue-700: #1D4ED8;
-  --color-cyan-300: #67E8F9;
-  --color-cyan-400: #22D3EE;
-  --color-cyan-500: #06B6D4;
-  --color-cyan-600: #0891B2;
-  --color-purple-300: #C4B5FD;
-  --color-purple-400: #A78BFA;
-  --color-purple-500: #8B5CF6;
-  --color-purple-600: #7C3AED;
-  --color-indigo-400: #818CF8;
-  --color-indigo-500: #6366F1;
-  --color-violet-400: #A78BFA;
-  --color-fuchsia-500: #D946EF;
+  --color-blue-300: #93c5fd;
+  --color-blue-400: #60a5fa;
+  --color-blue-500: #3b82f6;
+  --color-blue-600: #2563eb;
+  --color-blue-700: #1d4ed8;
+  --color-cyan-300: #67e8f9;
+  --color-cyan-400: #22d3ee;
+  --color-cyan-500: #06b6d4;
+  --color-cyan-600: #0891b2;
+  --color-purple-300: #c4b5fd;
+  --color-purple-400: #a78bfa;
+  --color-purple-500: #8b5cf6;
+  --color-purple-600: #7c3aed;
+  --color-indigo-400: #818cf8;
+  --color-indigo-500: #6366f1;
+  --color-violet-400: #a78bfa;
+  --color-fuchsia-500: #d946ef;
 }
 
 :root {
   color-scheme: light;
-  --noviq-bg: #F7F8F6;
-  --noviq-card: #FFFFFF;
-  --noviq-text: #14213D;
-  --noviq-muted: #52627A;
-  --noviq-border: #D8DEE7;
-  --noviq-accent: #2E5EAA;
-  --noviq-accent-hover: #1F2F52;
-  --noviq-soft: #EEF4FF;
-  --noviq-body-bg: linear-gradient(180deg, #F7F8F6 0%, #EEF3F1 100%);
+  --noviq-bg: #f7f8f6;
+  --noviq-card: #ffffff;
+  --noviq-text: #14213d;
+  --noviq-muted: #52627a;
+  --noviq-border: #d8dee7;
+  --noviq-accent: #2e5eaa;
+  --noviq-accent-hover: #1f2f52;
+  --noviq-soft: #eef4ff;
+  --noviq-body-bg: linear-gradient(180deg, #f7f8f6 0%, #eef3f1 100%);
   --noviq-shadow: 0 18px 50px rgba(20, 33, 61, 0.08);
-  --dashboard-heading: #14213D;
-  --dashboard-body: #40516C;
-  --dashboard-muted: #68778E;
-  --dashboard-faint: #8A97AA;
-  --dashboard-panel-bg: linear-gradient(135deg, rgba(255, 255, 255, 0.96), rgba(245, 248, 251, 0.92));
+  --dashboard-heading: #14213d;
+  --dashboard-body: #40516c;
+  --dashboard-muted: #68778e;
+  --dashboard-faint: #8a97aa;
+  --dashboard-panel-bg: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.96),
+    rgba(245, 248, 251, 0.92)
+  );
   --dashboard-card-bg: rgba(255, 255, 255, 0.9);
   --dashboard-command-bg: rgba(255, 255, 255, 0.92);
-  --dashboard-border: #D8DEE7;
+  --dashboard-border: #d8dee7;
   --dashboard-nested-bg: rgba(239, 244, 249, 0.78);
   --dashboard-rail-bg: rgba(218, 226, 236, 0.72);
-  --dashboard-shadow: 0 24px 80px rgba(20, 33, 61, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.72);
+  --dashboard-shadow:
+    0 24px 80px rgba(20, 33, 61, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.72);
 }
 
 .dark {
   color-scheme: dark;
-  --noviq-bg: #07152B;
-  --noviq-card: #0D203B;
-  --noviq-text: #F4F8FF;
-  --noviq-muted: #AAB9D1;
-  --noviq-border: #223A5E;
-  --noviq-accent: #7DD3FC;
-  --noviq-accent-hover: #BAE6FD;
+  --noviq-bg: #07152b;
+  --noviq-card: #0d203b;
+  --noviq-text: #f4f8ff;
+  --noviq-muted: #aab9d1;
+  --noviq-border: #223a5e;
+  --noviq-accent: #7dd3fc;
+  --noviq-accent-hover: #bae6fd;
   --noviq-soft: rgba(125, 211, 252, 0.12);
   --noviq-body-bg:
-    radial-gradient(circle at 16% 0%, rgba(59, 130, 246, 0.22), transparent 32%),
-    radial-gradient(circle at 84% 8%, rgba(34, 211, 238, 0.12), transparent 28%),
-    linear-gradient(180deg, #07152B 0%, #081B35 100%);
+    radial-gradient(
+      circle at 16% 0%,
+      rgba(59, 130, 246, 0.22),
+      transparent 32%
+    ),
+    radial-gradient(
+      circle at 84% 8%,
+      rgba(34, 211, 238, 0.12),
+      transparent 28%
+    ),
+    linear-gradient(180deg, #07152b 0%, #081b35 100%);
   --noviq-shadow: 0 22px 70px rgba(2, 8, 23, 0.34);
-  --dashboard-heading: #F4F8FF;
-  --dashboard-body: #C7D2E5;
-  --dashboard-muted: #AAB9D1;
-  --dashboard-faint: #6F84A3;
+  --dashboard-heading: #f4f8ff;
+  --dashboard-body: #c7d2e5;
+  --dashboard-muted: #aab9d1;
+  --dashboard-faint: #6f84a3;
   --dashboard-panel-bg:
     linear-gradient(135deg, rgba(13, 32, 59, 0.94), rgba(8, 27, 53, 0.9)),
     radial-gradient(circle at 18% 0%, rgba(59, 130, 246, 0.14), transparent 34%);
@@ -90,7 +107,8 @@
   --dashboard-border: rgba(151, 180, 220, 0.18);
   --dashboard-nested-bg: rgba(244, 248, 255, 0.055);
   --dashboard-rail-bg: rgba(244, 248, 255, 0.08);
-  --dashboard-shadow: 0 34px 100px rgba(2, 8, 23, 0.32), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  --dashboard-shadow:
+    0 34px 100px rgba(2, 8, 23, 0.32), inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 
 @layer base {
@@ -192,11 +210,18 @@
   }
 
   .glass-hover {
-    transition: border-color 220ms ease, background 220ms ease, transform 220ms ease;
+    transition:
+      border-color 220ms ease,
+      background 220ms ease,
+      transform 220ms ease;
   }
 
   .glass-hover:hover {
-    border-color: color-mix(in srgb, var(--noviq-accent) 34%, var(--noviq-border));
+    border-color: color-mix(
+      in srgb,
+      var(--noviq-accent) 34%,
+      var(--noviq-border)
+    );
     transform: translateY(-1px);
   }
 
@@ -245,7 +270,11 @@
 
   .btn-secondary:hover,
   .btn-outline:hover {
-    border-color: color-mix(in srgb, var(--noviq-accent) 34%, var(--noviq-border));
+    border-color: color-mix(
+      in srgb,
+      var(--noviq-accent) 34%,
+      var(--noviq-border)
+    );
     background: var(--noviq-soft);
     color: var(--noviq-accent-hover);
   }
@@ -281,8 +310,16 @@
     inset: -80px -32px auto -32px;
     height: 360px;
     background:
-      radial-gradient(circle at 16% 0%, color-mix(in srgb, var(--noviq-accent) 18%, transparent), transparent 34%),
-      linear-gradient(180deg, color-mix(in srgb, var(--noviq-accent) 8%, transparent), transparent 70%);
+      radial-gradient(
+        circle at 16% 0%,
+        color-mix(in srgb, var(--noviq-accent) 18%, transparent),
+        transparent 34%
+      ),
+      linear-gradient(
+        180deg,
+        color-mix(in srgb, var(--noviq-accent) 8%, transparent),
+        transparent 70%
+      );
     border-radius: 48px;
   }
 
@@ -290,8 +327,15 @@
     inset: -24px -24px 0 -24px;
     opacity: 0.18;
     background-image:
-      linear-gradient(color-mix(in srgb, var(--dashboard-heading) 8%, transparent) 1px, transparent 1px),
-      linear-gradient(90deg, color-mix(in srgb, var(--dashboard-heading) 8%, transparent) 1px, transparent 1px);
+      linear-gradient(
+        color-mix(in srgb, var(--dashboard-heading) 8%, transparent) 1px,
+        transparent 1px
+      ),
+      linear-gradient(
+        90deg,
+        color-mix(in srgb, var(--dashboard-heading) 8%, transparent) 1px,
+        transparent 1px
+      );
     background-size: 80px 80px;
     mask-image: linear-gradient(to bottom, black 0%, transparent 55%);
   }
@@ -304,7 +348,10 @@
     border: 1px solid var(--dashboard-border);
     background: var(--dashboard-card-bg);
     box-shadow: var(--dashboard-shadow);
-    transition: transform 220ms ease, border-color 220ms ease, background 220ms ease;
+    transition:
+      transform 220ms ease,
+      border-color 220ms ease,
+      background 220ms ease;
   }
 
   .dashboard-panel {
@@ -324,8 +371,16 @@
 
   .dashboard-card:hover {
     transform: translateY(-2px);
-    border-color: color-mix(in srgb, var(--noviq-accent) 32%, var(--dashboard-border));
-    background: color-mix(in srgb, var(--dashboard-card-bg) 88%, var(--noviq-soft));
+    border-color: color-mix(
+      in srgb,
+      var(--noviq-accent) 32%,
+      var(--dashboard-border)
+    );
+    background: color-mix(
+      in srgb,
+      var(--dashboard-card-bg) 88%,
+      var(--noviq-soft)
+    );
   }
 
   .dashboard-command:focus-within {
@@ -343,13 +398,24 @@
     position: absolute;
     inset: 0;
     transform: translateX(-100%);
-    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.36), transparent);
+    background: linear-gradient(
+      90deg,
+      transparent,
+      rgba(255, 255, 255, 0.36),
+      transparent
+    );
     animation: progress-shine 3.8s ease-in-out infinite;
   }
 
   @keyframes progress-shine {
-    0%, 42% { transform: translateX(-100%); }
-    76%, 100% { transform: translateX(100%); }
+    0%,
+    42% {
+      transform: translateX(-100%);
+    }
+    76%,
+    100% {
+      transform: translateX(100%);
+    }
   }
 }
 
@@ -372,21 +438,51 @@
     background: color-mix(in srgb, var(--noviq-muted) 42%, transparent);
   }
 
-  .perspective-1000 { perspective: 1000px; }
-  .perspective-1200 { perspective: 1200px; }
-  .preserve-3d { transform-style: preserve-3d; }
-  .backface-hidden { backface-visibility: hidden; }
-  .rotate-x-6 { transform: rotateX(6deg); }
-  .shadow-3xl { box-shadow: var(--noviq-shadow); }
-  .shadow-glow-3d { box-shadow: 0 18px 50px rgba(17, 24, 39, 0.08); }
-  .scene-3d { perspective: 1400px; transform-style: preserve-3d; }
-  .card-3d { transform-style: preserve-3d; backface-visibility: hidden; will-change: transform; }
-  .floating-3d { animation: float-3d 8s ease-in-out infinite; }
-  .glow-3d { box-shadow: 0 18px 50px rgba(17, 24, 39, 0.08); }
+  .perspective-1000 {
+    perspective: 1000px;
+  }
+  .perspective-1200 {
+    perspective: 1200px;
+  }
+  .preserve-3d {
+    transform-style: preserve-3d;
+  }
+  .backface-hidden {
+    backface-visibility: hidden;
+  }
+  .rotate-x-6 {
+    transform: rotateX(6deg);
+  }
+  .shadow-3xl {
+    box-shadow: var(--noviq-shadow);
+  }
+  .shadow-glow-3d {
+    box-shadow: 0 18px 50px rgba(17, 24, 39, 0.08);
+  }
+  .scene-3d {
+    perspective: 1400px;
+    transform-style: preserve-3d;
+  }
+  .card-3d {
+    transform-style: preserve-3d;
+    backface-visibility: hidden;
+    will-change: transform;
+  }
+  .floating-3d {
+    animation: float-3d 8s ease-in-out infinite;
+  }
+  .glow-3d {
+    box-shadow: 0 18px 50px rgba(17, 24, 39, 0.08);
+  }
 
   @keyframes float-3d {
-    0%, 100% { transform: translateY(0px); }
-    50% { transform: translateY(-8px); }
+    0%,
+    100% {
+      transform: translateY(0px);
+    }
+    50% {
+      transform: translateY(-8px);
+    }
   }
 
   .animate-gradient-x {
@@ -395,8 +491,13 @@
   }
 
   @keyframes gradient-x {
-    0%, 100% { background-position: 0% 50%; }
-    50% { background-position: 100% 50%; }
+    0%,
+    100% {
+      background-position: 0% 50%;
+    }
+    50% {
+      background-position: 100% 50%;
+    }
   }
 }
 
@@ -440,7 +541,11 @@
 .noviq-app .theme-toggle:hover,
 .noviq-app .app-icon-button:hover,
 .noviq-app .app-sidebar-collapse:hover {
-  border-color: color-mix(in srgb, var(--noviq-accent) 42%, var(--noviq-border));
+  border-color: color-mix(
+    in srgb,
+    var(--noviq-accent) 42%,
+    var(--noviq-border)
+  );
   background: var(--noviq-soft);
   color: var(--noviq-accent-hover);
 }
@@ -464,7 +569,11 @@
 }
 
 .noviq-app.dark [class*="border-[#3F7D58]"] {
-  border-color: color-mix(in srgb, var(--noviq-accent) 44%, var(--noviq-border));
+  border-color: color-mix(
+    in srgb,
+    var(--noviq-accent) 44%,
+    var(--noviq-border)
+  );
 }
 
 .noviq-app.dark [class~="bg-white"],
@@ -536,12 +645,12 @@
 .noviq-app:not(.dark) [class*="bg-[#070A14]"],
 .noviq-app:not(.dark) [class*="bg-[#080d1b]"],
 .noviq-app:not(.dark) [class*="bg-[#0B1020]"] {
-  background-color: color-mix(in srgb, var(--noviq-card) 92%, #EEF3F8);
+  background-color: color-mix(in srgb, var(--noviq-card) 92%, #eef3f8);
 }
 
 .noviq-app:not(.dark) [class*="bg-slate-50"],
 .noviq-app:not(.dark) [class*="bg-gray-50"] {
-  background-color: #F4F7FA;
+  background-color: #f4f7fa;
 }
 
 .noviq-app:not(.dark) input,
@@ -558,28 +667,42 @@
 
 .noviq-app:not(.dark) .btn-primary,
 .noviq-app:not(.dark) .premium-action {
-  color: #FFFFFF;
+  color: #ffffff;
 }
 
-.noviq-app:not(.dark) .dashboard-shell :is(h1, h2, h3, h4, h5, h6, p, span, label, input, textarea).text-white {
+.noviq-app:not(.dark)
+  .dashboard-shell
+  :is(h1, h2, h3, h4, h5, h6, p, span, label, input, textarea).text-white {
   color: var(--dashboard-heading);
 }
 
-.noviq-app:not(.dark) .dashboard-shell :is(h1, h2, h3, h4, h5, h6, p, span, label, input, textarea).text-slate-200,
-.noviq-app:not(.dark) .dashboard-shell :is(h1, h2, h3, h4, h5, h6, p, span, label, input, textarea).text-slate-300 {
-  color: #2F3E5A;
+.noviq-app:not(.dark)
+  .dashboard-shell
+  :is(h1, h2, h3, h4, h5, h6, p, span, label, input, textarea).text-slate-200,
+.noviq-app:not(.dark)
+  .dashboard-shell
+  :is(h1, h2, h3, h4, h5, h6, p, span, label, input, textarea).text-slate-300 {
+  color: #2f3e5a;
 }
 
-.noviq-app:not(.dark) .dashboard-shell :is(h1, h2, h3, h4, h5, h6, p, span, label, input, textarea).text-slate-400 {
+.noviq-app:not(.dark)
+  .dashboard-shell
+  :is(h1, h2, h3, h4, h5, h6, p, span, label, input, textarea).text-slate-400 {
   color: var(--dashboard-body);
 }
 
-.noviq-app:not(.dark) .dashboard-shell :is(h1, h2, h3, h4, h5, h6, p, span, label, input, textarea).text-slate-500,
-.noviq-app:not(.dark) .dashboard-shell :is(h1, h2, h3, h4, h5, h6, p, span, label, input, textarea).text-slate-600 {
+.noviq-app:not(.dark)
+  .dashboard-shell
+  :is(h1, h2, h3, h4, h5, h6, p, span, label, input, textarea).text-slate-500,
+.noviq-app:not(.dark)
+  .dashboard-shell
+  :is(h1, h2, h3, h4, h5, h6, p, span, label, input, textarea).text-slate-600 {
   color: var(--dashboard-muted);
 }
 
-.noviq-app:not(.dark) .dashboard-shell [class*="placeholder:text-slate-600"]::placeholder {
+.noviq-app:not(.dark)
+  .dashboard-shell
+  [class*="placeholder:text-slate-600"]::placeholder {
   color: var(--dashboard-faint);
 }
 
@@ -624,7 +747,11 @@
 
 .admin-dashboard .admin-hero {
   border-color: var(--admin-border);
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(242, 245, 255, 0.96));
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.98),
+    rgba(242, 245, 255, 0.96)
+  );
   box-shadow: 0 24px 80px rgba(43, 54, 86, 0.09);
 }
 
@@ -636,7 +763,10 @@
 }
 
 .admin-dashboard .admin-metric-card {
-  transition: transform 180ms ease, border-color 180ms ease, box-shadow 180ms ease;
+  transition:
+    transform 180ms ease,
+    border-color 180ms ease,
+    box-shadow 180ms ease;
 }
 
 .admin-dashboard .admin-metric-card:hover {
@@ -695,7 +825,11 @@
 }
 
 .noviq-app.dark .admin-dashboard .admin-hero {
-  background: linear-gradient(135deg, rgba(18, 42, 76, 0.96), rgba(11, 28, 53, 0.96));
+  background: linear-gradient(
+    135deg,
+    rgba(18, 42, 76, 0.96),
+    rgba(11, 28, 53, 0.96)
+  );
   box-shadow: 0 28px 80px rgba(2, 8, 23, 0.28);
 }
 

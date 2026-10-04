@@ -8,17 +8,14 @@ import { useAuth } from "@/src/contexts/AuthContext";
 import { calculateLevelName, getLocalDayKey } from "@/src/lib/progress";
 import { useUserActivityMetrics } from "@/src/lib/useUserActivityMetrics";
 import type { StudySession } from "@/src/types";
+import { recordDate } from "@/src/lib/recordDate";
 
 const COLORS = ["#3b82f6", "#a855f7", "#ec4899", "#f97316"];
 const DAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
 type AnalyticsStudySession = StudySession & { id: string };
 
-const timestampToIso = (value: any, fallback = new Date().toISOString()) => {
-  if (typeof value === "string") return value;
-  const parsed = value?.toDate?.();
-  return parsed instanceof Date && !Number.isNaN(parsed.getTime()) ? parsed.toISOString() : fallback;
-};
+const timestampToIso = (value: unknown) => recordDate(value)?.toISOString() || "";
 
 const formatDuration = (seconds: number) => {
   const minutes = Math.round(Math.max(0, seconds) / 60);
@@ -127,9 +124,9 @@ export const Analytics = ({ setActiveTab }: { setActiveTab?: (t: string) => void
               subject: data.subject || "Study",
               category: data.category || "focus",
               xpEarned: Number(data.xpEarned) || 0,
-              timestamp: timestampToIso(data.timestamp, timestampToIso(data.createdAt)),
+              timestamp: timestampToIso(data.timestamp) || timestampToIso(data.createdAt),
             } as AnalyticsStudySession;
-          })
+          }).filter((session) => Boolean(session.timestamp))
         );
       },
       (error) => {

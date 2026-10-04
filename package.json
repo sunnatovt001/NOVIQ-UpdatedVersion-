@@ -24,6 +24,7 @@
     "preview": "vite preview",
     "clean": "node -e \"require('node:fs').rmSync('dist', {recursive:true, force:true})\"",
     "lint": "tsc --noEmit",
+    "verify": "npm run lint && npm --prefix functions run lint && npm test && npm run build",
     "test": "node --test tests/*.test.cjs && npm --prefix functions test",
     "test:rules": "npx firebase-tools emulators:exec --project demo-noviq --config firebase.emulators.json --only firestore \"node --test tests/firestore.rules.cjs\"",
     "deploy:hosting": "npm run build && npx --yes firebase-tools deploy --only hosting --project gen-lang-client-0937997111",

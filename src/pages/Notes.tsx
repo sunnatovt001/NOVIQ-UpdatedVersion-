@@ -559,7 +559,11 @@ export const Notes = () => {
   };
 
   const fetchWebsiteText = async (url: string) => {
-    const response = await fetch(url);
+    const parsedUrl = new URL(url);
+    if (!["http:", "https:"].includes(parsedUrl.protocol)) {
+      throw new Error("Enter a website address beginning with https:// or http://.");
+    }
+    const response = await fetch(parsedUrl.href, { signal: AbortSignal.timeout(15000) });
     if (!response.ok) throw new Error(`Could not fetch website: ${response.status}`);
     const text = await response.text();
     return text
@@ -976,6 +980,7 @@ export const Notes = () => {
                 <button
                   type="button"
                   onClick={() => handleDeleteNote(activeNote)}
+                  aria-label="Delete notebook"
                   className="rounded-2xl border border-red-400/20 bg-red-400/10 p-3 text-red-200 hover:bg-red-400/15"
                 >
                   <Trash2 size={16} />
@@ -1163,7 +1168,7 @@ export const Notes = () => {
                   <p className="section-label">Add source</p>
                   <h3 className="text-3xl font-bold text-white">Website or transcript</h3>
                 </div>
-                <button type="button" onClick={() => setShowSourceModal(false)} className="rounded-xl bg-white/5 p-2 text-slate-400 hover:text-white">
+                <button type="button" aria-label="Close source form" onClick={() => setShowSourceModal(false)} className="rounded-xl bg-white/5 p-2 text-slate-400 hover:text-white">
                   <X size={18} />
                 </button>
               </div>

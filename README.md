@@ -19,6 +19,11 @@ Local frontend development uses deployed Firebase services, not automatic emulat
 
 ## Verification
 
+Run `npm run verify` before pushing. It runs TypeScript, Functions syntax checks,
+all isolated tests and the production build. GitHub Actions also runs this command
+and the Firestore emulator suite on Node.js 22 with Java 21. Deployed Functions
+retain the Node.js 20 runtime specified in `firebase.json`.
+
 ```text
 npm run lint
 npm test

@@ -722,6 +722,7 @@ export const Dashboard = ({ setActiveTab }: { setActiveTab: (tab: string) => voi
             >
               <button
                 onClick={() => setJournalOpen(false)}
+                aria-label="Close study log"
                 className="absolute top-6 right-6 p-2 rounded-xl bg-white/5 hover:bg-white/10 transition"
               >
                 <X size={20} className="text-slate-300" />

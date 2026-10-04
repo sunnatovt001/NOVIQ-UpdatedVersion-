@@ -38,6 +38,17 @@ function harness(env = {}) {
   });
   const collection = (path) => ({
     path,
+    where: (field, operator, value) => ({
+      limit: (count) => ({
+        get: async () => {
+          const docs = [...records.entries()]
+            .filter(([key, data]) => key.startsWith(`${path}/`) && key.split("/").length === path.split("/").length + 1 && operator === "==" && data[field] === value)
+            .slice(0, count)
+            .map(([key, data]) => ({ id: key.split("/").at(-1), data: () => data }));
+          return { docs, empty: !docs.length };
+        },
+      }),
+    }),
     doc: (id = crypto.randomBytes(8).toString("hex")) => ref(`${path}/${id}`),
     limit: () => ({ queryPath: path }),
   });
@@ -138,6 +149,8 @@ function harness(env = {}) {
     fetch: async () => ({
       ok: true,
       json: async () => ({
+        ok: true,
+        result: { username: "noviqq_bot" },
         candidates: [{ content: { parts: [{ text: "answer" }] } }],
       }),
     }),
@@ -365,6 +378,25 @@ test("Telegram rejects UID linking, expired tokens and token reuse", async () =>
   assert.equal((await call(expired)).body.linked, false);
 });
 
+test("Telegram planner and metrics require a linked private account", async () => {
+  const h = harness();
+  h.records.get("users/u1").telegramId = "123456";
+  for (const command of ["/planner", "/metrics"]) {
+    const response = h.response();
+    await h.functions.telegramWebhook({ method: "POST", get: () => "telegram-secret",
+      body: { message: { text: command, chat: { id: 123456, type: "private" } } } }, response);
+    assert.equal(response.body.linked, true);
+    const unknown = h.response();
+    await h.functions.telegramWebhook({ method: "POST", get: () => "telegram-secret",
+      body: { message: { text: command, chat: { id: 999999, type: "private" } } } }, unknown);
+    assert.equal(unknown.body.linked, false);
+    const group = h.response();
+    await h.functions.telegramWebhook({ method: "POST", get: () => "telegram-secret",
+      body: { message: { text: command, chat: { id: 123456, type: "group" } } } }, group);
+    assert.equal(group.body.ignored, true);
+  }
+});
+
 test("independent study contexts resume and survive another task starting", async () => {
   const h = harness();
   const focus = await h.functions.startStudySession({
@@ -466,6 +498,32 @@ test("community membership writes are atomic and repeat joins/leaves preserve co
     h.records.has(`users/u2/joinedCommunities/${communityId}`),
     false,
   );
+});
+test("legacy joined groups can restore their existing member connection", async () => {
+  const h = harness();
+  h.records.set("communities/legacy", {
+    name: "General",
+    isPublic: false,
+    createdBy: "owner",
+    membersCount: 1,
+  });
+  h.records.set("users/u1/joinedCommunities/legacy", {
+    name: "General",
+    role: "member",
+    joinedAt: "2026-01-02T03:04:05.000Z",
+  });
+
+  await h.functions.joinCommunity({
+    auth,
+    data: { communityId: "legacy" },
+  });
+
+  assert.equal(h.records.get("communities/legacy/members/u1").role, "member");
+  assert.equal(
+    h.records.get("communities/legacy/members/u1").joinedAt,
+    "2026-01-02T03:04:05.000Z",
+  );
+  assert.equal(h.records.get("communities/legacy").membersCount, 2);
 });
 test("chat requires membership, preserves retry IDs and limits message spam", async () => {
   const h = harness(),

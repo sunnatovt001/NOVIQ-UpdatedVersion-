@@ -2088,8 +2088,9 @@ export const Planner = () => {
     openingTaskRef.current = true;
     setTimerRunning(false);
     setValidationMessage("");
-    try {
-      studyReceiptsRef.current[task.id] = await startStudySession(
+    setActiveTaskId(task.id);
+    setView("activity");
+    void startStudySession(
         task.kind === "quiz"
           ? "quiz"
           : task.kind === "flashcards"
@@ -2105,19 +2106,16 @@ export const Planner = () => {
             );
           }
         },
-      );
-    } catch (error) {
+      ).then((sessionId) => {
+        studyReceiptsRef.current[task.id] = sessionId;
+      }).catch((error) => {
       setValidationMessage(
         error instanceof Error
           ? error.message
           : "Connect to the internet to start this task.",
       );
-      openingTaskRef.current = false;
-      return;
-    }
+      });
     openingTaskRef.current = false;
-    setActiveTaskId(task.id);
-    setView("activity");
 
     if (plannerState.activities[task.id]) {
       setPlannerState((current) => ({
@@ -2690,6 +2688,9 @@ export const Planner = () => {
         </section>
 
         <section className="mt-6 rounded-[1.75rem] border border-[#E2E8F0] bg-white p-6 sm:p-8">
+          {validationMessage && !activeActivity && (
+            <p role="status" className="mb-4 text-sm text-amber-700">{validationMessage}</p>
+          )}
           {generatingTaskId === activeTask.id && (
             <div className="flex min-h-64 items-center justify-center">
               <div className="flex items-center gap-3 rounded-2xl border border-[#E2E8F0] bg-[#F8FAFC] px-5 py-4 text-sm font-black text-[#64748B]">
@@ -3387,6 +3388,7 @@ export const Planner = () => {
                   <button
                     type="button"
                     onClick={() => setSettingsOpen(false)}
+                    aria-label="Close plan settings"
                     className="rounded-full border border-[#E2E8F0] bg-white p-2 text-[#64748B] hover:text-[#0F172A]"
                   >
                     <X size={18} />
@@ -3624,6 +3626,7 @@ export const Planner = () => {
                 <button
                   type="button"
                   onClick={() => setRecommendationsOpen(false)}
+                  aria-label="Close recommendations"
                   className="absolute right-5 top-5 rounded-full border border-[#E2E8F0] bg-white p-2 text-[#64748B] hover:text-[#0F172A]"
                 >
                   <X size={18} />

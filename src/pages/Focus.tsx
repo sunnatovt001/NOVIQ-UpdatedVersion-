@@ -10,19 +10,62 @@ import {
   persistStudySession,
   startStudySession,
 } from "@/src/lib/progress";
-import { motion, AnimatePresence } from "motion/react";
 import {
   Play,
   Pause,
   RotateCcw,
   Brain,
-  Moon,
-  Sun,
-  Music,
+  TimerReset,
+  Coffee,
+  Palmtree,
+  Lightbulb,
+  Target,
+  Check,
+  Clock3,
+  Flame,
+  Volume2,
+  Leaf,
+  SkipForward,
+  Plus,
+  Pencil,
   CheckCircle2,
 } from "lucide-react";
 import { formatTime, cn } from "@/src/lib/utils";
 import { withFocusTimeout } from "@/src/lib/focusTimer";
+
+const FOCUS_DURATION = 25 * 60;
+const SHORT_BREAK_DURATION = 5 * 60;
+const LONG_BREAK_DURATION = 15 * 60;
+const DAILY_GOAL = 8;
+
+const tracks = [
+  {
+    id: "focus-beats",
+    name: "Focus Beats",
+    icon: Volume2,
+    url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3",
+  },
+  {
+    id: "lo-fi",
+    name: "Lo-fi",
+    icon: Brain,
+    url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3",
+  },
+  {
+    id: "nature",
+    name: "Nature",
+    icon: Leaf,
+    url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3",
+  },
+  {
+    id: "white-noise",
+    name: "White Noise",
+    icon: Volume2,
+    url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-4.mp3",
+  },
+] as const;
+
+type FocusHistoryEntry = { id: string; duration: number; timestamp: string };
 
 export const Focus = () => {
   const { user, profile } = useAuth();
@@ -34,6 +77,7 @@ export const Focus = () => {
       startedAt: number;
       localOnly?: boolean;
       localId?: string;
+      breakDuration?: number;
     } | null>(`noviq-focus-${user?.uid}`, null),
   );
   const validCache =
@@ -42,14 +86,36 @@ export const Focus = () => {
     Date.now() - cached.startedAt < 8 * 3600000 &&
     Number.isFinite(cached.time) &&
     cached.time >= 0 &&
-    cached.time <= (cached.mode === "break" ? 300 : 1500);
-  const [time, setTime] = useState(validCache ? cached.time : 25 * 60);
+    cached.time <=
+      (cached.mode === "focus"
+        ? FOCUS_DURATION
+        : cached.breakDuration === LONG_BREAK_DURATION
+          ? LONG_BREAK_DURATION
+          : SHORT_BREAK_DURATION);
+  const [time, setTime] = useState(validCache ? cached.time : FOCUS_DURATION);
   const [isActive, setIsActive] = useState(false);
   const [mode, setMode] = useState<"focus" | "break">(
     validCache ? cached.mode : "focus",
   );
   const [deepWork, setDeepWork] = useState(false);
-  const [music, setMusic] = useState<string | null>(null);
+  const [music, setMusic] = useState<string | null>("focus-beats");
+  const [breakDuration, setBreakDuration] = useState(
+    validCache && cached.breakDuration === LONG_BREAK_DURATION
+      ? LONG_BREAK_DURATION
+      : SHORT_BREAK_DURATION,
+  );
+  const [taskInputOpen, setTaskInputOpen] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
+  const [taskDraft, setTaskDraft] = useState("");
+  const [focusTask, setFocusTask] = useState(() =>
+    loadLocalData(`noviq-focus-task-${user?.uid}`, ""),
+  );
+  const [taskDone, setTaskDone] = useState(() =>
+    loadLocalData(`noviq-focus-task-done-${user?.uid}`, false),
+  );
+  const [focusHistory, setFocusHistory] = useState<FocusHistoryEntry[]>(() =>
+    loadLocalData(`noviq-focus-history-${user?.uid}`, []),
+  );
 
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -86,35 +152,21 @@ export const Focus = () => {
         startedAt: startedAtRef.current,
         localOnly,
         localId: localIdRef.current,
+        breakDuration,
       })
     )
       setSessionError(
         "Device storage is unavailable. Keep this page open to preserve your timer.",
       );
-  }, [time, mode, isActive, localOnly, user?.uid]);
+  }, [time, mode, isActive, localOnly, breakDuration, user?.uid]);
 
-  const tracks = [
-    {
-      id: "ambient-bedtime",
-      name: "Ambient Bedtime",
-      url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3",
-    },
-    {
-      id: "laidback-lofi",
-      name: "Laidback Lo-fi",
-      url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3",
-    },
-    {
-      id: "momentum-beats",
-      name: "Momentum Beats",
-      url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3",
-    },
-    {
-      id: "calm-piano",
-      name: "Calm Piano",
-      url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-4.mp3",
-    },
-  ];
+  useEffect(() => {
+    if (user) saveLocalData(`noviq-focus-task-${user.uid}`, focusTask);
+  }, [focusTask, user?.uid]);
+
+  useEffect(() => {
+    if (user) saveLocalData(`noviq-focus-task-done-${user.uid}`, taskDone);
+  }, [taskDone, user?.uid]);
 
   useEffect(() => {
     if (isActive && time > 0) {
@@ -137,7 +189,8 @@ export const Focus = () => {
   useEffect(() => {
     if (music) {
       if (audioRef.current) {
-        audioRef.current.src = tracks.find((t) => t.id === music)?.url || "";
+        audioRef.current.src =
+          tracks.find((track) => track.id === music)?.url || "";
         audioRef.current.play().catch(() => setMusic(null));
       }
     } else {
@@ -164,30 +217,26 @@ export const Focus = () => {
 
     if (localOnly) {
       const key = `noviq-focus-history-${user.uid}`;
-      const history = loadLocalData<
-        Array<{ id: string; duration: number; timestamp: string }>
-      >(key, []);
+      const history = loadLocalData<FocusHistoryEntry[]>(key, []);
       const id = localIdRef.current || crypto.randomUUID();
-      if (
-        !saveLocalData(
-          key,
-          [
-            {
-              id,
-              duration: sessionDuration,
-              timestamp: completedAt.toISOString(),
-            },
-            ...(Array.isArray(history) ? history : []).filter(
-              (entry) => entry && entry.id !== id,
-            ),
-          ].slice(0, 100),
-        )
-      ) {
+      const savedSession = {
+        id,
+        duration: sessionDuration,
+        timestamp: completedAt.toISOString(),
+      };
+      const nextHistory = [
+        savedSession,
+        ...(Array.isArray(history) ? history : []).filter(
+          (entry) => entry && entry.id !== id,
+        ),
+      ].slice(0, 100);
+      if (!saveLocalData(key, nextHistory)) {
         setSessionError(
           "Could not save on this device. Free up browser storage and try again.",
         );
         return false;
       }
+      setFocusHistory(nextHistory);
       setSessionError(
         "Session saved on this device. XP is unavailable because the server could not verify this session.",
       );
@@ -201,6 +250,16 @@ export const Focus = () => {
         10000,
       );
       sessionIdRef.current = undefined;
+      setFocusHistory((current) =>
+        [
+          {
+            id: crypto.randomUUID(),
+            duration: sessionDuration,
+            timestamp: completedAt.toISOString(),
+          },
+          ...current,
+        ].slice(0, 100),
+      );
       trackUserEvent(user.uid, "focus_session_completed", 0, {
         focusMinutes: Math.round(sessionDuration / 60),
         durationSeconds: sessionDuration,
@@ -220,7 +279,7 @@ export const Focus = () => {
 
   const completeCurrentFocusSession = async () => {
     if (mode !== "focus" || completingRef.current || verifying) return;
-    const elapsedSeconds = 25 * 60 - time;
+    const elapsedSeconds = FOCUS_DURATION - time;
     if (elapsedSeconds <= 0) return;
     setIsActive(false);
     if (timerRef.current) clearInterval(timerRef.current);
@@ -229,7 +288,7 @@ export const Focus = () => {
     try {
       if (await recordFocusSession(elapsedSeconds)) {
         setMode("break");
-        setTime(5 * 60);
+        setTime(breakDuration);
       }
     } finally {
       completingRef.current = false;
@@ -246,9 +305,9 @@ export const Focus = () => {
       completingRef.current = true;
       setSessionBusy(true);
       try {
-        if (await recordFocusSession(25 * 60)) {
+        if (await recordFocusSession(FOCUS_DURATION)) {
           setMode("break");
-          setTime(5 * 60);
+          setTime(breakDuration);
         } else setTime(1);
       } finally {
         completingRef.current = false;
@@ -260,7 +319,7 @@ export const Focus = () => {
       sessionIdRef.current = undefined;
       setSessionError("");
       setMode("focus");
-      setTime(25 * 60);
+      setTime(FOCUS_DURATION);
     }
   };
 
@@ -313,178 +372,471 @@ export const Focus = () => {
     startedAtRef.current = Date.now();
     sessionIdRef.current = undefined;
     setIsActive(false);
-    setTime(mode === "focus" ? 25 * 60 : 5 * 60);
+    setTime(mode === "focus" ? FOCUS_DURATION : breakDuration);
   };
+
+  const selectTimerMode = (
+    nextMode: "focus" | "break",
+    nextDuration: number,
+  ) => {
+    if (completingRef.current || sessionBusy) return;
+    setIsActive(false);
+    if (timerRef.current) clearInterval(timerRef.current);
+    setMode(nextMode);
+    setTime(nextDuration);
+    setSessionError("");
+  };
+
+  const updateFocusTask = () => {
+    const nextTask = taskDraft.trim();
+    if (!nextTask) return;
+    setFocusTask(nextTask.slice(0, 120));
+    setTaskDraft("");
+    setTaskDone(false);
+    setTaskInputOpen(false);
+  };
+
+  const skipTimer = () => {
+    if (sessionBusy || verifying) return;
+    setIsActive(false);
+    if (timerRef.current) clearInterval(timerRef.current);
+    if (mode === "focus") {
+      selectTimerMode("break", breakDuration);
+    } else {
+      setLocalOnly(false);
+      localIdRef.current = undefined;
+      sessionIdRef.current = undefined;
+      selectTimerMode("focus", FOCUS_DURATION);
+    }
+  };
+
+  const completedToday = focusHistory.filter(
+    (session) =>
+      new Date(session.timestamp).toDateString() === new Date().toDateString(),
+  ).length;
+  const focusMinutes = Math.round(
+    focusHistory
+      .filter(
+        (session) =>
+          new Date(session.timestamp).toDateString() ===
+          new Date().toDateString(),
+      )
+      .reduce((total, session) => total + session.duration, 0) / 60,
+  );
+  const progress = Math.min(
+    100,
+    Math.max(
+      0,
+      (((mode === "focus" ? FOCUS_DURATION : breakDuration) - time) /
+        (mode === "focus" ? FOCUS_DURATION : breakDuration)) *
+        100,
+    ),
+  );
+  const sessionNumber = (completedToday % 4) + 1;
 
   return (
     <div
       className={cn(
-        "min-h-[85vh] rounded-[40px] transition-all duration-1000 flex flex-col items-center justify-center relative overflow-hidden",
-        deepWork ? "bg-black" : "bg-[#0B1020]",
+        "min-h-[calc(100dvh-9rem)] rounded-[32px] border border-slate-200/90 bg-[#f8fbff] p-3 text-slate-900 shadow-[0_20px_70px_rgba(15,23,42,0.05)] sm:p-4 dark:border-slate-800 dark:bg-slate-950",
+        deepWork && "dark:bg-black",
       )}
     >
       <audio ref={audioRef} loop />
-      {verifying && (
-        <p role="status" className="relative z-10 max-w-md px-6 text-center text-sm text-slate-200">
-          Timer started. Connecting to the session server...
-        </p>
-      )}
-      {localOnly && !verifying && !sessionError && (
-        <p role="status" className="relative z-10 max-w-md px-6 text-center text-sm text-slate-200">
-          Device-only session: saved locally without XP.
-        </p>
-      )}
-      {sessionError && (
-        <p
-          role="alert"
-          className="relative z-10 max-w-md px-6 text-center text-sm text-slate-200"
-        >
-          {sessionError}
-        </p>
-      )}
-      {sessionBusy && (
-        <p role="status" className="relative z-10 text-blue-200">
-          Please wait...
-        </p>
-      )}
-      {/* Animated Orbitals */}
-      <div className="absolute inset-0 pointer-events-none opacity-20">
-        <motion.div
-          animate={{ rotate: 360 }}
-          transition={{ duration: 20, repeat: Infinity, ease: "linear" }}
-          className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] border border-blue-500/30 rounded-full"
-        />
-        <motion.div
-          animate={{ rotate: -360 }}
-          transition={{ duration: 30, repeat: Infinity, ease: "linear" }}
-          className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[400px] h-[400px] border border-purple-500/20 rounded-full"
-        />
-      </div>
-
-      <div className="relative z-10 text-center space-y-10 max-w-4xl w-full px-6">
-        <header className="space-y-2">
-          <motion.div
-            initial={{ scale: 0.9, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 border border-white/10 text-[10px] font-bold uppercase tracking-widest text-blue-400"
-          >
-            {mode === "focus" ? <Brain size={14} /> : <Sun size={14} />}
-            {mode === "focus" ? "Focus Session" : "Short Break"}
-          </motion.div>
-          <h2 className="text-xl text-slate-500 font-medium tracking-wide">
-            Silence the world. Master your mind.
-          </h2>
-        </header>
-
-        {/* Timer Display */}
-        <button
-          type="button"
-          aria-label={isActive ? "Pause timer" : "Start timer"}
-          disabled={sessionBusy}
-          className="relative group mx-auto block disabled:opacity-50"
-          onClick={toggleTimer}
-        >
-          <div className="absolute -inset-8 bg-blue-500/5 blur-[80px] rounded-full group-hover:bg-blue-500/10 transition-all duration-700" />
-          <div className="text-[100px] sm:text-[140px] md:text-[180px] font-black font-display tracking-tighter leading-none relative text-white select-none cursor-pointer">
-            {formatTime(time)}
-          </div>
-        </button>
-
-        {/* Music Options */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 max-w-2xl mx-auto">
-          {tracks.map((track) => (
+      <div className="mx-auto grid w-full max-w-none gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(360px,0.9fr)]">
+        <section className="rounded-[28px] border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900 sm:p-5 lg:p-6">
+          <header className="flex flex-wrap items-center justify-between gap-4">
+            <div className="flex items-center gap-4">
+              <div className="grid h-14 w-14 place-items-center rounded-2xl bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10">
+                <TimerReset size={31} />
+              </div>
+              <div>
+                <h1 className="text-3xl font-black tracking-tight">
+                  Focus Zone
+                </h1>
+                <p className="mt-1 text-sm text-slate-500">
+                  Pomodoro technique for a sharper, more focused you.
+                </p>
+              </div>
+            </div>
             <button
-              key={track.id}
-              onClick={(e) => {
-                e.stopPropagation();
-                setMusic(music === track.id ? null : track.id);
-              }}
-              className={cn(
-                "py-3 px-4 rounded-xl border transition-all text-[10px] font-bold uppercase tracking-widest flex items-center justify-center gap-2",
-                music === track.id
-                  ? "bg-blue-600 border-blue-500 text-white"
-                  : "bg-white/5 border-white/10 text-slate-500 hover:bg-white/10",
-              )}
+              type="button"
+              aria-expanded={helpOpen}
+              aria-controls="focus-help"
+              onClick={() => setHelpOpen((current) => !current)}
+              className="inline-flex items-center gap-2 rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-500 dark:border-slate-700"
             >
-              <Music size={12} />
-              {track.name}
+              <Lightbulb size={16} /> How it works?
             </button>
-          ))}
-        </div>
+          </header>
+          {helpOpen && (
+            <p
+              id="focus-help"
+              className="mt-4 rounded-2xl bg-blue-50 p-4 text-sm text-blue-900 dark:bg-blue-500/10 dark:text-blue-100"
+            >
+              Focus for 25 minutes, then take a 5-minute break. After four focus
+              sessions, take a 15-minute break. Start pauses and resumes the
+              timer; Reset restarts it and Skip moves to the next mode. Only
+              completed, server-verified sessions earn account XP.
+            </p>
+          )}
 
-        {/* Controls */}
-        <div className="flex items-center justify-center gap-8">
-          <button
-            aria-label="Reset timer"
-            disabled={sessionBusy}
-            onClick={(e) => {
-              e.stopPropagation();
-              resetTimer();
-            }}
-            className="p-5 rounded-full bg-white/5 border border-white/10 hover:bg-white/10 transition-all text-slate-500 hover:text-white"
-          >
-            <RotateCcw size={24} />
-          </button>
+          <div className="mt-7 grid grid-cols-3 rounded-2xl border border-slate-200 bg-slate-50 p-1.5 dark:border-slate-700 dark:bg-slate-800">
+            {[
+              {
+                label: "Focus",
+                duration: FOCUS_DURATION,
+                icon: TimerReset,
+                active: mode === "focus",
+                mode: "focus" as const,
+              },
+              {
+                label: "Short Break",
+                duration: SHORT_BREAK_DURATION,
+                icon: Coffee,
+                active:
+                  mode === "break" && breakDuration === SHORT_BREAK_DURATION,
+                mode: "break" as const,
+              },
+              {
+                label: "Long Break",
+                duration: LONG_BREAK_DURATION,
+                icon: Palmtree,
+                active:
+                  mode === "break" && breakDuration === LONG_BREAK_DURATION,
+                mode: "break" as const,
+              },
+            ].map((item) => {
+              const Icon = item.icon;
+              return (
+                <button
+                  key={item.label}
+                  type="button"
+                  onClick={() => {
+                    if (item.duration !== FOCUS_DURATION)
+                      setBreakDuration(item.duration);
+                    selectTimerMode(item.mode, item.duration);
+                  }}
+                  className={cn(
+                    "flex min-h-14 items-center justify-center gap-2 rounded-xl px-2 text-left transition",
+                    item.active
+                      ? "bg-blue-50 text-blue-600 shadow-sm dark:bg-blue-500/15"
+                      : "text-slate-500 hover:bg-white dark:hover:bg-slate-700",
+                  )}
+                >
+                  <Icon size={21} />
+                  <span className="leading-tight">
+                    <span className="block text-xs font-black">
+                      {item.label}
+                    </span>
+                    <span className="block text-sm font-bold">
+                      {item.duration / 60} min
+                    </span>
+                  </span>
+                </button>
+              );
+            })}
+          </div>
 
-          <button
-            aria-label={isActive ? "Pause timer" : "Start timer"}
-            disabled={sessionBusy}
-            onClick={(e) => {
-              e.stopPropagation();
-              toggleTimer();
-            }}
-            className="w-24 h-24 rounded-full bg-blue-600 hover:bg-blue-500 text-white flex items-center justify-center shadow-2xl shadow-blue-500/30 transition-all active:scale-90"
+          {(verifying || localOnly || sessionError || sessionBusy) && (
+            <div className="mt-4" aria-live="polite">
+              {sessionError ? (
+                <p
+                  role="alert"
+                  className="rounded-xl bg-red-50 px-4 py-3 text-sm font-medium text-red-800 dark:bg-red-950/50 dark:text-red-200"
+                >
+                  {sessionError}
+                </p>
+              ) : (
+                <p
+                  role="status"
+                  className="rounded-xl bg-blue-50 px-4 py-3 text-sm font-medium text-blue-800 dark:bg-blue-950/50 dark:text-blue-200"
+                >
+                  {sessionBusy
+                    ? "Saving session..."
+                    : verifying
+                      ? "Timer started. Connecting to the session server..."
+                      : "Device-only session: saved locally without XP."}
+                </p>
+              )}
+            </div>
+          )}
+
+          <div
+            className="mx-auto mt-6 grid h-[clamp(270px,31vw,340px)] w-[clamp(270px,31vw,340px)] place-items-center rounded-full bg-[conic-gradient(var(--focus-ring)_0%,#e8eff9_var(--focus-ring)_100%)] p-3 shadow-[0_0_0_16px_rgba(37,99,235,0.05)]"
+            style={{ "--focus-ring": `${progress}%` } as React.CSSProperties}
           >
-            {isActive ? (
-              <Pause size={40} fill="currentColor" />
+            <div className="grid h-full w-full place-items-center rounded-full bg-white text-center shadow-inner dark:bg-slate-900">
+              <div>
+                <Brain className="mx-auto text-blue-600" size={34} />
+                <p className="mt-3 text-lg font-black">
+                  {mode === "focus"
+                    ? "Focus Session"
+                    : breakDuration === LONG_BREAK_DURATION
+                      ? "Long Break"
+                      : "Short Break"}
+                </p>
+                <p className="text-sm text-slate-500">
+                  {mode === "focus" ? "Pomodoro mode" : "Take a mindful pause"}
+                </p>
+                <button
+                  type="button"
+                  aria-label={isActive ? "Pause timer" : "Start timer"}
+                  disabled={sessionBusy}
+                  onClick={toggleTimer}
+                  className="mt-2 text-[clamp(4rem,9vw,6.5rem)] font-black leading-none tracking-[-0.08em] text-slate-900 transition hover:text-blue-600 disabled:opacity-50 dark:text-white"
+                >
+                  {formatTime(time)}
+                </button>
+                <p className="mx-auto mt-3 inline-flex items-center gap-2 rounded-full bg-emerald-50 px-4 py-2 text-sm font-bold text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300">
+                  <Leaf size={15} />{" "}
+                  {isActive
+                    ? "Stay in the flow"
+                    : mode === "focus"
+                      ? "Time to focus!"
+                      : "Enjoy your break"}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-6 flex items-center justify-center gap-4 sm:gap-7">
+            <button
+              type="button"
+              aria-label="Reset timer"
+              disabled={sessionBusy}
+              onClick={resetTimer}
+              className="inline-flex min-w-28 items-center justify-center gap-2 rounded-full border border-slate-200 bg-white px-5 py-3 text-sm font-bold text-slate-500 transition hover:border-blue-300 hover:text-blue-600 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800"
+            >
+              <RotateCcw size={18} /> Reset
+            </button>
+            <button
+              type="button"
+              aria-label={isActive ? "Pause timer" : "Start timer"}
+              disabled={sessionBusy}
+              onClick={toggleTimer}
+              className="inline-flex min-w-48 items-center justify-center gap-3 rounded-full bg-blue-600 px-8 py-4 text-lg font-black text-white shadow-lg shadow-blue-500/25 transition hover:bg-blue-500 disabled:opacity-50"
+            >
+              {isActive ? (
+                <Pause size={23} fill="currentColor" />
+              ) : (
+                <Play size={23} fill="currentColor" />
+              )}{" "}
+              {isActive ? "Pause" : "Start"}
+            </button>
+            <button
+              type="button"
+              aria-label="Skip timer"
+              disabled={sessionBusy || verifying}
+              onClick={skipTimer}
+              className="inline-flex min-w-28 items-center justify-center gap-2 rounded-full border border-slate-200 bg-white px-5 py-3 text-sm font-bold text-slate-500 transition hover:border-blue-300 hover:text-blue-600 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800"
+            >
+              <SkipForward size={18} /> Skip
+            </button>
+          </div>
+          {mode === "focus" && time < FOCUS_DURATION && (
+            <button
+              type="button"
+              disabled={sessionBusy || verifying || time > FOCUS_DURATION - 60}
+              onClick={completeCurrentFocusSession}
+              className="mx-auto mt-4 inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-bold text-emerald-700 hover:bg-emerald-50 disabled:opacity-50 dark:text-emerald-300"
+            >
+              <CheckCircle2 size={17} />{" "}
+              {sessionBusy ? "Saving session..." : "Complete focus session"}
+            </button>
+          )}
+          <div className="mt-6 text-center">
+            <p className="text-sm font-semibold text-slate-500">
+              Session {sessionNumber} of 4
+            </p>
+            <div className="mt-2 flex justify-center gap-2">
+              {Array.from({ length: 4 }, (_, index) => (
+                <span
+                  key={index}
+                  className={cn(
+                    "h-3 w-3 rounded-full border",
+                    index === sessionNumber - 1
+                      ? "border-blue-600 bg-blue-600"
+                      : "border-slate-300 bg-white dark:border-slate-600 dark:bg-slate-800",
+                  )}
+                />
+              ))}
+            </div>
+          </div>
+        </section>
+
+        <aside className="space-y-4">
+          <section className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+            <div className="flex items-center justify-between gap-3">
+              <h2 className="flex items-center gap-2 text-lg font-black">
+                <Target className="text-blue-600" size={24} /> Today's focus
+              </h2>
+              <button
+                type="button"
+                aria-label="Add focus task"
+                onClick={() => setTaskInputOpen((current) => !current)}
+                className="inline-flex items-center gap-1 rounded-xl border border-blue-200 px-3 py-2 text-sm font-bold text-blue-600 hover:bg-blue-50"
+              >
+                <Plus size={16} /> Add task
+              </button>
+            </div>
+            {taskInputOpen && (
+              <form
+                className="mt-4 flex gap-2"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  updateFocusTask();
+                }}
+              >
+                <input
+                  autoFocus
+                  value={taskDraft}
+                  onChange={(event) => setTaskDraft(event.target.value)}
+                  maxLength={120}
+                  required
+                  aria-label="Focus task"
+                  placeholder="What will you focus on?"
+                  className="min-w-0 flex-1 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm outline-none focus:border-blue-400 dark:border-slate-700 dark:bg-slate-800"
+                />
+                <button
+                  type="submit"
+                  className="rounded-xl bg-blue-600 px-3 text-sm font-bold text-white"
+                >
+                  Save
+                </button>
+              </form>
+            )}
+            {focusTask ? (
+              <div className="mt-4 flex items-center gap-3 rounded-2xl border border-slate-100 bg-slate-50 px-4 py-4 dark:border-slate-800 dark:bg-slate-800">
+                <button
+                  type="button"
+                  aria-label="Complete focus task"
+                  aria-pressed={taskDone}
+                  onClick={() => setTaskDone((current) => !current)}
+                  className={cn(
+                    "grid h-6 w-6 place-items-center rounded-full border-2",
+                    taskDone
+                      ? "border-emerald-500 bg-emerald-500 text-white"
+                      : "border-slate-400",
+                  )}
+                >
+                  {taskDone && <Check size={15} strokeWidth={3} />}
+                </button>
+                <p
+                  className={cn(
+                    "min-w-0 flex-1 font-semibold",
+                    taskDone && "text-slate-400 line-through",
+                  )}
+                >
+                  {focusTask}
+                </p>
+                <button
+                  type="button"
+                  aria-label="Edit focus task"
+                  onClick={() => {
+                    setTaskDraft(focusTask);
+                    setTaskInputOpen(true);
+                  }}
+                  className="text-slate-400 hover:text-blue-600"
+                >
+                  <Pencil size={17} />
+                </button>
+              </div>
             ) : (
-              <Play size={40} fill="currentColor" className="ml-2" />
+              <p className="mt-4 rounded-2xl bg-slate-50 p-4 text-sm text-slate-500 dark:bg-slate-800">
+                No focus task yet. Add what you want to study today.
+              </p>
             )}
-          </button>
-
-          <button
-            aria-label="Toggle deep work"
-            aria-pressed={deepWork}
-            onClick={(e) => {
-              e.stopPropagation();
-              setDeepWork(!deepWork);
-            }}
-            className={cn(
-              "p-5 rounded-full border transition-all duration-500",
-              deepWork
-                ? "bg-white text-black border-white"
-                : "bg-white/5 text-slate-500 border-white/10 hover:text-white",
-            )}
-          >
-            <Moon size={24} className={cn(deepWork && "fill-black")} />
-          </button>
-        </div>
-
-        {mode === "focus" && time < 25 * 60 && (
-          <button
-            type="button"
-            disabled={sessionBusy || verifying || time > 24 * 60}
-            onClick={(e) => {
-              e.stopPropagation();
-              completeCurrentFocusSession();
-            }}
-            className="mx-auto inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl border border-emerald-400/30 bg-emerald-500/15 px-5 text-sm font-black text-emerald-200 transition hover:bg-emerald-500/20"
-          >
-            <CheckCircle2 size={18} />
-            {sessionBusy ? "Saving session..." : "Complete focus session"}
-          </button>
-        )}
+          </section>
+          <section className="grid grid-cols-3 gap-3">
+            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+              <span className="grid h-10 w-10 place-items-center rounded-xl bg-emerald-50 text-emerald-600">
+                <Check size={22} />
+              </span>
+              <p className="mt-4 text-3xl font-black">{completedToday}</p>
+              <p className="mt-1 text-xs font-bold text-slate-500">
+                Completed today
+              </p>
+            </div>
+            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+              <span className="grid h-10 w-10 place-items-center rounded-xl bg-blue-50 text-blue-600">
+                <Clock3 size={22} />
+              </span>
+              <p className="mt-4 text-3xl font-black">{focusMinutes}</p>
+              <p className="mt-1 text-xs font-bold text-slate-500">
+                Focus minutes
+              </p>
+            </div>
+            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+              <span className="grid h-10 w-10 place-items-center rounded-xl bg-orange-50 text-orange-500">
+                <Flame size={22} />
+              </span>
+              <p className="mt-4 text-3xl font-black text-orange-500">
+                {profile?.streak || 0}
+              </p>
+              <p className="mt-1 text-xs font-bold text-slate-500">
+                Current streak
+              </p>
+            </div>
+          </section>
+          <section className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+            <div className="flex items-center justify-between">
+              <h2 className="flex items-center gap-2 text-lg font-black">
+                <Target className="text-emerald-500" size={22} /> Daily Goal
+              </h2>
+              <span className="font-black text-slate-700 dark:text-slate-200">
+                {completedToday} / {DAILY_GOAL}{" "}
+                <span className="text-sm text-slate-500">pomodoros</span>
+              </span>
+            </div>
+            <div className="mt-5 h-3 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
+              <div
+                className="h-full rounded-full bg-emerald-500 transition-all"
+                style={{
+                  width: `${Math.min(100, (completedToday / DAILY_GOAL) * 100)}%`,
+                }}
+              />
+            </div>
+            <p className="mt-3 text-sm text-slate-500">
+              {completedToday
+                ? `Keep going! You're ${Math.round((completedToday / DAILY_GOAL) * 100)}% there.`
+                : "Start your first Pomodoro to build momentum."}
+            </p>
+          </section>
+          <section className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+            <div className="flex items-center justify-between">
+              <h2 className="flex items-center gap-2 text-lg font-black">
+                <Volume2 size={22} /> Ambient Sound
+              </h2>
+              <span className="text-sm font-bold text-blue-600">
+                Focus mode
+              </span>
+            </div>
+            <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4 xl:grid-cols-2">
+              {tracks.map((track) => {
+                const Icon = track.icon;
+                const selected = music === track.id;
+                return (
+                  <button
+                    key={track.id}
+                    type="button"
+                    aria-pressed={selected}
+                    onClick={() => setMusic(selected ? null : track.id)}
+                    className={cn(
+                      "flex min-h-20 flex-col items-center justify-center gap-2 rounded-2xl border px-2 text-sm font-bold transition",
+                      selected
+                        ? "border-blue-500 bg-blue-50 text-blue-600 dark:bg-blue-500/10"
+                        : "border-slate-100 bg-slate-50 text-slate-500 hover:border-blue-200 dark:border-slate-800 dark:bg-slate-800",
+                    )}
+                  >
+                    <Icon size={23} />
+                    {track.name}
+                  </button>
+                );
+              })}
+            </div>
+          </section>
+        </aside>
       </div>
-
-      {isActive && (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          className="absolute bottom-12 text-blue-500/50 text-[10px] font-bold tracking-[0.4em] uppercase"
-        >
-          Session Running
-        </motion.div>
-      )}
     </div>
   );
 };

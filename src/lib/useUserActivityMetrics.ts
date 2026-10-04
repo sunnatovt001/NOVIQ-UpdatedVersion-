@@ -5,6 +5,7 @@ import {
   onSnapshot,
   getCountFromServer,
   getAggregateFromServer,
+  getDocsFromServer,
   sum,
   query,
   where,
@@ -280,6 +281,26 @@ export const useUserActivityMetrics = (
     const target = (name: string) => collection(db, "users", uid, name);
     const count = async (target: Query) =>
       (await getCountFromServer(target)).data().count;
+    const withIndexFallback = async <T>(
+      read: () => Promise<T>,
+      fallback: () => Promise<T>,
+    ): Promise<T> => {
+      try {
+        return await read();
+      } catch (error) {
+        if ((error as { code?: string }).code !== "failed-precondition")
+          throw error;
+        return fallback();
+      }
+    };
+    const countRole = (name: string) =>
+      withIndexFallback(
+        () => count(scoped(query(target(name), where("role", "==", "user")))),
+        async () =>
+          (await getDocsFromServer(scoped(target(name)))).docs.filter(
+            (entry) => entry.data().role === "user",
+          ).length,
+      );
     const refresh = async () => {
       if (!active || refreshing || document.hidden) return;
       if (!navigator.onLine) {
@@ -307,33 +328,52 @@ export const useUserActivityMetrics = (
           cards,
           dailyXp,
         ] = await Promise.all([
-          getAggregateFromServer(
-            query(sessions, where("category", "==", "focus")),
-            { seconds: sum("duration") },
+          withIndexFallback(
+            async () =>
+              toNumber(
+                (
+                  await getAggregateFromServer(
+                    query(sessions, where("category", "==", "focus")),
+                    { seconds: sum("duration") },
+                  )
+                ).data().seconds,
+              ),
+            async () =>
+              (await getDocsFromServer(sessions)).docs.reduce(
+                (total, entry) =>
+                  total +
+                  (entry.data().category === "focus"
+                    ? toNumber(entry.data().duration)
+                    : 0),
+                0,
+              ),
           ),
           count(scoped(target("notebookNotes"))),
           count(scoped(target("notebookSources"))),
-          count(
-            scoped(
-              query(target("notebookMessages"), where("role", "==", "user")),
-            ),
-          ),
-          count(
-            scoped(query(target("tutorMessages"), where("role", "==", "user"))),
-          ),
+          countRole("notebookMessages"),
+          countRole("tutorMessages"),
           count(scoped(target("decks"))),
-          count(
-            scoped(
-              query(
-                target("roadmapTasks"),
-                or(
-                  where("done", "==", true),
-                  where("completed", "==", true),
-                  where("status", "in", ["completed", "done"]),
+          withIndexFallback(
+            () =>
+              count(
+                scoped(
+                  query(
+                    target("roadmapTasks"),
+                    or(
+                      where("done", "==", true),
+                      where("completed", "==", true),
+                      where("status", "in", ["completed", "done"]),
+                    ),
+                  ),
+                  "completedAt",
                 ),
               ),
-              "completedAt",
-            ),
+            async () =>
+              (
+                await getDocsFromServer(
+                  scoped(target("roadmapTasks"), "completedAt"),
+                )
+              ).docs.filter((entry) => isCompleted(entry.data())).length,
           ),
           Promise.all(
             deckIds.map((id) =>
@@ -341,12 +381,26 @@ export const useUserActivityMetrics = (
             ),
           ),
           dayScope
-            ? getAggregateFromServer(sessions, { xp: sum("xpEarned") })
+            ? withIndexFallback(
+                async () =>
+                  toNumber(
+                    (
+                      await getAggregateFromServer(sessions, {
+                        xp: sum("xpEarned"),
+                      })
+                    ).data().xp,
+                  ),
+                async () =>
+                  (await getDocsFromServer(sessions)).docs.reduce(
+                    (total, entry) => total + toNumber(entry.data().xpEarned),
+                    0,
+                  ),
+              )
             : Promise.resolve(null),
         ]);
         roadmapDone = roadmap;
         update({
-          focusMinutes: Math.round(toNumber(focus.data().seconds) / 60),
+          focusMinutes: Math.round(focus / 60),
           notesCreated: notes,
           sourcesUploaded: sources,
           notebookMessages: notebook,
@@ -354,7 +408,7 @@ export const useUserActivityMetrics = (
           decksCreated: decks,
           flashcardsCreated: cards.reduce((total, value) => total + value, 0),
           tasksDone: roadmapDone + plannerDone,
-          ...(dailyXp ? { xp: toNumber(dailyXp.data().xp) } : {}),
+          ...(dailyXp !== null ? { xp: dailyXp } : {}),
           loading: false,
           error: null,
         });
