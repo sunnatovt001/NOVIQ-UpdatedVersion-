@@ -1,0 +1,13 @@
+{
+  "authorizedDomains": [
+    "gen-lang-client-0937997111.firebaseapp.com",
+    "gen-lang-client-0937997111.web.app",
+    "ais-dev-4c272mo4k3bbxolqpdmqtm-756566791890.asia-southeast1.run.app",
+    "ais-shared-4c272mo4k3bbxolqpdmqtm-756566791890.asia-southeast1.run.app",
+    "ais-pre-4c272mo4k3bbxolqpdmqtm-756566791890.asia-southeast1.run.app",
+    "ais-mob-4c272mo4k3bbxolqpdmqtm-756566791890.asia-southeast1.run.app",
+    "127.0.0.1",
+    "localhost"
+  ],
+  "deleteProtection": "DELETE_PROTECTION_DISABLED"
+}

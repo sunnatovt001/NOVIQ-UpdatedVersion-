@@ -1,0 +1,40 @@
+{
+  "passed": [
+    "Planner opens on desktop",
+    "Tutor opens on desktop with English as the default language",
+    "Mobile primary navigation exposes five destinations and changes pages",
+    "Planner settings and Today dashboard switch application language",
+    "Tutor and Notebook switch language without corrupted copy",
+    "Notebook list, editor and AI workspace fit on mobile",
+    "Focus avoids autoplay, fits narrow mobile and supports Uzbek",
+    "Flashcards has readable light and dark themes with an accessible mobile dialog",
+    "Responsive shell supports 375px, landscape, safe areas and reduced motion",
+    "Analytics supports light, dark, 320px and Uzbek copy",
+    "Profile supports themes, localized copy and keyboard-safe avatar editing",
+    "Pricing supports themes, 320px, explicit selection states and Uzbek copy",
+    "Community supports themes, 320px, modular UI and Uzbek copy",
+    "Mobile dashboard uses the primary Tutor destination without a floating overlay",
+    "Dashboard single task metric and mobile fits at 320px and 390px",
+    "Dashboard unavailable and retry recover",
+    "Planner silent listener deadline and retry",
+    "Tutor history deadline and retry",
+    "Direct /planner pathname opens Planner",
+    "Route import error and retry",
+    "Route runtime error and retry",
+    "Route hang error and retry",
+    "CTA signup, inline validation, focus trap, Escape and mobile modal",
+    "Forgot password blank email focuses input",
+    "Desktop modal fits",
+    "Invalid auth forms never call Firebase accounts endpoints",
+    "Valid signup shows loading and backend failure without production writes",
+    "Mobile recovery controls export genuine pending changes without cloud writes",
+    "Admin client monitoring fits on mobile",
+    "Admin monitoring outage and retry recover"
+  ],
+  "viewportSizes": [
+    "1440x900",
+    "390x844",
+    "320x740"
+  ],
+  "productionWrites": 0
+}

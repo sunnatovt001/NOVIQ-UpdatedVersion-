@@ -2,7 +2,7 @@ import { deleteDoc, doc, setDoc, updateDoc } from "firebase/firestore";
 import { useEffect } from "react";
 import { isReadOnlyAudit } from "./auditMode";
 import { db } from "@/src/lib/firebase";
-import { loadLocalData, saveLocalData } from "@/src/lib/localStore";
+import { loadLocalDataStrict, saveLocalData } from "@/src/lib/localStore";
 
 export type SyncStatus = "pending" | "synced" | "failed";
 export type SyncOperationKind = "set" | "update" | "delete";
@@ -36,17 +36,72 @@ const normalizePath = (path: string[]) => path.filter(Boolean);
 const operationId = (kind: SyncOperationKind, path: string[]) =>
   `${kind}:${normalizePath(path).join("/")}`;
 
-const loadQueue = () => loadLocalData<OfflineSyncOperation[]>(QUEUE_KEY, []);
+const isValidOperation = (item: OfflineSyncOperation) => !!item &&
+  typeof item.id === "string" && typeof item.userId === "string" &&
+  Array.isArray(item.path) && item.path.length >= 2 && item.path.length % 2 === 0 &&
+  item.path.every((segment) => typeof segment === "string" && !!segment && !segment.includes("/")) &&
+  ["set", "update", "delete"].includes(item.kind) &&
+  ["pending", "failed", "synced"].includes(item.status) &&
+  item.id === operationId(item.kind, item.path);
+
+const loadQueue = () => {
+  let queue: OfflineSyncOperation[];
+  try {
+    queue = loadLocalDataStrict<OfflineSyncOperation[]>(QUEUE_KEY, []);
+    if (!Array.isArray(queue) || !queue.every(isValidOperation)) throw new Error("Invalid queue format");
+  } catch (error) {
+    console.error("Offline queue could not be read; preserving stored data", error);
+    throw new Error("Local changes could not be read. Keep this browser's data and contact support before saving again.");
+  }
+  return queue;
+};
 
 const saveQueue = (queue: OfflineSyncOperation[]) => {
   const retainedSynced = queue
     .filter((item) => item.status === "synced")
     .slice(-MAX_RETAINED_SYNCED_OPERATIONS);
   const active = queue.filter((item) => item.status !== "synced");
-  saveLocalData(QUEUE_KEY, [...active, ...retainedSynced]);
+  try {
+    saveLocalData(QUEUE_KEY, [...active, ...retainedSynced]);
+  } catch (error) {
+    console.error("Offline queue could not be saved", error);
+    throw new Error("Your changes could not be saved on this device. Free some storage and try again.");
+  }
+  if (typeof window !== "undefined" && typeof CustomEvent !== "undefined") {
+    window.dispatchEvent(new CustomEvent("noviq:offline-sync"));
+  }
 };
 
 export const getOfflineSyncQueue = () => loadQueue();
+
+export const exportPendingChanges = (userId: string) => JSON.stringify({
+  format: "noviq-pending-changes", version: 1, userId,
+  exportedAt: new Date().toISOString(),
+  operations: loadQueue().filter(item => item.userId === userId && item.status !== "synced"),
+}, null, 2);
+
+export const importPendingChanges = (userId: string, text: string) => {
+  if (isReadOnlyAudit) throw new Error("Import is disabled in read-only audit mode.");
+  if (text.length > 10 * 1024 * 1024) throw new Error("Backup is too large (maximum 10 MB).");
+  const backup = JSON.parse(text);
+  if (backup.format !== "noviq-pending-changes" || backup.version !== 1 || backup.userId !== userId ||
+    !Array.isArray(backup.operations) || !backup.operations.every((item: OfflineSyncOperation) =>
+      isValidOperation(item) && item.userId === userId && item.path[0] === "users" && item.path[1] === userId)) {
+    throw new Error("Use a pending-changes backup from the same account. Only private account changes can be imported.");
+  }
+  const queue = loadQueue();
+  let imported = 0;
+  for (const item of backup.operations as OfflineSyncOperation[]) {
+    // Existing pending edits always win; never silently overwrite a newer draft.
+    if (queue.some(existing => existing.id === item.id && existing.status !== "synced")) continue;
+    const index = queue.findIndex(existing => existing.id === item.id);
+    if (index >= 0) queue.splice(index, 1);
+    queue.push({...item, status: "pending", revision: crypto.randomUUID(), updatedAt: new Date().toISOString()});
+    imported++;
+  }
+  saveQueue(queue);
+  return imported;
+};
 
 export const getQueuedOperation = (kind: SyncOperationKind, path: string[]) =>
   loadQueue().find((operation) => operation.id === operationId(kind, path));
@@ -197,8 +252,18 @@ export const writeDocWithQueue = async ({
 
   upsertQueuedOperation(operation);
   if (typeof navigator !== "undefined" && !navigator.onLine) return "pending";
-  await flushOfflineSyncQueue(userId);
-  return getQueuedOperation(kind, path)?.status || "synced";
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    // Settle the caller without releasing the actual flush lock. The SDK may
+    // complete later; serial ordering protects newer revisions from old writes.
+    await Promise.race([
+      flushOfflineSyncQueue(userId),
+      new Promise<void>((resolve) => { timer = setTimeout(resolve, 15000); }),
+    ]);
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+  }
+  return getQueuedOperation(kind, path)?.status || "pending";
 };
 
 export const flushOfflineSyncQueue = async (userId?: string | null) => {

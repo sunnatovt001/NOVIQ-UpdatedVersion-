@@ -10,4 +10,4 @@ Disallow: /analytics
 Disallow: /profile
 Disallow: /admin
 
-Sitemap: https://noviq.app/sitemap.xml
+Sitemap: https://noviqq.uz/sitemap.xml

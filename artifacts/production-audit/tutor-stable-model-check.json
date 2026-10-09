@@ -1,0 +1,16 @@
+[
+  {
+    "model": "gemini-3.5-flash",
+    "status": 200,
+    "elapsedMs": 10762,
+    "answerCharacters": 2240,
+    "correctAnswerPresent": true
+  },
+  {
+    "model": "gemini-3.1-flash-lite",
+    "status": 200,
+    "elapsedMs": 5922,
+    "answerCharacters": 1549,
+    "correctAnswerPresent": true
+  }
+]

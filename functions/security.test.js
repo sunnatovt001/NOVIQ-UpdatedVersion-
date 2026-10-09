@@ -34,7 +34,23 @@ test("AI uses the available model and header-only key, and does not retry creden
   const calls=[];
   const h=harness({}, {fetch:async(url,options)=>{calls.push({url,options});return {ok:false,status:403,json:async()=>({error:{message:"API key forbidden"}})};}});
   await assert.rejects(h.functions.generateAiResponse({auth:{uid:"u1"},data:{contents:"Isolated question",feature:"tutor",retries:1}}),error=>error.details.reason==="AI_KEY_OR_PERMISSION");
-  assert.equal(calls.length,1);assert.ok(calls[0].url.includes("gemini-3.8-flash"));assert.ok(!calls[0].url.includes("test-key"));assert.equal(calls[0].options.headers["x-goog-api-key"],"test-key");
+  assert.equal(calls.length,1);assert.ok(calls[0].url.includes("gemini-3.5-flash-lite"));assert.ok(!calls[0].url.includes("test-key"));assert.equal(calls[0].options.headers["x-goog-api-key"],"test-key");
+});
+
+test("Tutor uses one fast model with minimal thinking and retries only explicit temporary rejection", async()=>{
+ const calls=[];
+ const h=harness({GEMINI_MODELS:"obsolete-model"},{fetch:async(url,options)=>{
+  calls.push({url,options});
+  if(calls.length===1)return {ok:false,status:503,json:async()=>({error:{message:"Temporarily unavailable"}})};
+  return {ok:true,json:async()=>({candidates:[{content:{parts:[{thought:true,text:"Private thought"},{text:"Actual tutor answer"}]}}]})};
+ }});
+ const result=await h.functions.generateAiResponse({auth:{uid:"u1"},data:{contents:"Isolated question",feature:"tutor"}});
+ assert.equal(result.text,"Actual tutor answer");assert.equal(result.model,"gemini-3.5-flash-lite");assert.equal(calls.length,2);assert.equal(calls[0].url,calls[1].url);
+ assert.equal(JSON.parse(calls[0].options.body).generationConfig.thinkingConfig.thinkingLevel,"minimal");
+});
+test("Tutor timeout never repeats an unconfirmed provider generation",async()=>{
+ let calls=0;const h=harness({}, {fetch:async()=>{calls++;throw new Error("The operation timed out");}});
+ await assert.rejects(h.functions.generateAiResponse({auth:{uid:"u1"},data:{contents:"Isolated question",feature:"tutor"}}),error=>error.details.reason==="AI_TIMEOUT");assert.equal(calls,1);
 });
 
 // Exercise the exported handlers against an isolated transaction store. No
@@ -161,7 +177,7 @@ function harness(env = {}, overrides = {}) {
       logger: { info() {}, warn() {}, error() {} },
       setGlobalOptions() {},
     },
-    "firebase-functions/v2/firestore": { onDocumentCreated: handler },
+    "firebase-functions/v2/firestore": { onDocumentCreated: handler, onDocumentWritten: handler },
     "firebase-functions/v2/https": {
       onCall: handler,
       onRequest: handler,
@@ -171,6 +187,7 @@ function harness(env = {}, overrides = {}) {
     "node:crypto": crypto,
     "./policy": require("./policy"),
     "./community": require("./community"),
+    "./metrics": require("./metrics"),
   };
   const context = {
     exports: {},

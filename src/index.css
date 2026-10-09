@@ -72,43 +72,32 @@
 
 .dark {
   color-scheme: dark;
-  --noviq-bg: #07152b;
-  --noviq-card: #0d203b;
-  --noviq-text: #f4f8ff;
-  --noviq-muted: #aab9d1;
-  --noviq-border: #223a5e;
-  --noviq-accent: #7dd3fc;
-  --noviq-accent-hover: #bae6fd;
-  --noviq-soft: rgba(125, 211, 252, 0.12);
-  --noviq-body-bg:
-    radial-gradient(
-      circle at 16% 0%,
-      rgba(59, 130, 246, 0.22),
-      transparent 32%
-    ),
-    radial-gradient(
-      circle at 84% 8%,
-      rgba(34, 211, 238, 0.12),
-      transparent 28%
-    ),
-    linear-gradient(180deg, #07152b 0%, #081b35 100%);
-  --noviq-shadow: 0 22px 70px rgba(2, 8, 23, 0.34);
-  --dashboard-heading: #f4f8ff;
-  --dashboard-body: #c7d2e5;
-  --dashboard-muted: #aab9d1;
-  --dashboard-faint: #6f84a3;
-  --dashboard-panel-bg:
-    linear-gradient(135deg, rgba(13, 32, 59, 0.94), rgba(8, 27, 53, 0.9)),
-    radial-gradient(circle at 18% 0%, rgba(59, 130, 246, 0.14), transparent 34%);
-  --dashboard-card-bg: rgba(12, 30, 56, 0.82);
-  --dashboard-command-bg:
-    linear-gradient(135deg, rgba(14, 36, 68, 0.94), rgba(8, 27, 53, 0.9)),
-    radial-gradient(circle at 18% 0%, rgba(34, 211, 238, 0.12), transparent 34%);
-  --dashboard-border: rgba(151, 180, 220, 0.18);
-  --dashboard-nested-bg: rgba(244, 248, 255, 0.055);
-  --dashboard-rail-bg: rgba(244, 248, 255, 0.08);
+  --noviq-bg: #0b1220;
+  --noviq-card: #131d2e;
+  --noviq-text: #f8fafc;
+  --noviq-muted: #a7b0c0;
+  --noviq-border: #27344b;
+  --noviq-accent: #91a7ff;
+  --noviq-accent-hover: #bdc9ff;
+  --noviq-soft: rgba(145, 167, 255, 0.13);
+  --noviq-body-bg: linear-gradient(180deg, #0b1220 0%, #0f1929 100%);
+  --noviq-shadow: 0 22px 70px rgba(2, 6, 23, 0.28);
+  --dashboard-heading: #f8fafc;
+  --dashboard-body: #d4dae5;
+  --dashboard-muted: #a7b0c0;
+  --dashboard-faint: #778399;
+  --dashboard-panel-bg: linear-gradient(
+    135deg,
+    rgba(19, 29, 46, 0.96),
+    rgba(15, 25, 41, 0.94)
+  );
+  --dashboard-card-bg: rgba(19, 29, 46, 0.9);
+  --dashboard-command-bg: rgba(23, 35, 55, 0.96);
+  --dashboard-border: rgba(148, 163, 184, 0.2);
+  --dashboard-nested-bg: rgba(248, 250, 252, 0.05);
+  --dashboard-rail-bg: rgba(248, 250, 252, 0.09);
   --dashboard-shadow:
-    0 34px 100px rgba(2, 8, 23, 0.32), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+    0 28px 80px rgba(2, 6, 23, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.045);
 }
 
 @layer base {
@@ -126,10 +115,138 @@
   }
 
   button,
+  a {
+    touch-action: manipulation;
+  }
+
+  button,
   input,
   textarea,
   select {
     font: inherit;
+  }
+}
+
+.landing-backdrop {
+  background:
+    radial-gradient(circle at 18% 10%, rgba(66, 105, 210, 0.12), transparent 34%),
+    linear-gradient(145deg, #f7f8fc 0%, #eef2f8 58%, #f8f5ef 100%);
+}
+
+.landing-backdrop-grid {
+  background-image:
+    linear-gradient(rgba(20, 33, 61, 0.045) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(20, 33, 61, 0.045) 1px, transparent 1px);
+  background-size: 48px 48px;
+  mask-image: linear-gradient(to bottom, rgba(0, 0, 0, 0.58), transparent 82%);
+}
+
+.today-command,
+.today-card {
+  border: 1px solid var(--noviq-border);
+  background: var(--noviq-card);
+}
+
+.today-card {
+  box-shadow: 0 10px 28px color-mix(in srgb, var(--noviq-text) 5%, transparent);
+}
+
+.today-next-card {
+  border: 1px solid color-mix(in srgb, #315efb 24%, var(--noviq-border));
+  background:
+    radial-gradient(circle at 92% 8%, rgba(49, 94, 251, 0.12), transparent 32%),
+    color-mix(in srgb, var(--noviq-card) 88%, #e9efff);
+}
+
+.today-primary-button {
+  background: #315efb;
+  color: #fff;
+  box-shadow: 0 8px 18px rgba(49, 94, 251, 0.2);
+  transition: background-color 150ms ease, transform 150ms ease;
+}
+
+.today-primary-button:hover {
+  background: #264ed8;
+}
+
+.today-primary-button:active {
+  transform: translateY(1px);
+}
+
+.today-secondary-button {
+  border: 1px solid var(--noviq-border);
+  background: var(--noviq-card);
+  color: var(--noviq-text);
+  transition: background-color 150ms ease, border-color 150ms ease;
+}
+
+.today-secondary-button:hover {
+  border-color: color-mix(in srgb, #315efb 32%, var(--noviq-border));
+  background: var(--noviq-soft);
+}
+
+.today-alert {
+  display: flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  border: 1px solid #f2b8b5;
+  border-radius: 0.875rem;
+  background: #fff3f2;
+  padding: 0.75rem 1rem;
+  color: #8a2621;
+  font-size: 0.875rem;
+}
+
+.today-alert button {
+  flex-shrink: 0;
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.today-tool-button {
+  display: flex;
+  min-height: 76px;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: space-between;
+  border: 1px solid var(--noviq-border);
+  border-radius: 0.875rem;
+  background: var(--noviq-card);
+  padding: 0.875rem;
+  color: var(--noviq-text);
+  font-size: 0.875rem;
+  font-weight: 700;
+  transition: background-color 150ms ease, border-color 150ms ease;
+}
+
+.today-tool-button:hover {
+  border-color: color-mix(in srgb, #315efb 30%, var(--noviq-border));
+  background: var(--noviq-soft);
+}
+
+.noviq-app.dark .today-next-card {
+  background:
+    radial-gradient(circle at 92% 8%, rgba(91, 130, 255, 0.16), transparent 34%),
+    color-mix(in srgb, var(--noviq-card) 92%, #315efb);
+}
+
+.noviq-app.dark .today-alert {
+  border-color: rgba(248, 113, 113, 0.32);
+  background: rgba(127, 29, 29, 0.2);
+  color: #fecaca;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
   }
 }
 
@@ -517,10 +634,28 @@
 
 .noviq-app .app-mobile-header,
 .noviq-app .app-sidebar,
+.noviq-app .mobile-bottom-nav,
 .noviq-app .app-popover {
   border-color: var(--noviq-border);
   background: color-mix(in srgb, var(--noviq-card) 92%, transparent);
   color: var(--noviq-text);
+}
+
+.noviq-app .mobile-bottom-nav {
+  padding-bottom: calc(0.5rem + env(safe-area-inset-bottom));
+  box-shadow: 0 -12px 32px color-mix(in srgb, var(--noviq-text) 8%, transparent);
+}
+
+@media (max-width: 1023px) {
+  .noviq-app .app-sidebar {
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+}
+
+.noviq-app.dark .mobile-bottom-nav [aria-current="page"] {
+  background: var(--noviq-soft);
+  color: var(--noviq-accent);
 }
 
 .noviq-app .app-main-surface,
@@ -587,11 +722,15 @@
 }
 
 .noviq-app.dark [class*="bg-[#3F7D58]"] {
-  background-color: var(--noviq-accent);
+  background-color: #3657b7;
+}
+
+.noviq-app.dark [class*="hover:bg-[#356B4B]"]:hover {
+  background-color: #2f4da3;
 }
 
 .noviq-app.dark .CustomScrollbar::-webkit-scrollbar-thumb {
-  background: rgba(170, 185, 209, 0.26);
+  background: rgba(167, 176, 192, 0.3);
 }
 
 .noviq-app:not(.dark) [class*="text-white"],
@@ -637,6 +776,14 @@
 .noviq-app button.bg-orange-700 { color: #fff !important; }
 .noviq-app .audit-mode-notice { color: #52627a !important; }
 .noviq-app.dark .audit-mode-notice { color: #b8c6dc !important; }
+.noviq-app .sync-recovery-card,
+.noviq-app .sync-recovery-card :is(p, button, span) {
+  color: #172033 !important;
+}
+
+.noviq-app.dark .community-page .text-slate-500 {
+  color: #cbd5e1;
+}
 .noviq-app:not(.dark) :is(.text-cyan-300, .text-cyan-400) { color: #0e7490 !important; }
 .noviq-app:not(.dark) :is(.text-emerald-300, .text-emerald-400) { color: #047857 !important; }
 .noviq-app:not(.dark) :is(.text-red-200, .text-red-300) { color: #b91c1c !important; }
@@ -899,3 +1046,19 @@
     opacity: 0;
   }
 }
+
+/* Chat fields use their container for focus feedback, without the global blue
+   rectangle. Keyboard focus on buttons and links keeps its visible outline. */
+.noviq-app .tutor-composer textarea:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+.noviq-app .tutor-composer:focus-within {
+  border-color: var(--noviq-muted);
+}
+.noviq-app .tutor-messages :is(pre, table) {
+  max-width: 100%;
+  overflow-x: auto;
+}
+.noviq-app .tutor-messages pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+.noviq-app .tutor-messages a { overflow-wrap: anywhere; }

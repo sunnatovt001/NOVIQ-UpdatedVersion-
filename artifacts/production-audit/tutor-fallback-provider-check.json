@@ -1,0 +1,17 @@
+[
+  {
+    "model": "gemini-3.7-flash",
+    "status": 503,
+    "elapsedMs": 8298,
+    "answerCharacters": 0,
+    "correctAnswerPresent": false,
+    "errorStatus": "UNAVAILABLE"
+  },
+  {
+    "model": "gemini-3.6-flash",
+    "status": 200,
+    "elapsedMs": 9610,
+    "answerCharacters": 1555,
+    "correctAnswerPresent": true
+  }
+]

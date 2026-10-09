@@ -3,8 +3,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { Suspense, useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { AuthProvider, useAuth } from "@/src/contexts/AuthContext";
+import { RoutePage } from "@/src/components/RoutePage";
 import { Layout } from "@/src/components/Layout";
 import { Landing } from "@/src/pages/Landing";
 import { trackSiteVisit } from "@/src/lib/analytics";
@@ -14,29 +15,13 @@ import { motion, AnimatePresence } from "motion/react";
 
 const LOGO_SRC = "/noviq-logo.jpeg";
 
-const lazyPage = <T extends React.ComponentType<any>>(
-  loader: () => Promise<Record<string, T>>,
-  exportName: string,
-) =>
-  React.lazy(async () => {
-    const module = await loader();
-    return { default: module[exportName] };
-  });
-
-const Dashboard = lazyPage(() => import("@/src/pages/Dashboard"), "Dashboard");
-const Planner = lazyPage(() => import("@/src/pages/Planner"), "Planner");
-const Tutor = lazyPage(() => import("@/src/pages/Tutor"), "Tutor");
-const Notes = lazyPage(() => import("@/src/pages/Notes"), "Notes");
-const Flashcards = lazyPage(
-  () => import("@/src/pages/Flashcards"),
-  "Flashcards",
-);
-const Focus = lazyPage(() => import("@/src/pages/Focus"), "Focus");
-const Community = lazyPage(() => import("@/src/pages/Community"), "Community");
-const Analytics = lazyPage(() => import("@/src/pages/Analytics"), "Analytics");
-const Admin = lazyPage(() => import("@/src/pages/Admin"), "Admin");
-const Profile = lazyPage(() => import("@/src/pages/Profile"), "Profile");
-const Pricing = lazyPage(() => import("@/src/pages/Pricing"), "Pricing");
+const pageLoaders: Record<string, () => Promise<Record<string, any>>> = {
+  Dashboard: () => import("@/src/pages/Dashboard"), Planner: () => import("@/src/pages/Planner"),
+  Tutor: () => import("@/src/pages/Tutor"), Notes: () => import("@/src/pages/Notes"),
+  Flashcards: () => import("@/src/pages/Flashcards"), Focus: () => import("@/src/pages/Focus"),
+  Community: () => import("@/src/pages/Community"), Analytics: () => import("@/src/pages/Analytics"),
+  Admin: () => import("@/src/pages/Admin"), Profile: () => import("@/src/pages/Profile"), Pricing: () => import("@/src/pages/Pricing"),
+};
 
 const LoadingScreen = ({
   message = "Preparing your workspace",
@@ -97,7 +82,7 @@ const AppContent = () => {
     "profile",
   ];
   const readTab = () => {
-    const requested = window.location.hash.replace(/^#\/?/, "");
+    const requested = (window.location.hash || window.location.pathname).replace(/^#?\/?/, "").replace(/\/$/, "");
     if (validTabs.includes(requested)) return requested;
     return new URLSearchParams(window.location.search).has("invite")
       ? "community"
@@ -192,41 +177,11 @@ const AppContent = () => {
     );
   }
 
-  const renderContent = () => {
-    const props = { setActiveTab };
-    switch (activeTab) {
-      case "dashboard":
-        return <Dashboard setActiveTab={setActiveTab} />;
-      case "planner":
-        return <Planner />;
-      case "tutor":
-        return <Tutor setActiveTab={setActiveTab} />;
-      case "notes":
-        return <Notes />;
-      case "flashcards":
-        return <Flashcards />;
-      case "focus":
-        return <Focus />;
-      case "community":
-        return <Community />;
-      case "analytics":
-        return <Analytics {...props} />;
-      case "pricing":
-        return <Pricing {...props} />;
-      case "admin":
-        return <Admin {...props} />;
-      case "profile":
-        return <Profile />;
-      default:
-        return <Dashboard setActiveTab={setActiveTab} />;
-    }
-  };
-
+  const pageName = activeTab.charAt(0).toUpperCase() + activeTab.slice(1);
+  const name = pageLoaders[pageName] ? pageName : "Dashboard";
   return (
     <Layout activeTab={activeTab} setActiveTab={setActiveTab}>
-      <Suspense fallback={<LoadingScreen message="Loading page" />}>
-        {renderContent()}
-      </Suspense>
+      <RoutePage key={name} loader={pageLoaders[name]} name={name} pageProps={{ setActiveTab }} />
     </Layout>
   );
 };

@@ -1,0 +1,23 @@
+[
+  {
+    "page": "Planner",
+    "asset": "Planner-C4Bu-g3H.js",
+    "exports": [
+      "Planner"
+    ]
+  },
+  {
+    "page": "Tutor",
+    "asset": "Tutor-DLldfs1v.js",
+    "exports": [
+      "Tutor"
+    ]
+  },
+  {
+    "page": "Dashboard",
+    "asset": "Dashboard-Bv4KPxqR.js",
+    "exports": [
+      "Dashboard"
+    ]
+  }
+]

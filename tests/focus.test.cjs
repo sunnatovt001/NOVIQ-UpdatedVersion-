@@ -19,6 +19,10 @@ vm.runInNewContext(compile("src/lib/focusTimer.ts"), {
   setTimeout,
   clearTimeout,
 });
+const focusCopy = {};
+vm.runInNewContext(compile("src/features/focus/focusCopy.ts"), {
+  exports: focusCopy,
+});
 
 test("session verification fails promptly when the server is unreachable", async () => {
   await assert.rejects(
@@ -77,6 +81,9 @@ function focusHarness({
       const slot = index++;
       return (slots[slot] ||= { current: initial });
     },
+    useMemo(factory) {
+      return factory();
+    },
     useEffect(fn, deps) {
       const slot = index++,
         previous = slots[slot];
@@ -107,6 +114,10 @@ function focusHarness({
     "@/src/contexts/AuthContext": {
       useAuth: () => ({ user: { uid: "user" }, profile: {} }),
     },
+    "@/src/contexts/LocaleContext": {
+      useLocale: () => ({ locale: "en" }),
+    },
+    "@/src/features/focus/focusCopy": focusCopy,
     "@/src/lib/analytics": { trackUserEvent: async () => {} },
     "@/src/lib/progress": {
       calculateSessionXp: () => 10,
@@ -130,6 +141,11 @@ function focusHarness({
     },
   };
   const exports = {};
+  const setTestInterval = (fn) => {
+    const id = ++intervalId;
+    intervals.set(id, fn);
+    return id;
+  };
   vm.runInNewContext(compile("src/pages/Focus.tsx"), {
     exports,
     require: (name) => {
@@ -139,11 +155,8 @@ function focusHarness({
     Date: Clock,
     crypto: { randomUUID: () => `local-${now}` },
     console,
-    setInterval: (fn) => {
-      const id = ++intervalId;
-      intervals.set(id, fn);
-      return id;
-    },
+    window: { setInterval: setTestInterval },
+    setInterval: setTestInterval,
     clearInterval: (id) => intervals.delete(id),
   });
   function render() {
@@ -211,7 +224,7 @@ test("missing backend does not block start, pause, resume or local completion", 
   assert.equal(app.starts, 1);
   app.click("Complete focus session");
   await app.settle();
-  assert.match(app.text(), /Short Break/);
+  assert.match(app.text(), /Short break/);
   assert.equal(app.storage.get("noviq-focus-history-user")[0].duration, 60);
   assert.equal(app.cloudWrites, 0);
   app.click("Start timer");
@@ -250,7 +263,7 @@ test("verified focus sessions still use server completion", async () => {
   await app.settle();
   assert.equal(app.cloudWrites, 1);
   assert.equal(app.storage.has("noviq-focus-history-user"), false);
-  assert.match(app.text(), /Short Break/);
+  assert.match(app.text(), /Short break/);
 });
 
 test("restored device-only session resumes without losing elapsed time", async () => {

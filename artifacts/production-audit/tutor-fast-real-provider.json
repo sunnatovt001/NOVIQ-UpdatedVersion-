@@ -1,0 +1,40 @@
+{
+  "authentication": "Isolated fixture; no real user token or cloud write. Actual frontend prompt, client, middleware and Gemini API.",
+  "results": [
+    {
+      "question": "Salom!",
+      "elapsedMs": 1292,
+      "reply": "Salom! Bugun o'qishda senga qanday yordam bera olaman?",
+      "success": true
+    },
+    {
+      "question": "1/2 + 1/3 ni qisqa tushuntir.",
+      "elapsedMs": 1733,
+      "reply": "Salom! $1/2 + 1/3$ ni qo'shish uchun avval ularni umumiy maxrajga keltirish kerak.\n\n2 va 3 sonlari uchun eng kichik umumiy maxraj **6** bo'ladi. \n* Birinchi kasrning surat va maxrajini 3 ga ko'paytiramiz: $\\frac{1 \\cdot 3}{2 \\cdot 3} = \\frac{3}{6}$\n* Ikkinchi kasrning surat va maxrajini 2 ga ko'paytiramiz: $\\frac{1 \\cdot 2}{3 \\cdot 2} = \\frac{2}{6}$\n\nEndi maxrajlari bir xil bo'lgan kasrlarni qo'shamiz:\n$$\\frac{3}{6} + \\frac{2}{6} = \\frac{3 + 2}{6} = \\frac{5}{6}$$\n\nJavob: **5/6**.\n\nTushunarli bo'ldimi? Xuddi shunga o'xshash $1/4 + 1/3$ ni hisoblab ko'rasizmi?",
+      "success": true
+    },
+    {
+      "question": "IELTS uchun bugungi 60 daqiqalik o'qish rejamni tuzib ber. Reading va listening uchun aniq vaqt ajrat.",
+      "elapsedMs": 2047,
+      "reply": "Salom! Albatta, bugungi 60 daqiqalik IELTS dars rejangni tuzib beraman. Vaqtni Reading va Listening bo'limlariga quyidagicha taqsimlaymiz:\n\n1. **Listening (30 daqiqa):**\n   * *10 daqiqa:* IELTS Listening testidan bitta to'liq bo'lim (masalan, 1- yoki 3-qism) eshitib, savollarga javob yozish.\n   * *15 daqiqa:* Javoblarni transkript (audio matni) bilan tekshirish va xatolarni tahlil qilish (nega xato qilganingni tushunish).\n   * *5 daqiqa:* Notanish so'zlarni yozib olish.\n\n2. **Reading (30 daqiqa):**\n   * *20 daqiqa:* Bitta Reading matnini o'qib, uning savollariga (masalan, 13-14 ta savol) belgilangan vaqt ichida javob berish.\n   * *10 daqiqa:* Javoblarni kalitlar orqali tekshirish, matndan xatolar ustida ishlash (nima uchun noto'g'ri javob tanlaganingni tahlil qilish).\n\nBugungi mashg'ulotda aynan qaysi mavzudan boshlaymiz?",
+      "success": true
+    }
+  ],
+  "logs": [
+    {
+      "message": "Local AI generation completed",
+      "model": "gemini-3.5-flash-lite",
+      "elapsedMs": 1280
+    },
+    {
+      "message": "Local AI generation completed",
+      "model": "gemini-3.5-flash-lite",
+      "elapsedMs": 1729
+    },
+    {
+      "message": "Local AI generation completed",
+      "model": "gemini-3.5-flash-lite",
+      "elapsedMs": 2043
+    }
+  ]
+}

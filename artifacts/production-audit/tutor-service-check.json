@@ -1,0 +1,12 @@
+{
+  "localEndpointStatus": 401,
+  "localAuthRequired": true,
+  "productionAiEndpointStatus": 404,
+  "providerSmoke": {
+    "model": "gemini-3.8-flash",
+    "httpStatus": 200,
+    "answerToPublicMathQuestion": "4"
+  },
+  "productionWrites": 0,
+  "paidServicesEnabled": false
+}

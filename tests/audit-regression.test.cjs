@@ -24,6 +24,7 @@ test('malformed AI activities cannot silently acquire template questions or prom
 function handler(path, name, context) {
   context.Error = Error;
   context.isLocalAi ??= false;
+  context.localProvider ??= context.isLocalAi;
   const source = fs.readFileSync(path, 'utf8');
   const tree = ts.createSourceFile(path, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
   let body;
@@ -186,6 +187,8 @@ test('Tutor renders successful and failed AI responses in isolation and retry do
     setUpgradeOpen: noop, setInput: noop, setAttachedFiles: noop, setUploadError: noop, setLastRequest: noop, setTutorUsage: noop, saveLocalDailyUsage: noop, speak: noop,
     buildStudentTutorContext: () => '', trackUserEvent: async () => {}, persistMessage: async () => {}, getAppErrorMessage: error => error.message,
     messages: [], setMessages(update) { context.messages = update(context.messages); }, setAiError(value) { context.error = value; }, setIsTyping(value) { context.loading = value; }, askTutor: async () => 'Mocked answer' };
+  context.ownerRef={current:'test-only'};
+  context.chat={activeId:'test-conversation',add(message){context.messages.push(message);}};
   const send = handler('src/pages/Tutor.tsx', 'submitPrompt', context);
   await send('   ', []); assert.equal(context.messages.length, 0);
   await send('Test question', []); assert.equal(context.messages.at(-1).role, 'assistant'); assert.equal(context.messages.at(-1).content, 'Mocked answer');
@@ -196,15 +199,21 @@ test('Tutor renders successful and failed AI responses in isolation and retry do
   await send('Second question', [], true);
   assert.equal(context.messages.filter(message => message.role === 'user').length, userCount);
   assert.equal(context.messages.at(-1).content, 'Retry answer');
+  context.activePro=false;context.tutorUsage=0;
+  context.saveLocalDailyUsage=()=>{throw new Error('Device storage full');};
+  await send('Question with unavailable device storage',[]);
+  assert.equal(context.messages.at(-1).content,'Retry answer');
+  assert.equal(context.aiRequestRef.current,false);assert.equal(context.loading,false);
 });
 
 test('Notebook AI renders real handler output, blocks whitespace and parallel submits, and retries without duplicate user records', async () => {
   const noop = () => {};
   let id = 0;
   const writes = [];
-  const context = { Date, user: { uid: 'test-only' }, aiRequestRef: { current: false }, activeNote: {}, sources: [], notebookStudentContext: '', messages: [],
+  const context = { Date, user: { uid: 'test-only' }, aiRequestRef: { current: false }, activeNote: {}, sources: [], notebookStudentContext: '', notebookLanguage: 'en-US', messages: [],
     setMessages(update) { context.messages = update(context.messages); }, setIsAiLoading(value) { context.loading = value; }, setAiError(value) { context.error = value; },
     setLastAiPrompt: noop, setStatus: noop, debugNotebookMetricsWrite: noop, setCloudSyncBlocked: noop, makeSyncId: () => `test-${++id}`, getAppErrorMessage: error => error.message,
+    t: key => key === 'notebook.engineFailed' ? 'Notebook engine failed. Please retry.' : key,
     writeDocWithQueue: async request => { writes.push(request); return 'synced'; }, trackUserEvent: async () => {}, buildNotebookContext: () => '', askNotebook: async () => 'Source-grounded answer' };
   const send = handler('src/pages/Notes.tsx', 'runNotebookAi', context);
   await send('  '); assert.equal(writes.length, 0);

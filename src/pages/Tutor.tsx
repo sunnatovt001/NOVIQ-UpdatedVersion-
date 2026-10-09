@@ -1,10 +1,12 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "@/src/contexts/AuthContext";
-import { AiAttachment, askTutor } from "@/src/lib/gemini";
+import { askTutor } from "@/src/lib/gemini";
 import { trackUserEvent } from "@/src/lib/analytics";
 import { motion, AnimatePresence } from "motion/react";
 import {
   AlertCircle,
+  MessageSquare,
+  SquarePen,
   FileText,
   Image as ImageIcon,
   Loader2,
@@ -19,28 +21,26 @@ import {
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { cn } from "@/src/lib/utils";
-import {
-  collection,
-  limit,
-  onSnapshot,
-  orderBy,
-  query,
-} from "firebase/firestore";
-import { db } from "@/src/lib/firebase";
 import { getAppErrorMessage } from "@/src/lib/errors";
 import { UpgradeModal } from "@/src/components/UpgradeModal";
 import { FREE_LIMITS, getLocalDailyUsage, isPro, saveLocalDailyUsage } from "@/src/lib/subscription";
 import { getLocalDayKey } from "@/src/lib/progress";
 import { buildStudentTutorContext } from "@/src/lib/tutorContext";
-import { makeSyncId } from "@/src/lib/localStore";
-import { writeDocWithQueue } from "@/src/lib/offlineSync";
-import { isLocalAi } from "@/src/lib/auditMode";
-
-interface TutorAttachment extends AiAttachment {
-  id: string;
-  size: number;
-  previewUrl?: string;
-}
+import { isLocalAi, useDevelopmentAi } from "@/src/lib/auditMode";
+import { TutorChatHistory, TutorHistoryDrawer } from "@/src/components/TutorChatHistory";
+import { TutorSaveStatus } from "@/src/components/TutorSaveStatus";
+import {useTutorHistory} from "@/src/lib/useTutorHistory";
+import {
+  fileToTutorAttachment,
+  formatBytes,
+  type TutorAttachment,
+} from "@/src/features/tutor/tutorAttachments";
+import {
+  getTutorIntro,
+  TUTOR_LANGUAGE_OPTIONS,
+  type TutorLanguage,
+} from "@/src/features/tutor/tutorCopy";
+import { useLocale } from "@/src/contexts/LocaleContext";
 
 interface Message {
   id: string;
@@ -56,37 +56,14 @@ interface Message {
 const ASSISTANT_AVATAR =
   "/saidamin-avatar.jpg";
 
-const MAX_FILE_BYTES = 12 * 1024 * 1024;
-const DOCX_MIME_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
-
 const INTRO_MESSAGE: Message = {
   id: "intro",
   role: "assistant",
-  content:
-    "Assalomu alaykum!\nMen Saidamin, Noviq Tutorman. Maqsadim oddiy javob berish emas, IELTS, SAT, HSK, CEFR, maktab fanlari yoki universitet imtihonida natijangizni oshirish.\nSavolingizni yozing yoki darslik, konspekt, test, maqola va boshqa akademik hujjatlarni yuklang. Men javobni maqsadingiz, darajangiz va xatolaringizga bog'lab beraman.",
+  content: getTutorIntro("en-US"),
 };
-
-const messageTimeToMs = (value: unknown) => {
-  if (!value) return Date.now();
-  if (typeof value === "number") return Number.isFinite(value) ? value : Date.now();
-  if (typeof value === "string") {
-    const parsed = new Date(value).getTime();
-    return Number.isNaN(parsed) ? Date.now() : parsed;
-  }
-  if (typeof value === "object" && value !== null) {
-    const timestamp = value as { toMillis?: () => number; toDate?: () => Date; seconds?: number };
-    if (typeof timestamp.toMillis === "function") return timestamp.toMillis();
-    if (typeof timestamp.toDate === "function") return timestamp.toDate().getTime();
-    if (typeof timestamp.seconds === "number") return timestamp.seconds * 1000;
-  }
-  return Date.now();
-};
-
-const isUserMessageOnDay = (data: Record<string, unknown>, dayKey: string) =>
-  data.role === "user" && getLocalDayKey(new Date(messageTimeToMs(data.createdAt))) === dayKey;
 
 const Avatar = ({ src, alt, size = "sm" }: { src: string; alt: string; size?: "sm" | "lg" }) => {
-  const outerSize = size === "lg" ? "h-14 w-14" : "h-10 w-10";
+  const outerSize = size === "lg" ? "h-10 w-10 sm:h-14 sm:w-14" : "h-10 w-10";
   const dotSize = size === "lg" ? "h-3.5 w-3.5" : "h-3 w-3";
 
   return (
@@ -109,107 +86,23 @@ const Avatar = ({ src, alt, size = "sm" }: { src: string; alt: string; size?: "s
   );
 };
 
-const readAsDataUrl = (file: File) =>
-  new Promise<string>((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result || ""));
-    reader.onerror = () => reject(reader.error);
-    reader.readAsDataURL(file);
-  });
-
-const readAsText = (file: File) =>
-  new Promise<string>((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result || ""));
-    reader.onerror = () => reject(reader.error);
-    reader.readAsText(file);
-  });
-
-const formatBytes = (bytes: number) => {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
-};
-
-const shouldReadText = (file: File) =>
-  file.type.startsWith("text/") ||
-  /\.(txt|md|csv|json|log|html|css|js|ts|tsx)$/i.test(file.name);
-
-const isDocxFile = (file: File) =>
-  file.type === DOCX_MIME_TYPE || /\.docx$/i.test(file.name);
-
-const getSupportedInlineMimeType = (file: File) => {
-  if (file.type.startsWith("image/")) return file.type;
-  if (file.type === "application/pdf" || /\.pdf$/i.test(file.name)) return "application/pdf";
-  return "";
-};
-
-const isLegacyOfficeFile = (file: File) => /\.(doc|ppt|pptx)$/i.test(file.name) && !isDocxFile(file);
-
-const extractDocxText = async (file: File) => {
-  const mammothModule = (await import("mammoth")) as unknown as {
-    extractRawText?: (input: { arrayBuffer: ArrayBuffer }) => Promise<{ value: string }>;
-    default?: { extractRawText?: (input: { arrayBuffer: ArrayBuffer }) => Promise<{ value: string }> };
-  };
-  const mammoth = mammothModule.extractRawText ? mammothModule : mammothModule.default;
-  if (!mammoth?.extractRawText) throw new Error("DOCX reader is unavailable.");
-
-  const result = await mammoth.extractRawText({ arrayBuffer: await file.arrayBuffer() });
-  const text = result.value.trim();
-  if (!text) throw new Error(`${file.name} has no readable text. Export it as PDF or paste the text.`);
-  return text;
-};
-
-const fileToAttachment = async (file: File): Promise<TutorAttachment> => {
-  if (file.size > MAX_FILE_BYTES) {
-    throw new Error(`${file.name} is larger than ${formatBytes(MAX_FILE_BYTES)}.`);
-  }
-
-  if (isLegacyOfficeFile(file)) {
-    throw new Error(`${file.name} is not supported directly. Upload PDF, DOCX, TXT, image, or paste the text.`);
-  }
-
-  if (isDocxFile(file)) {
-    return {
-      id: `${Date.now()}-${file.name}`,
-      name: file.name,
-      mimeType: DOCX_MIME_TYPE,
-      size: file.size,
-      text: await extractDocxText(file),
-    };
-  }
-
-  if (shouldReadText(file)) {
-    return {
-      id: `${Date.now()}-${file.name}`,
-      name: file.name,
-      mimeType: file.type || "text/plain",
-      size: file.size,
-      text: await readAsText(file),
-    };
-  }
-
-  const inlineMimeType = getSupportedInlineMimeType(file);
-  if (!inlineMimeType) {
-    throw new Error(`${file.name} is not supported by the AI service. Upload PDF, DOCX, TXT, image, or paste the text.`);
-  }
-
-  const dataUrl = await readAsDataUrl(file);
-  const [, data = ""] = dataUrl.split(",");
-
-  return {
-    id: `${Date.now()}-${file.name}`,
-    name: file.name,
-    mimeType: inlineMimeType,
-    size: file.size,
-    data,
-    previewUrl: file.type.startsWith("image/") ? dataUrl : undefined,
-  };
-};
-
 export const Tutor = ({ setActiveTab }: { setActiveTab: (tab: string) => void }) => {
   const { profile, user } = useAuth();
-  const [messages, setMessages] = useState<Message[]>([INTRO_MESSAGE]);
+  const { locale, setLocale, t } = useLocale();
+  const chat = useTutorHistory(user?.uid);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const closeHistory = useCallback(() => setHistoryOpen(false), []);
+  const voiceLanguage: TutorLanguage =
+    locale === "uz" ? "uz-UZ" : locale === "ru" ? "ru-RU" : "en-US";
+  const intro = useMemo(
+    () => ({ ...INTRO_MESSAGE, content: getTutorIntro(voiceLanguage) }),
+    [voiceLanguage],
+  );
+  const messages: Message[] = useMemo(
+    () => (chat.messages.length ? chat.messages : [intro]),
+    [chat.messages, intro],
+  );
+  const ownerRef = useRef(user?.uid); ownerRef.current=user?.uid;
   const [input, setInput] = useState("");
   const [isTyping, setIsTyping] = useState(false);
   const aiRequestRef = useRef(false);
@@ -218,10 +111,10 @@ export const Tutor = ({ setActiveTab }: { setActiveTab: (tab: string) => void })
   const [autoSpeak, setAutoSpeak] = useState(false);
   const [attachedFiles, setAttachedFiles] = useState<TutorAttachment[]>([]);
   const [uploadError, setUploadError] = useState("");
+  const historyError = chat.error;
   const [aiError, setAiError] = useState("");
   const [lastRequest, setLastRequest] = useState<{ prompt: string; attachments: TutorAttachment[] } | null>(null);
   const [isDragging, setIsDragging] = useState(false);
-  const [voiceLanguage, setVoiceLanguage] = useState<"uz-UZ" | "en-US" | "ru-RU">("uz-UZ");
   const [upgradeOpen, setUpgradeOpen] = useState(false);
   const [tutorUsage, setTutorUsage] = useState(0);
 
@@ -235,6 +128,7 @@ export const Tutor = ({ setActiveTab }: { setActiveTab: (tab: string) => void })
   const dayKey = getLocalDayKey();
   const activePro = isPro(profile);
   const tutorLimit = FREE_LIMITS.aiTutorMessagesPerDay;
+  const localProvider = isLocalAi || useDevelopmentAi;
   const remainingTutorMessages = activePro ? Infinity : Math.max(0, tutorLimit - tutorUsage);
 
   useEffect(() => {
@@ -245,64 +139,8 @@ export const Tutor = ({ setActiveTab }: { setActiveTab: (tab: string) => void })
   }, [dayKey, profile?.usage?.aiTutor, user]);
 
   useEffect(() => {
-    if (!user) return undefined;
-
-    const messagesQuery = query(
-      collection(db, "users", user.uid, "tutorMessages"),
-      orderBy("createdAt", "asc"),
-      limit(80)
-    );
-
-    return onSnapshot(
-      messagesQuery,
-      (snapshot) => {
-        const remoteMessages = snapshot.docs.map((document) => {
-          const data = document.data();
-          return {
-            id: document.id,
-            role: data.role,
-            content: data.content,
-            attachments: data.attachments || [],
-            createdAt: messageTimeToMs(data.createdAt),
-          } as Message;
-        });
-        const remoteUsage = snapshot.docs.filter((document) =>
-          isUserMessageOnDay(document.data() as Record<string, unknown>, dayKey)
-        ).length;
-        const localUsage = getLocalDailyUsage(user.uid, "aiTutor", dayKey);
-        setTutorUsage(Math.max(remoteUsage, localUsage));
-
-        setMessages(remoteMessages.length ? remoteMessages : [INTRO_MESSAGE]);
-      },
-      (error) => {
-        console.warn(getAppErrorMessage(error));
-      }
-    );
-  }, [dayKey, user]);
-
-  useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-  }, [messages, isTyping]);
-
-  // Update intro message when language changes so initial greeting matches selected language
-  useEffect(() => {
-    const introIndex = messages.findIndex((m) => m.id === "intro");
-    if (introIndex === -1) return;
-    const localized =
-      voiceLanguage === "en-US"
-        ? `Hello!\nI'm Saidamin, your Noviq Tutor. My job is not to give generic answers; it is to help raise your exam score for IELTS, SAT, HSK, CEFR, school subjects, or university entrance prep. Send a question or upload files (PDF, DOCX, TXT), and I will connect the answer to your goal, level, and mistakes.`
-        : voiceLanguage === "ru-RU"
-        ? `Здравствуйте!\nЯ Noviq Tutor. Моя задача - не давать общие ответы, а помогать повышать ваш экзаменационный результат. Отправьте вопрос или загрузите файл (PDF, DOCX, TXT), и я свяжу ответ с вашей целью, уровнем и ошибками.`
-        : `Assalomu alaykum!\nMen Saidamin, Noviq Tutorman. Maqsadim oddiy javob berish emas, IELTS, SAT, HSK, CEFR, maktab fanlari yoki universitet imtihonida natijangizni oshirish.\nSavolingizni yozing yoki darslik, konspekt, test, maqola va boshqa akademik hujjatlarni yuklang. Men javobni maqsadingiz, darajangiz va xatolaringizga bog'lab beraman.`;
-
-    setMessages((current) => {
-      const copy = [...current];
-      if (copy[0] && copy[0].id === "intro") {
-        copy[0] = { ...copy[0], content: localized };
-      }
-      return copy;
-    });
-  }, [voiceLanguage]);
+  }, [messages, isTyping, attachedFiles, aiError, historyError, chat.saveError]);
 
   useEffect(() => {
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
@@ -375,23 +213,6 @@ export const Tutor = ({ setActiveTab }: { setActiveTab: (tab: string) => void })
     }
   };
 
-  const persistMessage = async (message: Omit<Message, "id">) => {
-    if (!user || isLocalAi) return;
-
-    const messageId = makeSyncId("tutor-message");
-    await writeDocWithQueue({
-      userId: user.uid,
-      path: ["users", user.uid, "tutorMessages", messageId],
-      data: {
-      role: message.role,
-      content: message.content,
-      attachments: message.attachments || [],
-      createdAt: new Date().toISOString(),
-      },
-      merge: true,
-    });
-  };
-
   const addFiles = async (files: FileList | File[]) => {
     const fileArray = Array.from(files);
     if (!fileArray.length) return;
@@ -399,7 +220,9 @@ export const Tutor = ({ setActiveTab }: { setActiveTab: (tab: string) => void })
     setUploadError("");
 
     try {
-      const processed = await Promise.all(fileArray.map(fileToAttachment));
+      const processed = await Promise.all(
+        fileArray.map(fileToTutorAttachment),
+      );
       setAttachedFiles((current) => [...current, ...processed]);
     } catch (error) {
       setUploadError(error instanceof Error ? error.message : "File upload failed.");
@@ -413,19 +236,18 @@ export const Tutor = ({ setActiveTab }: { setActiveTab: (tab: string) => void })
   const submitPrompt = async (prompt: string, files: TutorAttachment[], retry = false) => {
     if (!user) return;
     if ((!prompt.trim() && files.length === 0) || aiRequestRef.current) return;
-    if (!isLocalAi && !activePro && tutorUsage >= tutorLimit) {
+    if (!retry && !localProvider && !activePro && tutorUsage >= tutorLimit) {
       setUpgradeOpen(true);
       return;
     }
 
     const cleanPrompt = prompt.trim() || "Analyze the uploaded file and explain the most important points.";
     aiRequestRef.current = true;
-    const attachmentMeta = files.map(({ id, name, mimeType, size, previewUrl, text }) => ({
+    const attachmentMeta = files.map(({ id, name, mimeType, size, text }) => ({
       id,
       name,
       mimeType,
       size,
-      previewUrl,
       text: text?.slice(0, 50000),
       contentStored: Boolean(text),
     }));
@@ -437,28 +259,19 @@ export const Tutor = ({ setActiveTab }: { setActiveTab: (tab: string) => void })
     setIsTyping(true);
     setLastRequest({ prompt: cleanPrompt, attachments: files });
 
-    const optimisticUserMessage: Message = {
-      id: `local-${Date.now()}`,
-      role: "user",
-      content: cleanPrompt,
-      attachments: attachmentMeta,
-    };
-    if (!retry) setMessages((current) => [...current.filter((message) => message.id !== "intro"), optimisticUserMessage]);
+    const requestOwner = user.uid;
+    const conversationId = chat.activeId;
+    if (!retry) chat.add({role:"user",content:cleanPrompt,attachments:attachmentMeta},conversationId);
 
     const nextUsage = tutorUsage + 1;
-    if (user && !activePro && !isLocalAi) {
+    if (!retry && user && !activePro && !localProvider) {
       setTutorUsage(nextUsage);
-      saveLocalDailyUsage(user.uid, "aiTutor", nextUsage, dayKey);
+      try { saveLocalDailyUsage(user.uid, "aiTutor", nextUsage, dayKey); }
+      catch { console.warn("Tutor usage cache unavailable; server limits still apply"); }
     }
 
     try {
       trackUserEvent(user.uid, "tutor_message_sent", 0, { tutorMessagesSent: 1 }).catch(() => undefined);
-      if (!retry) persistMessage({
-        role: "user",
-        content: cleanPrompt,
-        attachments: attachmentMeta,
-      }).catch((error) => console.warn(getAppErrorMessage(error)));
-
       const languageInstruction =
         voiceLanguage === "en-US"
           ? "Answer naturally in English."
@@ -480,25 +293,13 @@ export const Tutor = ({ setActiveTab }: { setActiveTab: (tab: string) => void })
         retries: 2,
       });
 
-      const botMsg: Message = {
-        id: `local-assistant-${Date.now()}`,
-        role: "assistant",
-        content: response,
-      };
-      setMessages((current) => [...current, botMsg]);
-      persistMessage({ role: "assistant", content: response }).catch((error) => console.warn(getAppErrorMessage(error)));
+      if(ownerRef.current!==requestOwner)return;
+      chat.add({role:"assistant",content:response},conversationId);
       speak(response);
     } catch (error) {
+      if(ownerRef.current!==requestOwner)return;
       const message = getAppErrorMessage(error);
       setAiError(message);
-      setMessages((current) => [
-        ...current,
-        {
-          id: `error-${Date.now()}`,
-          role: "assistant",
-          content: `I could not complete that request.\n\n${message}`,
-        },
-      ]);
     } finally {
       aiRequestRef.current = false;
       setIsTyping(false);
@@ -513,10 +314,19 @@ export const Tutor = ({ setActiveTab }: { setActiveTab: (tab: string) => void })
       profile?.displayName || profile?.email || "student"
     )}&backgroundColor=ffd5dc,c0aede,d1d4f9&radius=50`;
 
+  const selectConversation = (id: string) => { chat.select(id); setAiError(""); setLastRequest(null); };
+  const newConversation = () => { chat.newChat(); setAiError(""); setLastRequest(null); };
+  const historyProps = { chat, disabled: isTyping, onSelect: selectConversation, onNew: newConversation };
+
   return (
+    <div className="tutor-workspace flex min-h-0 min-w-0 flex-1 overflow-hidden rounded-2xl border border-slate-200 shadow-xl sm:rounded-[1.5rem]">
+      <aside className="hidden w-60 shrink-0 border-r border-slate-200 xl:block" style={{background: "var(--noviq-card)"}}>
+        <TutorChatHistory {...historyProps} />
+      </aside>
+      <TutorHistoryDrawer {...historyProps} open={historyOpen} onClose={closeHistory} />
     <div
       className={cn(
-        "relative flex h-[calc(100vh-140px)] flex-col overflow-hidden rounded-[2rem] border bg-slate-950/70 shadow-3xl backdrop-blur-2xl",
+        "relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-slate-950/70 backdrop-blur-2xl",
         isDragging ? "border-cyan-300/50 ring-4 ring-cyan-300/10" : "border-white/10"
       )}
       onDragOver={(event) => {
@@ -530,10 +340,18 @@ export const Tutor = ({ setActiveTab }: { setActiveTab: (tab: string) => void })
         addFiles(event.dataTransfer.files);
       }}
     >
+      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-slate-200 bg-white px-3 py-2 text-[#111827] xl:hidden">
+        <button type="button" aria-expanded={historyOpen} aria-haspopup="dialog" onClick={() => setHistoryOpen(true)} className="flex min-h-11 items-center gap-2 rounded-xl border border-slate-200 px-3 text-sm font-semibold hover:bg-slate-100 dark:hover:bg-white/10">
+          <MessageSquare size={18} /> {t("tutor.chats")}
+        </button>
+        <button type="button" disabled={isTyping} onClick={newConversation} className="flex min-h-11 items-center gap-2 rounded-xl bg-blue-600 px-3 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50">
+          <SquarePen size={17} /> {t("tutor.newChat")}
+        </button>
+      </div>
       <UpgradeModal
         open={upgradeOpen}
         title="You have used today's free AI tutor messages."
-        message="Upgrade to Pro for unlimited exam assistance, faster responses, and advanced academic intelligence."
+        message="Upgrade to Pro for a higher daily AI allowance and advanced exam assistance."
         onClose={() => setUpgradeOpen(false)}
         onUpgrade={() => {
           setUpgradeOpen(false);
@@ -553,28 +371,36 @@ export const Tutor = ({ setActiveTab }: { setActiveTab: (tab: string) => void })
         }}
       />
 
-      <div className="flex shrink-0 flex-col gap-4 border-b border-white/10 bg-white/[0.02] p-4 sm:flex-row sm:items-center sm:justify-between sm:p-6">
+      <div className="flex shrink-0 flex-col gap-2 border-b border-white/10 bg-white/[0.02] p-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:p-4">
         <div className="flex items-center gap-4">
           <Avatar src={ASSISTANT_AVATAR} alt="Noviq Tutor" size="lg" />
           <div>
-            <h2 className="font-display text-xl font-bold text-white">Saidamin - Noviq Tutor</h2>
-            <p className="text-[10px] font-black uppercase tracking-widest text-cyan-300">
+            <h2 className="font-display text-base font-bold text-white sm:text-xl">Saidamin - Noviq Tutor</h2>
+            <p className="hidden text-[10px] font-black uppercase tracking-widest text-cyan-300 sm:block">
               Goal-aware exam coaching
             </p>
           </div>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-black uppercase tracking-widest text-slate-300">
-            {isLocalAi ? "Local AI · 10 requests/min" : activePro ? "Pro unlimited" : `${remainingTutorMessages} free left`}
+        <div className="flex max-w-full items-center gap-2 overflow-x-auto">
+          <div className="shrink-0 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-black uppercase tracking-widest text-slate-300">
+            {localProvider ? "Saidamin AI" : activePro ? "Pro AI" : `${remainingTutorMessages} free left`}
           </div>
           <select
             value={voiceLanguage}
-            onChange={(event) => setVoiceLanguage(event.target.value as "uz-UZ" | "en-US" | "ru-RU")}
+            onChange={(event) => {
+              const language = event.target.value as TutorLanguage;
+              setLocale(
+                language === "uz-UZ" ? "uz" : language === "ru-RU" ? "ru" : "en",
+              );
+            }}
+            aria-label="Tutor language"
             className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-white outline-none transition hover:border-blue-400 focus:border-blue-400"
           >
-            <option value="uz-UZ">Uzbek</option>
-            <option value="en-US">English</option>
-            <option value="ru-RU">Russian</option>
+            {TUTOR_LANGUAGE_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
           </select>
           <button
             type="button"
@@ -593,21 +419,23 @@ export const Tutor = ({ setActiveTab }: { setActiveTab: (tab: string) => void })
             disabled={!isSpeaking}
             className="rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs font-bold text-red-300 transition hover:bg-red-500/15 disabled:cursor-not-allowed disabled:opacity-40"
           >
-            Stop
+              {t("tutor.stop")}
           </button>
         </div>
       </div>
 
-      <div ref={scrollRef} className="CustomScrollbar flex-1 space-y-6 overflow-y-auto p-4 pb-10 sm:p-6">
+      <div ref={scrollRef} className="CustomScrollbar tutor-messages min-h-0 flex-1 space-y-5 overflow-y-auto p-3 sm:p-5">
+      {historyError && <div role="alert" className="z-10 shrink-0 bg-amber-50 p-3 text-sm text-amber-900 xl:hidden">{historyError} <button onClick={chat.retry} className="underline">Retry history</button></div>}
+      <TutorSaveStatus message={chat.saveError} retry={chat.retrySaving} />
         {messages.map((message) => (
-          <div key={message.id} className={cn("flex gap-4", message.role === "user" && "flex-row-reverse")}>
+          <div key={message.id} className={cn("flex gap-2.5 sm:gap-3", message.role === "user" && "flex-row-reverse")}>
             <Avatar
               src={message.role === "assistant" ? ASSISTANT_AVATAR : userAvatar}
               alt={message.role === "assistant" ? "Saidamin" : "You"}
             />
             <div
               className={cn(
-                "max-w-[88%] rounded-[1.5rem] p-4 text-sm leading-relaxed sm:p-5 sm:text-base",
+                "min-w-0 max-w-[calc(100%-3.25rem)] break-words rounded-2xl p-3 text-sm leading-relaxed sm:p-4 sm:text-base",
                 message.role === "assistant"
                   ? "border border-white/10 bg-white/[0.04] text-slate-200"
                   : "chat-user-message bg-blue-600 text-white shadow-xl shadow-blue-600/20"
@@ -649,15 +477,12 @@ export const Tutor = ({ setActiveTab }: { setActiveTab: (tab: string) => void })
             <Avatar src={ASSISTANT_AVATAR} alt="Noviq Tutor" />
             <div className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3">
               <Loader2 size={16} className="animate-spin text-cyan-300" />
-              <span className="text-[10px] font-black uppercase tracking-widest text-cyan-300">
-                Analyzing context...
+              <span role="status" className="text-[10px] font-black uppercase tracking-widest text-cyan-300">
+                 {t("tutor.analyzing")}
               </span>
             </div>
           </motion.div>
         )}
-      </div>
-
-      <div className="mt-auto border-t border-white/10 bg-white/[0.02] p-4 sm:p-6">
         <AnimatePresence>
           {(attachedFiles.length > 0 || uploadError || aiError) && (
             <motion.div
@@ -703,7 +528,7 @@ export const Tutor = ({ setActiveTab }: { setActiveTab: (tab: string) => void })
               )}
 
               {aiError && lastRequest && (
-                <div className="flex flex-col gap-3 rounded-2xl border border-red-400/20 bg-red-400/10 px-4 py-3 text-sm text-red-100 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex flex-col gap-3 rounded-2xl border border-red-400/20 bg-red-400/10 px-4 py-3 text-sm text-red-800 sm:flex-row sm:items-center sm:justify-between">
                   <span className="font-semibold">{aiError}</span>
                   <button
                     type="button"
@@ -719,29 +544,35 @@ export const Tutor = ({ setActiveTab }: { setActiveTab: (tab: string) => void })
             </motion.div>
           )}
         </AnimatePresence>
+      </div>
 
-        <div className="rounded-[1.5rem] border border-white/10 bg-white/5 p-2 transition-all focus-within:border-blue-500/50 focus-within:bg-white/[0.08]">
+      <div className="mt-auto shrink-0 border-t border-white/10 bg-white/[0.02] p-3 sm:p-4">
+
+
+        <div className="tutor-composer rounded-2xl border border-white/10 bg-white/5 p-2 transition-colors focus-within:border-slate-400">
           <textarea
+            aria-label="Message Noviq Tutor"
             value={input}
             onChange={(event) => setInput(event.target.value)}
             onKeyDown={(event) => {
-              if (event.key === "Enter" && !event.shiftKey) {
+              if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
                 event.preventDefault();
                 handleSend();
               }
             }}
-            placeholder="Ask an exam question, or upload a study file for Noviq Tutor..."
-            className="CustomScrollbar max-h-36 min-h-14 w-full resize-none bg-transparent px-3 py-3 text-sm text-white outline-none placeholder:text-slate-600 sm:text-base"
+            rows={1}
+            placeholder={t("tutor.askPlaceholder")}
+            className="CustomScrollbar max-h-36 min-h-12 w-full resize-none bg-transparent px-3 py-3 text-sm text-white outline-none placeholder:text-slate-600 sm:text-base"
           />
-          <div className="flex flex-col gap-3 border-t border-white/10 px-1 pt-2 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex flex-wrap items-center gap-1">
+          <div className="flex items-center justify-between gap-2 border-t border-white/10 px-1 pt-2">
+            <div className="flex items-center gap-1">
               <button
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
                 className="inline-flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-bold text-slate-400 transition hover:bg-white/5 hover:text-white"
               >
                 <Paperclip size={18} />
-                Upload file
+                 <span className="sr-only sm:not-sr-only">{t("tutor.uploadFile")}</span>
               </button>
               <button
                 type="button"
@@ -749,7 +580,7 @@ export const Tutor = ({ setActiveTab }: { setActiveTab: (tab: string) => void })
                 className="inline-flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-bold text-slate-400 transition hover:bg-white/5 hover:text-white"
               >
                 <ImageIcon size={18} />
-                Upload image
+                 <span className="sr-only sm:not-sr-only">{t("tutor.uploadImage")}</span>
               </button>
               <button
                 type="button"
@@ -760,7 +591,7 @@ export const Tutor = ({ setActiveTab }: { setActiveTab: (tab: string) => void })
                 )}
               >
                 {isListening ? <MicOff size={18} /> : <Mic size={18} />}
-                Voice
+                 <span className="sr-only sm:not-sr-only">{t("tutor.voice")}</span>
               </button>
             </div>
 
@@ -771,14 +602,15 @@ export const Tutor = ({ setActiveTab }: { setActiveTab: (tab: string) => void })
               className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-blue-600 px-5 text-sm font-black text-white shadow-xl shadow-blue-500/20 transition hover:bg-blue-500 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 disabled:active:scale-100"
             >
               {isTyping ? <Loader2 size={18} className="animate-spin" /> : <Send size={18} />}
-              Send
+               {t("tutor.send")}
             </button>
           </div>
         </div>
-        <p className="mt-3 text-center text-[11px] font-medium text-slate-500">
+        <p className="mt-2 hidden text-center text-[11px] font-medium text-slate-500 sm:block">
           Drag and drop academic files anywhere in this chat. Supported: images, PDF, DOCX, TXT and exam prep files.
         </p>
       </div>
+    </div>
     </div>
   );
 };

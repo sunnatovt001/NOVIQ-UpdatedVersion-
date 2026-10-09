@@ -40,6 +40,7 @@ import {
   saveLocalData,
 } from "@/src/lib/localStore";
 import { useBodyScrollLock } from "@/src/lib/useBodyScrollLock";
+import { useDialogFocus } from "@/src/lib/useDialogFocus";
 import { writeDocWithQueue, type SyncStatus } from "@/src/lib/offlineSync";
 
 interface Deck {
@@ -242,6 +243,10 @@ export const Flashcards = () => {
 
   const importInputRef = useRef<HTMLInputElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
+  const deckDialogRef = useRef<HTMLDivElement>(null);
+  const practiceDialogRef = useRef<HTMLDivElement>(null);
+  useDialogFocus(showDeckModal, deckDialogRef, () => setShowDeckModal(false));
+  useDialogFocus(practiceOpen, practiceDialogRef, () => setPracticeOpen(false));
 
   const selectedDeck = useMemo(
     () => decks.find((deck) => deck.id === selectedDeckId) || null,
@@ -372,11 +377,6 @@ export const Flashcards = () => {
     if (!practiceOpen) return undefined;
 
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setPracticeOpen(false);
-        return;
-      }
-
       if (event.key === " ") {
         event.preventDefault();
         setIsFlipped((current) => !current);
@@ -951,7 +951,7 @@ export const Flashcards = () => {
   };
 
   return (
-    <div className="min-h-screen space-y-8 pb-20">
+    <div className="min-h-screen space-y-8 pb-20 text-slate-950 dark:text-white">
       <header className="flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
         <div>
           <div className="mb-3 flex items-center gap-2">
@@ -960,10 +960,10 @@ export const Flashcards = () => {
               Spaced repetition workspace
             </span>
           </div>
-          <h2 className="font-display text-4xl font-bold tracking-tight text-white">
+          <h2 className="font-display text-4xl font-bold tracking-tight text-slate-950 dark:text-white">
             Decks
           </h2>
-          <p className="mt-2 max-w-2xl text-slate-400">
+          <p className="mt-2 max-w-2xl text-slate-600 dark:text-slate-400">
             Create decks, add markdown cards, import/export libraries, and
             review with Easy, Medium, Hard scheduling.
           </p>
@@ -990,7 +990,7 @@ export const Flashcards = () => {
       </header>
 
       {status && (
-        <div className="rounded-2xl border border-white/10 bg-white/[0.05] px-4 py-3 text-sm font-semibold text-slate-200">
+        <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 dark:border-white/10 dark:bg-white/[0.05] dark:text-slate-200">
           {status}
         </div>
       )}
@@ -1002,12 +1002,12 @@ export const Flashcards = () => {
       )}
 
       <div className="grid min-w-0 gap-6 xl:grid-cols-[280px_minmax(0,1fr)] 2xl:grid-cols-[320px_minmax(0,1fr)]">
-        <aside className="glass h-fit border-white/10 bg-white/[0.02] p-4">
+        <aside className="glass h-fit border-slate-200 bg-white p-4 dark:border-white/10 dark:bg-white/[0.02]">
           <div className="mb-4 flex items-center justify-between">
             <h3 className="text-sm font-black uppercase tracking-[0.2em] text-slate-500">
               Your decks
             </h3>
-            <span className="rounded-full bg-white/5 px-2 py-1 text-xs font-bold text-slate-400">
+            <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-bold text-slate-600 dark:bg-white/5 dark:text-slate-400">
               {decks.length}
             </span>
           </div>
@@ -1025,7 +1025,7 @@ export const Flashcards = () => {
                     "w-full rounded-2xl border p-4 text-left transition",
                     selectedDeckId === deck.id
                       ? "border-blue-500/30 bg-blue-600/10"
-                      : "border-transparent hover:border-white/10 hover:bg-white/[0.04]",
+                      : "border-transparent hover:border-slate-200 hover:bg-slate-50 dark:hover:border-white/10 dark:hover:bg-white/[0.04]",
                   )}
                 >
                   <div className="flex items-center gap-3">
@@ -1038,14 +1038,14 @@ export const Flashcards = () => {
                       <Layers size={20} />
                     </div>
                     <div className="min-w-0 flex-1">
-                      <h4 className="truncate font-bold text-white">
+                      <h4 className="truncate font-bold text-slate-950 dark:text-white">
                         {deck.title}
                       </h4>
                       <p className="mt-1 text-xs text-slate-500">
                         {cards.length} cards
                       </p>
                     </div>
-                    <span className="rounded-full bg-white/5 px-2 py-1 text-xs font-black text-cyan-300">
+                    <span className="rounded-full bg-blue-50 px-2 py-1 text-xs font-black text-blue-700 dark:bg-white/5 dark:text-cyan-300">
                       {due}
                     </span>
                   </div>
@@ -1055,9 +1055,9 @@ export const Flashcards = () => {
           </div>
 
           {decks.length === 0 && (
-            <div className="rounded-3xl border border-dashed border-white/15 p-8 text-center">
+            <div className="rounded-3xl border border-dashed border-slate-300 p-8 text-center dark:border-white/15">
               <Layers className="mx-auto text-slate-600" size={32} />
-              <p className="mt-4 text-sm font-bold text-white">No decks yet</p>
+              <p className="mt-4 text-sm font-bold text-slate-950 dark:text-white">No decks yet</p>
               <p className="mt-2 text-xs leading-5 text-slate-500">
                 No decks yet. Generate flashcards from your notes.
               </p>
@@ -1065,10 +1065,10 @@ export const Flashcards = () => {
           )}
         </aside>
 
-        <main className="glass min-h-[680px] overflow-hidden border-white/10 bg-white/[0.02]">
+        <main className="glass min-h-[680px] overflow-hidden border-slate-200 bg-white dark:border-white/10 dark:bg-white/[0.02]">
           {selectedDeck ? (
             <>
-              <section className="border-b border-white/10 p-5 sm:p-6">
+              <section className="border-b border-slate-200 p-5 dark:border-white/10 sm:p-6">
                 <div className="flex min-w-0 flex-col gap-5 2xl:flex-row 2xl:items-start 2xl:justify-between">
                   <div>
                     <div className="flex items-center gap-3">
@@ -1081,7 +1081,7 @@ export const Flashcards = () => {
                         <Layers size={22} />
                       </div>
                       <div>
-                        <h3 className="text-2xl font-bold text-white">
+                        <h3 className="text-2xl font-bold text-slate-950 dark:text-white">
                           {selectedDeck.title}
                         </h3>
                         <p className="mt-1 text-sm text-slate-500">
@@ -1090,24 +1090,24 @@ export const Flashcards = () => {
                       </div>
                     </div>
                     <div className="mt-5 grid grid-cols-3 gap-3">
-                      <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
-                        <p className="text-2xl font-black text-white">
+                      <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-white/10 dark:bg-white/[0.04]">
+                        <p className="text-2xl font-black text-slate-950 dark:text-white">
                           {selectedCards.length}
                         </p>
                         <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">
                           Cards
                         </p>
                       </div>
-                      <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
-                        <p className="text-2xl font-black text-cyan-300">
+                      <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-white/10 dark:bg-white/[0.04]">
+                        <p className="text-2xl font-black text-blue-700 dark:text-cyan-300">
                           {dueCards.length}
                         </p>
                         <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">
                           Due
                         </p>
                       </div>
-                      <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
-                        <p className="text-2xl font-black text-emerald-300">
+                      <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-white/10 dark:bg-white/[0.04]">
+                        <p className="text-2xl font-black text-emerald-700 dark:text-emerald-300">
                           {
                             selectedCards.filter((card) => card.repetition > 0)
                               .length
@@ -1125,7 +1125,7 @@ export const Flashcards = () => {
                       type="button"
                       onClick={() => startPractice(false)}
                       disabled={selectedCards.length === 0}
-                      className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-bold text-white transition hover:bg-white/10 disabled:opacity-40"
+                      className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-800 transition hover:bg-slate-50 disabled:opacity-40 dark:border-white/10 dark:bg-white/5 dark:text-white dark:hover:bg-white/10"
                     >
                       Practice all
                     </button>
@@ -1133,7 +1133,7 @@ export const Flashcards = () => {
                       type="button"
                       onClick={handleExportCards}
                       disabled={selectedCards.length === 0}
-                      className="inline-flex items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-bold text-white transition hover:bg-white/10 disabled:opacity-40"
+                      className="inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-800 transition hover:bg-slate-50 disabled:opacity-40 dark:border-white/10 dark:bg-white/5 dark:text-white dark:hover:bg-white/10"
                     >
                       <Download size={16} />
                       Export
@@ -1141,7 +1141,7 @@ export const Flashcards = () => {
                     <button
                       type="button"
                       onClick={() => importInputRef.current?.click()}
-                      className="inline-flex items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-bold text-white transition hover:bg-white/10"
+                      className="inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-800 transition hover:bg-slate-50 dark:border-white/10 dark:bg-white/5 dark:text-white dark:hover:bg-white/10"
                     >
                       <FileUp size={16} />
                       Import
@@ -1171,7 +1171,7 @@ export const Flashcards = () => {
               </section>
 
               <section className="grid min-w-0 gap-6 p-5 sm:p-6 2xl:grid-cols-2">
-                <div className="rounded-3xl border border-white/10 bg-slate-950/45 p-4">
+                <div className="rounded-3xl border border-slate-200 bg-slate-50 p-4 dark:border-white/10 dark:bg-slate-950/45">
                   <div className="mb-4 flex items-center justify-between">
                     <h4 className="text-sm font-black uppercase tracking-[0.2em] text-slate-500">
                       {editingCardId ? "Edit card" : "One-click add"}
@@ -1180,7 +1180,7 @@ export const Flashcards = () => {
                       <button
                         type="button"
                         onClick={resetCardForm}
-                        className="text-xs font-bold text-slate-500 hover:text-white"
+                        className="text-xs font-bold text-slate-500 hover:text-slate-950 dark:hover:text-white"
                       >
                         Cancel
                       </button>
@@ -1197,7 +1197,7 @@ export const Flashcards = () => {
                         }))
                       }
                       placeholder="Front: question, prompt, term..."
-                      className="CustomScrollbar min-h-28 w-full resize-none rounded-2xl border border-white/10 bg-white/[0.04] p-4 text-sm text-white outline-none transition focus:border-blue-500/50"
+                      className="CustomScrollbar min-h-28 w-full resize-none rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-950 outline-none transition focus:border-blue-500 dark:border-white/10 dark:bg-white/[0.04] dark:text-white"
                     />
                     <textarea
                       value={cardForm.back}
@@ -1208,11 +1208,11 @@ export const Flashcards = () => {
                         }))
                       }
                       placeholder="Back: answer, explanation, markdown..."
-                      className="CustomScrollbar min-h-32 w-full resize-none rounded-2xl border border-white/10 bg-white/[0.04] p-4 text-sm text-white outline-none transition focus:border-blue-500/50"
+                      className="CustomScrollbar min-h-32 w-full resize-none rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-950 outline-none transition focus:border-blue-500 dark:border-white/10 dark:bg-white/[0.04] dark:text-white"
                     />
 
                     {(cardForm.imageUrl || cardImageFile) && (
-                      <div className="overflow-hidden rounded-2xl border border-white/10">
+                      <div className="overflow-hidden rounded-2xl border border-slate-200 dark:border-white/10">
                         <img
                           src={
                             cardImageFile
@@ -1229,7 +1229,7 @@ export const Flashcards = () => {
                       <button
                         type="button"
                         onClick={() => imageInputRef.current?.click()}
-                        className="inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-xs font-bold text-slate-300 transition hover:bg-white/10"
+                        className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-xs font-bold text-slate-700 transition hover:bg-slate-100 dark:border-white/10 dark:bg-white/5 dark:text-slate-300 dark:hover:bg-white/10"
                       >
                         <ImageIcon size={16} />
                         Add image
@@ -1237,7 +1237,7 @@ export const Flashcards = () => {
                       <button
                         type="button"
                         onClick={() => setPreviewMode((current) => !current)}
-                        className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-xs font-bold text-slate-300 transition hover:bg-white/10"
+                        className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-xs font-bold text-slate-700 transition hover:bg-slate-100 dark:border-white/10 dark:bg-white/5 dark:text-slate-300 dark:hover:bg-white/10"
                       >
                         Markdown preview
                       </button>
@@ -1255,7 +1255,7 @@ export const Flashcards = () => {
                     />
 
                     {previewMode && (
-                      <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4 text-sm leading-6 text-slate-200">
+                      <div className="rounded-2xl border border-slate-200 bg-white p-4 text-sm leading-6 text-slate-700 dark:border-white/10 dark:bg-white/[0.04] dark:text-slate-200">
                         <p className="mb-3 text-[10px] font-black uppercase tracking-widest text-slate-500">
                           Back preview
                         </p>
@@ -1296,7 +1296,7 @@ export const Flashcards = () => {
                         value={search}
                         onChange={(event) => setSearch(event.target.value)}
                         placeholder="Search cards..."
-                        className="w-full rounded-2xl border border-white/10 bg-white/[0.04] py-3 pl-11 pr-4 text-sm text-white outline-none transition focus:border-blue-500/50"
+                        className="w-full rounded-2xl border border-slate-200 bg-white py-3 pl-11 pr-4 text-sm text-slate-950 outline-none transition focus:border-blue-500 dark:border-white/10 dark:bg-white/[0.04] dark:text-white"
                       />
                     </div>
                     <button
@@ -1306,7 +1306,7 @@ export const Flashcards = () => {
                         "inline-flex items-center justify-center gap-2 rounded-2xl border px-4 py-3 text-sm font-bold transition",
                         shuffleMode
                           ? "border-blue-500/25 bg-blue-600/10 text-blue-300"
-                          : "border-white/10 bg-white/5 text-slate-400",
+                          : "border-slate-200 bg-white text-slate-600 dark:border-white/10 dark:bg-white/5 dark:text-slate-400",
                       )}
                     >
                       <Shuffle size={16} />
@@ -1318,7 +1318,7 @@ export const Flashcards = () => {
                     {filteredCards.map((card) => (
                       <article
                         key={card.id}
-                        className="rounded-3xl border border-white/10 bg-white/[0.04] p-4"
+                        className="rounded-3xl border border-slate-200 bg-slate-50 p-4 dark:border-white/10 dark:bg-white/[0.04]"
                       >
                         <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
                           {card.imageUrl && (
@@ -1330,20 +1330,20 @@ export const Flashcards = () => {
                             />
                           )}
                           <div className="min-w-0 flex-1">
-                            <div className="text-sm font-bold leading-6 text-white">
+                            <div className="text-sm font-bold leading-6 text-slate-950 dark:text-white">
                               <ReactMarkdown>{card.front}</ReactMarkdown>
                             </div>
-                            <div className="mt-3 border-t border-white/10 pt-3 text-sm leading-6 text-slate-400">
+                            <div className="mt-3 border-t border-slate-200 pt-3 text-sm leading-6 text-slate-600 dark:border-white/10 dark:text-slate-400">
                               <ReactMarkdown>{card.back}</ReactMarkdown>
                             </div>
                             <div className="mt-4 flex flex-wrap gap-2 text-[10px] font-bold uppercase tracking-widest text-slate-500">
-                              <span className="rounded-full bg-white/5 px-2 py-1">
+                              <span className="rounded-full bg-white px-2 py-1 dark:bg-white/5">
                                 Due {new Date(card.dueAt).toLocaleDateString()}
                               </span>
-                              <span className="rounded-full bg-white/5 px-2 py-1">
+                              <span className="rounded-full bg-white px-2 py-1 dark:bg-white/5">
                                 Interval {card.interval}d
                               </span>
-                              <span className="rounded-full bg-white/5 px-2 py-1">
+                              <span className="rounded-full bg-white px-2 py-1 dark:bg-white/5">
                                 Reviews {card.reviewCount || 0}
                               </span>
                             </div>
@@ -1352,7 +1352,7 @@ export const Flashcards = () => {
                             <button
                               type="button"
                               onClick={() => handleEditCard(card)}
-                              className="rounded-xl border border-white/10 bg-white/5 p-2 text-slate-400 transition hover:text-white"
+                              className="rounded-xl border border-slate-200 bg-white p-2 text-slate-500 transition hover:text-slate-950 dark:border-white/10 dark:bg-white/5 dark:text-slate-400 dark:hover:text-white"
                               aria-label="Edit card"
                             >
                               <Edit3 size={16} />
@@ -1371,9 +1371,9 @@ export const Flashcards = () => {
                     ))}
 
                     {filteredCards.length === 0 && (
-                      <div className="rounded-3xl border border-dashed border-white/15 p-10 text-center">
+                      <div className="rounded-3xl border border-dashed border-slate-300 p-10 text-center dark:border-white/15">
                         <Plus className="mx-auto text-slate-600" size={34} />
-                        <p className="mt-4 font-bold text-white">
+                        <p className="mt-4 font-bold text-slate-950 dark:text-white">
                           No cards found
                         </p>
                         <p className="mt-2 text-sm text-slate-500">
@@ -1388,7 +1388,7 @@ export const Flashcards = () => {
           ) : (
             <div className="flex min-h-[640px] flex-col items-center justify-center p-8 text-center">
               <Layers size={42} className="text-slate-600" />
-              <h3 className="mt-5 text-2xl font-bold text-white">
+              <h3 className="mt-5 text-2xl font-bold text-slate-950 dark:text-white">
                 Create your first deck
               </h3>
               <p className="mt-2 max-w-sm text-sm leading-6 text-slate-500">
@@ -1418,16 +1418,21 @@ export const Flashcards = () => {
           >
             <div className="noviq-modal-positioner noviq-modal-md">
               <motion.div
+                ref={deckDialogRef}
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="create-deck-title"
+                tabIndex={-1}
                 initial={{ opacity: 0, scale: 0.96 }}
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.96 }}
                 transition={{ duration: 0.2, ease: "easeOut" }}
-                className="noviq-modal-panel CustomScrollbar glass border-white/10 bg-[#0B1020] p-5 sm:p-8"
+                className="noviq-modal-panel CustomScrollbar glass border-slate-200 bg-white p-5 dark:border-white/10 dark:bg-[#0B1020] sm:p-8"
               >
                 <div className="mb-6 flex items-start justify-between">
                   <div>
                     <p className="section-label">New Deck</p>
-                    <h2 className="text-3xl font-bold text-white">
+                    <h2 id="create-deck-title" className="text-3xl font-bold text-slate-950 dark:text-white">
                       Create deck
                     </h2>
                   </div>
@@ -1435,7 +1440,7 @@ export const Flashcards = () => {
                     type="button"
                     onClick={() => setShowDeckModal(false)}
                     aria-label="Close deck form"
-                    className="rounded-xl bg-white/5 p-2 text-slate-400 hover:text-white"
+                    className="rounded-xl bg-slate-100 p-2 text-slate-500 hover:text-slate-950 dark:bg-white/5 dark:text-slate-400 dark:hover:text-white"
                   >
                     <X size={18} />
                   </button>
@@ -1487,6 +1492,11 @@ export const Flashcards = () => {
       <AnimatePresence>
         {practiceOpen && currentPracticeCard && (
           <motion.div
+            ref={practiceDialogRef}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Flashcard review session"
+            tabIndex={-1}
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}

@@ -94,6 +94,7 @@ const isValidTelegramChatId = (value) =>
 const isNotificationPreferenceEnabled = (user, key) =>
   user?.settings?.notifications?.[key] !== false;
 
+const TUTOR_MODEL = "gemini-3.5-flash-lite";
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || "";
 const GEMINI_MODELS = [
   ...String(process.env.GEMINI_MODELS || "gemini-3.8-flash").split(",").map((model) => model.trim()).filter((model) => /^[a-zA-Z0-9._-]+$/.test(model)),
@@ -107,14 +108,15 @@ const normalizeGeminiContents = (contents) => {
   throw new HttpsError("invalid-argument", "Invalid AI contents.");
 };
 
-const normalizeGeminiConfig = (config) => {
+const normalizeGeminiConfig = (config, tutor = false) => {
   if (!config || typeof config !== "object") return {};
   const { systemInstruction, responseMimeType, responseSchema } = config;
   return {
     systemInstruction:
       typeof systemInstruction === "string" ? systemInstruction : undefined,
     generationConfig: {
-      maxOutputTokens: 8192,
+      maxOutputTokens: tutor ? 4096 : 8192,
+      ...(tutor ? { thinkingConfig: { thinkingLevel: "minimal" } } : {}),
       ...(typeof responseMimeType === "string" ? { responseMimeType } : {}),
       ...(responseSchema && typeof responseSchema === "object"
         ? { responseSchema }
@@ -126,17 +128,18 @@ const normalizeGeminiConfig = (config) => {
 const extractGeminiText = (payload) => {
   const parts = payload?.candidates?.[0]?.content?.parts || [];
   return parts
+    .filter((part) => !part.thought)
     .map((part) => part.text || "")
     .join("")
     .trim();
 };
 
-const callGeminiRest = async ({ model, contents, config }) => {
+const callGeminiRest = async ({ model, contents, config, feature }) => {
   if (!GEMINI_API_KEY) {
     throw new HttpsError("failed-precondition", "MISSING_GEMINI_API_KEY");
   }
 
-  const normalizedConfig = normalizeGeminiConfig(config);
+  const normalizedConfig = normalizeGeminiConfig(config, feature === "tutor");
   const body = {
     contents: normalizeGeminiContents(contents),
     ...(normalizedConfig.systemInstruction
@@ -1367,11 +1370,11 @@ exports.generateAiResponse = onCall(
     let lastError;
     const startedAt = Date.now();
 
-    for (const model of GEMINI_MODELS) {
-      for (let attempt = 0; attempt <= retries; attempt += 1) {
+    for (const model of feature === "tutor" ? [TUTOR_MODEL] : GEMINI_MODELS) {
+      for (let attempt = 0; attempt <= (feature === "tutor" ? 1 : retries); attempt += 1) {
         if (Date.now() - startedAt > 85000) break;
         try {
-          const text = await callGeminiRest({ model, contents, config });
+          const text = await callGeminiRest({ model, contents, config, feature });
           return { text, model };
         } catch (error) {
           lastError = error;
@@ -1381,6 +1384,7 @@ exports.generateAiResponse = onCall(
             attempt,
             error: getAiFailureDetails(error).reason,
           });
+          if (feature === "tutor" && !/Gemini HTTP (500|502|503|504)/.test(String(error?.message))) throwAiFailure(error);
           if (["AI_KEY_OR_PERMISSION", "AI_QUOTA_OR_RATE_LIMIT", "AI_REQUEST_REJECTED", "AI_UNSUPPORTED_FILE"].includes(getAiFailureDetails(error).reason)) throwAiFailure(error);
         }
       }
@@ -1645,3 +1649,4 @@ Object.assign(
   exports,
   require("./community")({ db, onCall, HttpsError, FieldValue }),
 );
+Object.assign(exports,require('./metrics')({db,onCall,onDocumentCreated,onDocumentWritten:require('firebase-functions/v2/firestore').onDocumentWritten,HttpsError,FieldValue,logger,database:FIRESTORE_DATABASE}).api);

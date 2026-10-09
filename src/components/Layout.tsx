@@ -24,6 +24,7 @@ import {
   Sun,
   ChevronsLeft,
   ChevronsRight,
+  Languages,
 } from "lucide-react";
 import { cn } from "@/src/lib/utils";
 import { motion, AnimatePresence } from "motion/react";
@@ -45,12 +46,14 @@ import { db } from "@/src/lib/firebase";
 import { getAppErrorMessage } from "@/src/lib/errors";
 import { calculateLevelName, getLocalDayKey } from "@/src/lib/progress";
 import { FloatingTutor } from "@/src/components/FloatingTutor";
+import { SyncRecovery } from "@/src/components/SyncRecovery";
 import type { UserProfile } from "@/src/types";
 import {
   getNotificationPreferences,
   shouldShowPreferenceNotification,
   type NotificationPreferenceKey,
 } from "@/src/lib/preferences";
+import { useLocale, type AppLocale } from "@/src/contexts/LocaleContext";
 
 interface SidebarItemProps {
   id: string;
@@ -68,7 +71,7 @@ const SidebarItem = ({ id, icon, label, active, collapsed, onClick }: SidebarIte
     aria-label={label}
     title={collapsed ? label : undefined}
     className={cn(
-      "w-full flex items-center gap-4 px-5 py-3.5 rounded-2xl transition-all duration-300 group relative border",
+      "group relative flex w-full items-center gap-4 rounded-2xl border px-5 py-3.5 transition-[background-color,border-color,color] duration-150",
       collapsed && "lg:mx-auto lg:h-[3.25rem] lg:w-[3.25rem] lg:justify-center lg:gap-0 lg:px-0 lg:py-0",
       active 
         ? "border-[#3F7D58]/25 bg-[#F0FDF4] text-[#2F6145]" 
@@ -76,13 +79,13 @@ const SidebarItem = ({ id, icon, label, active, collapsed, onClick }: SidebarIte
     )}
   >
     <div className={cn(
-      "transition-all duration-300", 
+      "transition-transform duration-150", 
       active ? "scale-110 text-[#3F7D58]" : "group-hover:scale-110 group-hover:text-[#3F7D58]"
     )}>
       {icon}
     </div>
     <span className={cn(
-      "font-bold text-sm tracking-tight transition-all duration-300",
+      "text-sm font-bold tracking-tight transition-transform duration-150",
       active ? "translate-x-1" : "group-hover:translate-x-1",
       collapsed && "lg:hidden"
     )}>
@@ -158,12 +161,15 @@ const nextMomentumMilestone = (streak: number) => {
   return Math.ceil((streak + 1) / 30) * 30;
 };
 
-const getMomentumState = (profile?: UserProfile | null) => {
+const getMomentumState = (
+  profile: UserProfile | null | undefined,
+  translate: ReturnType<typeof useLocale>["t"],
+) => {
   if (!profile) {
     return {
-      message: "Loading today's study rhythm.",
+      message: translate("shell.momentumLoading"),
       progress: 0,
-      caption: "Today",
+      caption: translate("shell.today"),
     };
   }
 
@@ -176,32 +182,34 @@ const getMomentumState = (profile?: UserProfile | null) => {
 
   if (completedToday) {
     return {
-      message: streak > 1 ? `Today locked in. ${streak}-day streak is active.` : "Today locked in. Your streak has started.",
+      message: streak > 1
+        ? translate("shell.momentumLocked", { streak })
+        : translate("shell.momentumStarted"),
       progress: Math.max(progress, 18),
-      caption: `${Math.max(streak, 1)} / ${milestone} days`,
+      caption: translate("shell.daysProgress", { current: Math.max(streak, 1), target: milestone }),
     };
   }
 
   if (streak > 0 && (daysSinceStudy === 0 || daysSinceStudy === 1)) {
     return {
-      message: `Protect your ${streak}-day streak with one focused session today.`,
+      message: translate("shell.protectStreak", { streak }),
       progress,
-      caption: `${streak} / ${milestone} days`,
+      caption: translate("shell.daysProgress", { current: streak, target: milestone }),
     };
   }
 
   if (daysSinceStudy !== null && daysSinceStudy > 1) {
     return {
-      message: "New day, clean start. Rebuild momentum with one short session.",
+      message: translate("shell.cleanStart"),
       progress: 0,
-      caption: "0 / 7 days",
+      caption: translate("shell.daysProgress", { current: 0, target: 7 }),
     };
   }
 
   return {
-    message: "Start today's first focused session to build a real streak.",
+    message: translate("shell.startFirstSession"),
     progress: 0,
-    caption: "0 / 7 days",
+    caption: translate("shell.daysProgress", { current: 0, target: 7 }),
   };
 };
 
@@ -211,6 +219,7 @@ export const Layout: React.FC<{
   setActiveTab: (tab: string) => void;
 }> = ({ children, activeTab, setActiveTab }) => {
   const { profile, signOut, user } = useAuth();
+  const { locale, setLocale, t } = useLocale();
   const presenceError = useCommunityPresence(user?.uid);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => {
@@ -220,7 +229,10 @@ export const Layout: React.FC<{
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const pushedNotificationIdsRef = useRef<Set<string>>(new Set());
-  const momentum = useMemo(() => getMomentumState(profile), [profile?.lastActive, profile?.lastStudySessionAt, profile?.streak]);
+  const momentum = useMemo(
+    () => getMomentumState(profile, t),
+    [profile, t],
+  );
   const [theme, setTheme] = useState<AppTheme>(() => {
     if (typeof window === "undefined") return "light";
     return window.localStorage.getItem("noviq-theme") === "dark" ? "dark" : "light";
@@ -240,18 +252,20 @@ export const Layout: React.FC<{
   );
   const isDarkTheme = theme === "dark";
 
-  const menuItems = [
-    { id: "dashboard", label: "Dashboard", icon: <LayoutDashboard size={20} /> },
-    { id: "planner", label: "AI Planner", icon: <Calendar size={20} /> },
-    { id: "tutor", label: "Noviq Tutor", icon: <MessageSquare size={20} /> },
-    { id: "notes", label: "Notebook", icon: <BookOpen size={20} /> },
-    { id: "flashcards", label: "Decks", icon: <Layers size={20} /> },
-    { id: "focus", label: "Focus Zone", icon: <Timer size={20} /> },
-    { id: "community", label: "Nexus", icon: <Users size={20} /> },
-    { id: "analytics", label: "Metrics", icon: <BarChart3 size={20} /> },
-    { id: "pricing", label: "Noviq Pro", icon: <CreditCard size={20} /> },
-    ...(profile?.isAdmin ? [{ id: "admin", label: "Admin", icon: <Users size={20} /> }] : []),
-    { id: "profile", label: "Profile", icon: <User size={20} /> },
+  const primaryMenuItems = [
+    { id: "dashboard", label: t("nav.today"), shortLabel: t("nav.today"), icon: <LayoutDashboard size={20} /> },
+    { id: "planner", label: t("nav.planner"), shortLabel: t("nav.plan"), icon: <Calendar size={20} /> },
+    { id: "tutor", label: t("nav.tutor"), shortLabel: t("nav.tutor"), icon: <MessageSquare size={20} /> },
+    { id: "notes", label: t("nav.library"), shortLabel: t("nav.library"), icon: <BookOpen size={20} /> },
+    { id: "focus", label: t("nav.focus"), shortLabel: t("nav.focus"), icon: <Timer size={20} /> },
+  ];
+  const secondaryMenuItems = [
+    { id: "flashcards", label: t("nav.flashcards"), icon: <Layers size={20} /> },
+    { id: "community", label: t("nav.community"), icon: <Users size={20} /> },
+    { id: "analytics", label: t("nav.progress"), icon: <BarChart3 size={20} /> },
+    { id: "pricing", label: t("nav.plans"), icon: <CreditCard size={20} /> },
+    ...(profile?.isAdmin ? [{ id: "admin", label: t("nav.admin"), icon: <Users size={20} /> }] : []),
+    { id: "profile", label: t("nav.profile"), icon: <User size={20} /> },
   ];
 
   useEffect(() => {
@@ -452,7 +466,9 @@ export const Layout: React.FC<{
       type="button"
       onClick={toggleTheme}
       className="theme-toggle flex h-12 w-12 items-center justify-center rounded-[1.1rem] border border-[#E5E7EB] bg-white text-[#6B7280] transition-all hover:border-[#3F7D58] hover:bg-[#F0FDF4] hover:text-[#111827]"
-      aria-label={isDarkTheme ? "Switch to light theme" : "Switch to dark theme"}
+      aria-label={
+        isDarkTheme ? t("shell.switchLight") : t("shell.switchDark")
+      }
       title={isDarkTheme ? "Light theme" : "Dark theme"}
     >
       {isDarkTheme ? <Sun size={18} /> : <Moon size={18} />}
@@ -470,7 +486,7 @@ export const Layout: React.FC<{
         >
           <div className="flex items-center justify-between border-b border-[#E5E7EB] p-4">
             <div>
-              <h3 className="text-sm font-black uppercase tracking-[0.2em] text-[#111827]">Notifications</h3>
+              <h3 className="text-sm font-black uppercase tracking-[0.2em] text-[#111827]">{t("shell.notifications")}</h3>
               <p className="mt-1 text-xs text-[#6B7280]">{unreadCount} unread updates</p>
             </div>
             <button
@@ -512,7 +528,7 @@ export const Layout: React.FC<{
             {visibleNotifications.length === 0 && (
               <div className="p-8 text-center">
                 <Bell className="mx-auto text-[#9CA3AF]" size={28} />
-                <p className="mt-3 text-sm font-bold text-[#111827]">No notifications yet</p>
+                <p className="mt-3 text-sm font-bold text-[#111827]">{t("shell.noNotifications")}</p>
               </div>
             )}
           </div>
@@ -523,7 +539,7 @@ export const Layout: React.FC<{
               onClick={requestPushPermission}
               className="w-full rounded-2xl border border-[#E5E7EB] bg-white px-4 py-3 text-sm font-bold text-[#111827] transition hover:border-[#3F7D58] hover:bg-[#F0FDF4]"
             >
-              {pushPermission === "granted" ? "Push notifications enabled" : "Enable browser push notifications"}
+              {pushPermission === "granted" ? t("shell.pushEnabled") : t("shell.enablePush")}
             </button>
           </div>
         </motion.div>
@@ -536,7 +552,7 @@ export const Layout: React.FC<{
       <div className="app-bg pointer-events-none fixed inset-0 -z-20 overflow-hidden" />
 
       {/* Mobile Top Nav */}
-      <header className="app-mobile-header fixed left-0 right-0 top-0 z-[100] flex h-20 items-center justify-between border-b border-[#E5E7EB] bg-white/90 px-5 backdrop-blur-xl lg:hidden">
+      <header className="app-mobile-header fixed left-0 right-0 top-0 z-[100] flex h-[calc(5rem+env(safe-area-inset-top))] items-center justify-between border-b border-[#E5E7EB] bg-white/90 px-5 pt-[env(safe-area-inset-top)] backdrop-blur-xl lg:hidden">
         <div className="flex items-center gap-3">
           <img
             src={LOGO_SRC}
@@ -550,7 +566,7 @@ export const Layout: React.FC<{
           <button 
             onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
             className="app-icon-button flex h-12 w-12 items-center justify-center rounded-2xl border border-[#E5E7EB] bg-white text-[#111827] transition-transform active:scale-90"
-            aria-label={isMobileMenuOpen ? "Close menu" : "Open menu"}
+            aria-label={isMobileMenuOpen ? t("shell.closeMenu") : t("shell.openMenu")}
           >
             {isMobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
           </button>
@@ -559,7 +575,7 @@ export const Layout: React.FC<{
 
       {/* Sidebar - Desktop & Tablet */}
       <aside className={cn(
-        "app-sidebar fixed inset-y-0 left-0 z-[110] flex w-72 flex-col border-r border-[#E5E7EB] bg-[#FAFAF8]/96 shadow-[12px_0_40px_rgba(17,24,39,0.04)] backdrop-blur-xl transition-[width,transform] duration-500 lg:relative lg:translate-x-0",
+        "app-sidebar fixed inset-y-0 left-0 z-[130] flex w-72 flex-col border-r border-[#E5E7EB] bg-[#FAFAF8]/96 shadow-[12px_0_40px_rgba(17,24,39,0.04)] transition-transform duration-200 ease-out lg:relative lg:z-[110] lg:translate-x-0",
         isSidebarCollapsed ? "lg:w-24" : "lg:w-72",
         isMobileMenuOpen ? "translate-x-0" : "-translate-x-full"
       )}>
@@ -592,22 +608,48 @@ export const Layout: React.FC<{
             type="button"
             onClick={() => setIsSidebarCollapsed((current) => !current)}
             className="app-sidebar-collapse hidden h-10 w-10 items-center justify-center rounded-2xl border border-[#E5E7EB] bg-white text-[#6B7280] transition hover:border-[#3F7D58] hover:bg-[#F0FDF4] hover:text-[#111827] lg:flex"
-            aria-label={isSidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-            title={isSidebarCollapsed ? "Expand" : "Collapse"}
+            aria-label={
+              isSidebarCollapsed
+                ? t("shell.expandSidebar")
+                : t("shell.collapseSidebar")
+            }
+            title={
+              isSidebarCollapsed
+                ? t("shell.expandSidebar")
+                : t("shell.collapseSidebar")
+            }
           >
             {isSidebarCollapsed ? <ChevronsRight size={17} /> : <ChevronsLeft size={17} />}
           </button>
           
-          <button className="text-[#6B7280] lg:hidden" onClick={() => setIsMobileMenuOpen(false)} aria-label="Close menu">
+          <button className="text-[#6B7280] lg:hidden" onClick={() => setIsMobileMenuOpen(false)} aria-label={t("shell.closeMenu")}>
             <X size={24} />
           </button>
         </div>
 
-        <nav className={cn(
+        <nav aria-label={t("shell.workspaceNavigation")} className={cn(
           "CustomScrollbar flex-1 space-y-2 overflow-y-auto px-6 py-4",
           isSidebarCollapsed && "lg:px-4"
         )}>
-          {menuItems.map((item) => (
+          {!isSidebarCollapsed && (
+            <p className="px-5 pb-1 text-xs font-semibold text-[#9CA3AF]">{t("shell.workspace")}</p>
+          )}
+          {primaryMenuItems.map((item) => (
+            <SidebarItem
+              key={item.id}
+              id={item.id}
+              label={item.label}
+              icon={item.icon}
+              active={activeTab === item.id}
+              collapsed={isSidebarCollapsed}
+              onClick={handleTabChange}
+            />
+          ))}
+          <div className="my-4 border-t border-[#E5E7EB]" />
+          {!isSidebarCollapsed && (
+            <p className="px-5 pb-1 text-xs font-semibold text-[#9CA3AF]">{t("shell.more")}</p>
+          )}
+          {secondaryMenuItems.map((item) => (
             <SidebarItem
               key={item.id}
               id={item.id}
@@ -620,17 +662,17 @@ export const Layout: React.FC<{
           ))}
         </nav>
 
-        <div className={cn("space-y-6 p-8", isSidebarCollapsed && "lg:px-4 lg:pb-6")}>
+        <div className={cn("space-y-3 p-8", isSidebarCollapsed && "lg:px-4 lg:pb-6")}>
           <div
             className={cn(
-              "app-sidebar-card group rounded-2xl border border-[#E5E7EB] bg-white p-5 transition-all hover:border-[#3F7D58]/30",
+              "app-sidebar-card group hidden rounded-2xl border border-[#E5E7EB] bg-white p-5 transition-[border-color] duration-150 hover:border-[#3F7D58]/30 lg:block",
               isSidebarCollapsed && "lg:flex lg:h-[3.25rem] lg:w-[3.25rem] lg:items-center lg:justify-center lg:p-0"
             )}
             title={isSidebarCollapsed ? momentum.message : undefined}
           >
             <div className={cn("flex items-center gap-2 mb-3", isSidebarCollapsed && "lg:mb-0 lg:gap-0")}>
                <Sparkles className="text-[#3F7D58]" size={14} />
-               <p className={cn("text-[10px] font-black uppercase tracking-[0.3em] text-[#3F7D58]", isSidebarCollapsed && "lg:hidden")}>Momentum</p>
+               <p className={cn("text-[10px] font-black uppercase tracking-[0.3em] text-[#3F7D58]", isSidebarCollapsed && "lg:hidden")}>{t("shell.momentum")}</p>
             </div>
             <p className={cn("text-xs font-medium leading-relaxed text-[#6B7280] transition-colors group-hover:text-[#111827]", isSidebarCollapsed && "lg:hidden")}>{momentum.message}</p>
             <p className={cn("mt-3 text-[10px] font-black uppercase tracking-[0.22em] text-[#94A3B8]", isSidebarCollapsed && "lg:hidden")}>{momentum.caption}</p>
@@ -639,31 +681,53 @@ export const Layout: React.FC<{
             </div>
           </div>
           
+          <label
+            className={cn(
+              "flex min-h-12 items-center gap-3 rounded-2xl border border-[#E5E7EB] bg-white px-4 text-[#6B7280]",
+              isSidebarCollapsed && "lg:hidden",
+            )}
+          >
+            <Languages size={17} aria-hidden="true" />
+            <span className="sr-only">{t("shell.language")}</span>
+            <select
+              aria-label={t("shell.language")}
+              value={locale}
+              onChange={(event) =>
+                setLocale(event.target.value as AppLocale)
+              }
+              className="min-h-11 min-w-0 flex-1 bg-transparent text-sm font-bold outline-none"
+            >
+              <option value="en">English</option>
+              <option value="uz">O‘zbekcha</option>
+              <option value="ru">Русский</option>
+            </select>
+          </label>
+
           <button 
             onClick={signOut}
             className={cn(
               "flex w-full items-center gap-4 rounded-2xl border border-[#E5E7EB] bg-white px-5 py-4 text-[10px] font-black uppercase tracking-[0.22em] text-[#6B7280] transition-all hover:border-red-200 hover:bg-red-50 hover:text-red-600",
               isSidebarCollapsed && "lg:mx-auto lg:h-[3.25rem] lg:w-[3.25rem] lg:justify-center lg:gap-0 lg:px-0 lg:py-0"
             )}
-            aria-label="Sign out"
-            title={isSidebarCollapsed ? "Sign out" : undefined}
+            aria-label={t("shell.signOut")}
+            title={isSidebarCollapsed ? t("shell.signOut") : undefined}
           >
             <LogOut size={16} />
-            <span className={cn(isSidebarCollapsed && "lg:hidden")}>Sign Out</span>
+            <span className={cn(isSidebarCollapsed && "lg:hidden")}>{t("shell.signOut")}</span>
           </button>
         </div>
       </aside>
 
       {/* Main Content */}
-      <main className="relative flex-1 flex flex-col overflow-hidden pt-20 lg:pt-0">
+      <main className="relative flex flex-1 flex-col overflow-hidden pb-[calc(4.75rem+env(safe-area-inset-bottom))] pt-[calc(5rem+env(safe-area-inset-top))] lg:pb-0 lg:pt-0">
         <div className="app-main-surface pointer-events-none absolute inset-0 rounded-[2rem] border border-[#E5E7EB] bg-white/45" />
-        <header className="relative z-[300] hidden h-28 shrink-0 items-center justify-between px-10 xl:px-14 lg:flex">
+        {activeTab !== "dashboard" && <header className={cn("relative z-[300] hidden shrink-0 items-center justify-between lg:flex", activeTab === "tutor" ? "h-20 px-5" : "h-28 px-10 xl:px-14")}>
           <div className="space-y-1">
             <h2 className="group flex items-center gap-3 text-3xl font-bold leading-none tracking-tight text-[#111827]">
-               Hi, {firstName}
+                {t("shell.greeting")}, {firstName}
             </h2>
             <p className="text-sm font-medium tracking-wide text-[#6B7280]">
-               Exam engine is <span className="font-bold text-[#3F7D58]">ready</span>
+               {t("shell.readyPrefix")} <span className="font-bold text-[#3F7D58]">{t("shell.ready")}</span>
             </p>
           </div>
           
@@ -674,7 +738,7 @@ export const Layout: React.FC<{
                   <p className="text-xl font-bold leading-none text-[#111827]">{(profile?.xp || 0).toLocaleString()}</p>
                </div>
                <div className="text-right">
-                  <p className="mb-1 text-[9px] font-black uppercase tracking-widest text-[#9CA3AF]">Current Streak</p>
+                   <p className="mb-1 text-[9px] font-black uppercase tracking-widest text-[#9CA3AF]">{t("shell.currentStreak")}</p>
                   <div className="flex items-center gap-2 justify-end">
                      <Flame size={16} className="text-orange-500 animate-pulse" />
                      <p className="text-xl font-bold text-orange-500 leading-none">{profile?.streak || 0}</p>
@@ -690,7 +754,7 @@ export const Layout: React.FC<{
                  <button
                    onClick={() => setNotificationsOpen((current) => !current)}
                    className="relative flex h-12 w-12 items-center justify-center rounded-[1.1rem] border border-[#E5E7EB] bg-white text-[#6B7280] transition-all hover:border-[#3F7D58] hover:bg-[#F0FDF4] hover:text-[#111827]"
-                   aria-label="Notifications"
+                    aria-label={t("shell.notifications")}
                  >
                    <Bell size={18} />
                    {unreadCount > 0 && (
@@ -711,22 +775,20 @@ export const Layout: React.FC<{
                </button>
             </div>
           </div>
-        </header>
+        </header>}
 
-        <div data-page-scroll className="CustomScrollbar relative min-h-0 min-w-0 flex-1 overflow-y-auto p-5 md:p-8 lg:px-10 xl:px-14">
+        <div data-page-scroll className={cn("CustomScrollbar relative min-h-0 min-w-0 flex-1", activeTab === "tutor" || activeTab === "notes" ? "flex flex-col overflow-hidden p-2 sm:p-3 lg:p-4" : "overflow-y-auto p-5 md:p-8 lg:px-10 xl:px-14")}>
           <div className="app-content-surface pointer-events-none absolute inset-0 rounded-[2rem] border border-[#E5E7EB] bg-white/35" />
-          <AnimatePresence mode="wait">
+          <AnimatePresence mode="wait" initial={false}>
             <motion.div
               key={activeTab}
-              initial={{ opacity: 0, y: 18, filter: 'blur(6px)' }}
-              animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
-              exit={{ opacity: 0, y: -18, filter: 'blur(6px)' }}
-              transition={{ 
-                duration: 0.5, 
-                ease: [0.22, 1, 0.36, 1] 
-              }}
-              className="max-w-[1600px] mx-auto relative z-10"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.14, ease: "easeOut" }}
+              className={cn("mx-auto relative z-10 w-full", activeTab === "tutor" || activeTab === "notes" ? "flex min-h-0 flex-1 flex-col" : "max-w-[1600px]")}
             >
+              <SyncRecovery />
               {children}
             </motion.div>
           </AnimatePresence>
@@ -742,10 +804,31 @@ export const Layout: React.FC<{
             className="fixed inset-0 z-[105] bg-[#111827]/35 backdrop-blur-sm lg:hidden"
           />
         )}
-        {isReadOnlyAudit && <p role="status" className="audit-mode-notice relative z-10 shrink-0 px-4 py-1 text-xs">{isLocalAi ? "Local AI enabled · cloud writes, chat history saving and telemetry disabled" : "Read-only audit · cloud writes and telemetry disabled"}</p>}
+        {isReadOnlyAudit && <p role="status" className="audit-mode-notice relative z-10 shrink-0 px-4 py-1 text-xs">{isLocalAi ? t("audit.localAi") : t("audit.readOnly")}</p>}
         {activeTab === "community" && presenceError && <p role="status" className="relative z-10 shrink-0 bg-amber-50 px-4 py-1 text-xs text-amber-900 dark:bg-amber-900 dark:text-amber-100">{presenceError}</p>}
         {activeTab !== "tutor" && <FloatingTutor activeTab={activeTab} />}
       </main>
+
+      <nav aria-label="Primary navigation" className="mobile-bottom-nav fixed inset-x-0 bottom-0 z-[120] grid grid-cols-5 border-t px-2 pt-2 lg:hidden">
+        {primaryMenuItems.map((item) => {
+          const active = activeTab === item.id;
+          return (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => handleTabChange(item.id)}
+              aria-current={active ? "page" : undefined}
+              className={cn(
+                "flex min-h-14 min-w-0 flex-col items-center justify-center gap-1 rounded-xl px-1 text-[11px] font-semibold transition-[background-color,color,transform] duration-150 active:scale-[0.97]",
+                active ? "bg-[#F0FDF4] text-[#2F6145]" : "text-[#6B7280]",
+              )}
+            >
+              <span aria-hidden="true">{item.icon}</span>
+              <span className="max-w-full truncate">{item.shortLabel}</span>
+            </button>
+          );
+        })}
+      </nav>
     </div>
   );
 };

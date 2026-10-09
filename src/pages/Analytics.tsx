@@ -11,22 +11,26 @@ import { calculateLevelName, getLocalDayKey } from "@/src/lib/progress";
 import { useUserActivityMetrics } from "@/src/lib/useUserActivityMetrics";
 import type { StudySession } from "@/src/types";
 import { recordDate } from "@/src/lib/recordDate";
+import { useLocale, type AppLocale } from "@/src/contexts/LocaleContext";
+import { formatAnalyticsCopy, getAnalyticsCopy } from "@/src/features/analytics/analyticsCopy";
 
-const COLORS = ["#3b82f6", "#a855f7", "#ec4899", "#f97316"];
+const COLORS = ["#315EFB", "#5B7CFA", "#829AF8", "#A8B9F5"];
 const DAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
 type AnalyticsStudySession = StudySession & { id: string };
 
 const timestampToIso = (value: unknown) => recordDate(value)?.toISOString() || "";
 
-const formatDuration = (seconds: number) => {
+const formatDuration = (seconds: number, locale: AppLocale = "en") => {
   const minutes = Math.round(Math.max(0, seconds) / 60);
+  const hourUnit = locale === "uz" ? "soat" : locale === "ru" ? "ч" : "h";
+  const minuteUnit = locale === "uz" ? "daq" : locale === "ru" ? "мин" : "m";
   if (minutes >= 60) {
     const hours = Math.floor(minutes / 60);
     const remainingMinutes = minutes % 60;
-    return remainingMinutes ? `${hours}h ${remainingMinutes}m` : `${hours}h`;
+    return remainingMinutes ? `${hours} ${hourUnit} ${remainingMinutes} ${minuteUnit}` : `${hours} ${hourUnit}`;
   }
-  return `${minutes}m`;
+  return `${minutes} ${minuteUnit}`;
 };
 
 const getWeekStart = (weekOffset = 0) => {
@@ -90,15 +94,17 @@ const buildCategoryData = (sessions: AnalyticsStudySession[]) => {
 };
 
 const heatmapClass = (intensity: number) => {
-  if (intensity >= 4) return "bg-blue-500 shadow-[0_0_14px_rgba(59,130,246,0.45)]";
-  if (intensity === 3) return "bg-blue-500/70 shadow-[0_0_10px_rgba(59,130,246,0.25)]";
-  if (intensity === 2) return "bg-cyan-500/45";
-  if (intensity === 1) return "bg-emerald-500/25";
-  return "bg-white/5";
+  if (intensity >= 4) return "bg-blue-600";
+  if (intensity === 3) return "bg-blue-500/75";
+  if (intensity === 2) return "bg-blue-400/55";
+  if (intensity === 1) return "bg-blue-300/35 dark:bg-blue-400/25";
+  return "bg-slate-100 dark:bg-white/5";
 };
 
 export const Analytics = ({ setActiveTab }: { setActiveTab?: (t: string) => void }) => {
   const { user, profile } = useAuth();
+  const { locale } = useLocale();
+  const copy = useMemo(() => getAnalyticsCopy(locale), [locale]);
   const activityMetrics = useUserActivityMetrics(user?.uid);
   const [studySessions, setStudySessions] = useState<AnalyticsStudySession[]>([]);
   const [weekOffset, setWeekOffset] = useState(0);
@@ -141,14 +147,17 @@ export const Analytics = ({ setActiveTab }: { setActiveTab?: (t: string) => void
       },
       (error) => {
         console.warn("Analytics session listener failed", error);
-        setSessionError("Study history could not be loaded. Check your connection and retry.");
+        setSessionError(copy.historyError);
         setSessionLoading(false);
       }
     );
-  }, [user?.uid, sessionRevision]);
+  }, [copy.historyError, user?.uid, sessionRevision]);
 
   const dailyTargetMinutes = profile?.dailyTargetMinutes || 30;
-  const weeklyData = useMemo(() => buildWeeklyData(studySessions, weekOffset), [studySessions, weekOffset]);
+  const weeklyData = useMemo(
+    () => buildWeeklyData(studySessions, weekOffset).map((day, index) => ({ ...day, name: copy.dayLabels[index] })),
+    [copy.dayLabels, studySessions, weekOffset],
+  );
   const heatmapData = useMemo(() => buildHeatmapData(studySessions, dailyTargetMinutes), [studySessions, dailyTargetMinutes]);
   const categoryData = useMemo(() => buildCategoryData(studySessions), [studySessions]);
   const totalStudySeconds = useMemo(
@@ -167,92 +176,91 @@ export const Analytics = ({ setActiveTab }: { setActiveTab?: (t: string) => void
 
   const metricCards = [
     {
-      label: "Recent Study Time",
-      value: formatDuration(totalStudySeconds),
-      trend: `${studySessions.length} completed · last 300 records`,
+      label: copy.recentStudyTime,
+      value: formatDuration(totalStudySeconds, locale),
+      trend: formatAnalyticsCopy(copy.completedRecords, { count: studySessions.length }),
       icon: Clock,
-      color: "text-blue-400",
-      bg: "bg-blue-500/5",
+      color: "text-blue-700 dark:text-blue-300",
+      bg: "bg-blue-50 dark:bg-blue-500/10",
     },
     {
-      label: weekOffset === 0 ? "This Week" : "Last Week",
-      value: formatDuration(weeklyStudySeconds),
-      trend: `${weeklyGoalProgress}% goal`,
+      label: weekOffset === 0 ? copy.thisWeek : copy.lastWeek,
+      value: formatDuration(weeklyStudySeconds, locale),
+      trend: formatAnalyticsCopy(copy.goalPercent, { percent: weeklyGoalProgress }),
       icon: Zap,
-      color: "text-purple-400",
-      bg: "bg-purple-500/5",
+      color: "text-blue-700 dark:text-blue-300",
+      bg: "bg-blue-50 dark:bg-blue-500/10",
     },
     {
-      label: "Current Streak",
-      value: `${activityMetrics.streak} day${activityMetrics.streak === 1 ? "" : "s"}`,
-      trend: `${activeDaysThisWeek}/7 active`,
+      label: copy.currentStreak,
+      value: formatAnalyticsCopy(copy.streakDays, { count: activityMetrics.streak, unit: activityMetrics.streak === 1 ? copy.day : copy.days }),
+      trend: formatAnalyticsCopy(copy.activeDays, { count: activeDaysThisWeek }),
       icon: Brain,
-      color: "text-pink-400",
-      bg: "bg-pink-500/5",
+      color: "text-blue-700 dark:text-blue-300",
+      bg: "bg-blue-50 dark:bg-blue-500/10",
     },
     {
-      label: "Card review coverage",
-      value: reviewCoverage === null ? "Not measured" : `${reviewCoverage}%`,
-      trend: "Reviewed at least once",
+      label: copy.reviewCoverage,
+      value: reviewCoverage === null ? copy.notMeasured : `${reviewCoverage}%`,
+      trend: copy.reviewedOnce,
       icon: Calendar,
-      color: "text-orange-400",
-      bg: "bg-orange-500/5",
+      color: "text-blue-700 dark:text-blue-300",
+      bg: "bg-blue-50 dark:bg-blue-500/10",
     },
   ];
 
   return (
-    <div className="space-y-12 pb-24 px-2 sm:px-0">
-      {sessionLoading && <p role="status">Loading study history…</p>}
-      {(sessionError || activityMetrics.error) && <div role="alert" className="rounded-xl border border-amber-300 p-4 text-sm text-amber-700">{sessionError || activityMetrics.error} <button type="button" className="ml-2 underline" onClick={() => { setSessionRevision((current) => current + 1); activityMetrics.retry(); }}>Retry</button></div>}
+    <div className="space-y-8 px-0 pb-24 text-slate-950 dark:text-slate-50 sm:space-y-10">
+      {sessionLoading && <p role="status" className="text-sm font-medium text-slate-600 dark:text-slate-300">{copy.loading}</p>}
+      {(sessionError || activityMetrics.error) && <div role="alert" className="rounded-2xl border border-amber-300 bg-amber-50 p-4 text-sm font-medium text-amber-900 dark:border-amber-500/30 dark:bg-amber-950/30 dark:text-amber-100">{sessionError || activityMetrics.error} <button type="button" className="ml-2 min-h-11 font-bold underline underline-offset-4" onClick={() => { setSessionRevision((current) => current + 1); activityMetrics.retry(); }}>{copy.retry}</button></div>}
       <header className="flex flex-col xl:flex-row xl:items-center justify-between gap-8">
         <div className="space-y-3">
           <div className="flex items-center gap-2">
              <div className="w-10 h-1 bg-blue-500 rounded-full" />
-             <span className="text-[10px] font-black text-blue-400 uppercase tracking-[0.4em]">Performance Metrics</span>
+             <span className="text-[10px] font-black uppercase tracking-[0.3em] text-blue-700 dark:text-blue-300">{copy.performanceMetrics}</span>
           </div>
-          <h2 className="text-4xl sm:text-5xl font-bold font-display tracking-tight text-white leading-tight">Advanced Analytics</h2>
-          <p className="text-slate-400 text-base sm:text-lg">Detailed insight into your cognitive load and productivity trends.</p>
+          <h2 className="text-balance font-display text-4xl font-bold leading-tight tracking-tight text-slate-950 dark:text-white sm:text-5xl">{copy.title}</h2>
+          <p className="max-w-2xl text-base leading-7 text-slate-600 dark:text-slate-300 sm:text-lg">{copy.subtitle}</p>
         </div>
         <div className="flex flex-wrap gap-4">
-           <div className="flex-1 min-w-[140px] glass px-6 py-4 border-white/5 bg-white/[0.02]">
-              <p className="text-[9px] font-black text-slate-600 uppercase tracking-widest mb-1">Total XP</p>
-              <p className="text-xl sm:text-2xl font-bold text-white leading-none">{totalXp.toLocaleString()}</p>
+           <div className="min-w-[140px] flex-1 rounded-2xl border border-slate-200 bg-white px-6 py-4 dark:border-slate-700 dark:bg-slate-900">
+              <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400">{copy.totalXp}</p>
+              <p className="text-xl font-bold leading-none text-slate-950 [font-variant-numeric:tabular-nums] dark:text-white sm:text-2xl">{totalXp.toLocaleString(locale)}</p>
            </div>
-           <div className="flex-1 min-w-[140px] glass px-6 py-4 border-white/5 bg-white/[0.02]">
-              <p className="text-[9px] font-black text-slate-600 uppercase tracking-widest mb-1">{levelName}</p>
-              <p className="text-xl sm:text-2xl font-bold text-white leading-none">{activityMetrics.level}</p>
+           <div className="min-w-[140px] flex-1 rounded-2xl border border-slate-200 bg-white px-6 py-4 dark:border-slate-700 dark:bg-slate-900">
+              <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400">{levelName}</p>
+              <p className="text-xl font-bold leading-none text-slate-950 [font-variant-numeric:tabular-nums] dark:text-white sm:text-2xl">{activityMetrics.level}</p>
            </div>
         </div>
       </header>
 
       {/* Hero Stats */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {metricCards.map((s) => (
-          <div key={s.label} className="glass p-6 sm:p-8 border-white/5 relative overflow-hidden group hover:scale-[1.02] transition-all">
-            <div className={cn("absolute -right-4 -top-4 w-24 h-24 rounded-full blur-3xl opacity-10", s.bg)} />
-            <div className="flex items-center justify-between mb-6 sm:mb-8 relative z-10">
+          <article key={s.label} className="relative overflow-hidden rounded-3xl border border-slate-200 bg-white p-6 dark:border-slate-700 dark:bg-slate-900">
+            <div className="relative z-10 mb-6 flex items-start justify-between gap-3">
               <div className={cn("p-2.5 sm:p-3 rounded-xl sm:rounded-2xl", s.bg, s.color)}>
-                <s.icon size={20} />
+                <s.icon size={20} aria-hidden="true" />
               </div>
-              <span className="text-[9px] font-black text-emerald-400 uppercase tracking-widest bg-emerald-500/10 px-3 py-1 rounded-full border border-emerald-500/20">{s.trend}</span>
+              <span className="max-w-[11rem] text-right text-[10px] font-bold leading-4 text-slate-500 dark:text-slate-400">{s.trend}</span>
             </div>
-            <p className="text-[9px] font-black text-slate-500 uppercase tracking-[0.2em] mb-2">{s.label}</p>
-            <p className="text-2xl sm:text-3xl font-bold font-display text-white">{s.value}</p>
-          </div>
+            <p className="mb-2 text-[10px] font-black uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">{s.label}</p>
+            <p className="font-display text-2xl font-bold text-slate-950 [font-variant-numeric:tabular-nums] dark:text-white sm:text-3xl">{s.value}</p>
+          </article>
         ))}
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
         {/* Activity Chart */}
-        <section className="glass p-6 sm:p-10 xl:col-span-2 border-white/5 bg-white/[0.01]">
+        <section className="rounded-3xl border border-slate-200 bg-white p-6 dark:border-slate-700 dark:bg-slate-900 sm:p-8 xl:col-span-2">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6 mb-8 sm:mb-10">
             <div className="space-y-1">
-               <h3 className="text-xl sm:text-2xl font-bold text-white tracking-tight">Productivity Flow</h3>
-               <p className="text-[10px] sm:text-xs font-medium text-slate-500">Daily study hours, Monday–Sunday · {weekOffset === 0 ? "current week" : "last week"}</p>
+               <h3 className="text-xl font-bold tracking-tight text-slate-950 dark:text-white sm:text-2xl">{copy.productivityFlow}</h3>
+               <p className="text-xs font-medium leading-5 text-slate-500 dark:text-slate-400">{formatAnalyticsCopy(copy.dailyStudyHours, { week: weekOffset === 0 ? copy.currentWeek.toLowerCase() : copy.lastWeek.toLowerCase() })}</p>
             </div>
-            <select aria-label="Study week" value={weekOffset} onChange={(event) => setWeekOffset(Number(event.target.value))} className="bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-slate-400 self-start sm:self-center">
-               <option value={0}>Current Week</option>
-               <option value={-1}>Last Week</option>
+            <select aria-label={copy.productivityFlow} value={weekOffset} onChange={(event) => setWeekOffset(Number(event.target.value))} className="min-h-11 self-start rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 outline-none focus:border-blue-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 sm:self-center">
+               <option value={0}>{copy.currentWeek}</option>
+               <option value={-1}>{copy.lastWeek}</option>
             </select>
           </div>
           
@@ -265,24 +273,25 @@ export const Analytics = ({ setActiveTab }: { setActiveTab?: (t: string) => void
                     <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
                   </linearGradient>
                 </defs>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#ffffff05" />
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--noviq-border)" />
                 <XAxis 
                   dataKey="name" 
                   axisLine={false} 
                   tickLine={false} 
-                  tick={{ fill: "#64748b", fontSize: 11, fontWeight: 700 }}
+                  tick={{ fill: "var(--noviq-muted)", fontSize: 11, fontWeight: 700 }}
                   dy={15}
                 />
                 <YAxis 
                   axisLine={false} 
                   tickLine={false} 
-                  tick={{ fill: "#64748b", fontSize: 11, fontWeight: 700 }}
+                  tick={{ fill: "var(--noviq-muted)", fontSize: 11, fontWeight: 700 }}
                   dx={-10}
                 />
                 <Tooltip 
-                  contentStyle={{ backgroundColor: "#0f172a", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "20px", padding: "16px", boxShadow: '0 20px 40px rgba(0,0,0,0.5)' }}
-                  itemStyle={{ color: "#3b82f6", fontWeight: "bold" }}
-                  cursor={{ stroke: '#3b82f6', strokeWidth: 2 }}
+                  formatter={(value) => [`${value}`, copy.hours]}
+                  contentStyle={{ backgroundColor: "var(--noviq-card)", color: "var(--noviq-text)", border: "1px solid var(--noviq-border)", borderRadius: "16px", padding: "12px", boxShadow: "0 12px 28px rgba(15,23,42,0.14)" }}
+                  itemStyle={{ color: "var(--noviq-accent)", fontWeight: "bold" }}
+                  cursor={{ stroke: 'var(--noviq-accent)', strokeWidth: 2 }}
                 />
                 <Area 
                   type="monotone" 
@@ -298,32 +307,34 @@ export const Analytics = ({ setActiveTab }: { setActiveTab?: (t: string) => void
         </section>
 
         {/* Consistency Heatmap */}
-        <section className="glass p-10 border-white/5 flex flex-col bg-white/[0.01]">
+        <section className="flex flex-col rounded-3xl border border-slate-200 bg-white p-6 dark:border-slate-700 dark:bg-slate-900 sm:p-8">
           <div className="space-y-1 mb-10">
-             <h3 className="text-2xl font-bold text-white tracking-tight">Consistency</h3>
-             <p className="text-xs font-medium text-slate-500">Daily study minutes · last 35 calendar days</p>
+             <h3 className="text-2xl font-bold tracking-tight text-slate-950 dark:text-white">{copy.consistency}</h3>
+             <p className="text-xs font-medium leading-5 text-slate-500 dark:text-slate-400">{copy.dailyStudyMinutes}</p>
           </div>
           
           <div className="flex-1 grid grid-cols-7 gap-2.5">
              {heatmapData.map((item) => (
                <div 
                  key={item.dayKey} 
-                 title={`${item.minutes} min`}
+                 title={formatAnalyticsCopy(copy.minutesShort, { count: item.minutes })}
+                 role="img"
+                 aria-label={`${item.dayKey}: ${formatAnalyticsCopy(copy.minutesShort, { count: item.minutes })}`}
                  className={cn(
-                   "aspect-square rounded-lg border border-white/5 transition-all hover:scale-110",
+                   "aspect-square rounded-lg border border-slate-200 dark:border-white/5",
                    heatmapClass(item.intensity)
                  )} 
                />
              ))}
           </div>
 
-          <div className="mt-8 pt-8 border-t border-white/5 flex items-center justify-between">
+          <div className="mt-8 flex items-center justify-between border-t border-slate-200 pt-8 dark:border-slate-700">
              <div className="flex flex-col">
-                <span className="text-[10px] font-black text-slate-600 uppercase tracking-widest mb-1">{weekOffset === 0 ? "Current week goal" : "Last week · current goal reference"}</span>
-                <span className="text-lg font-bold text-white leading-none">{formatDuration(weeklyStudySeconds)} / {formatDuration(weeklyTargetSeconds)}</span>
+                <span className="mb-1 text-[10px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400">{weekOffset === 0 ? copy.currentWeekGoal : copy.lastWeekGoal}</span>
+                <span className="text-lg font-bold leading-none text-slate-950 [font-variant-numeric:tabular-nums] dark:text-white">{formatDuration(weeklyStudySeconds, locale)} / {formatDuration(weeklyTargetSeconds, locale)}</span>
              </div>
              <div className="w-14 h-14 rounded-full border-4 border-blue-600/20 border-t-blue-600 flex items-center justify-center">
-                <span className="text-xs font-black text-blue-400">{weeklyGoalProgress}%</span>
+                <span className="text-xs font-black text-blue-700 dark:text-blue-300">{weeklyGoalProgress}%</span>
              </div>
           </div>
         </section>
@@ -331,9 +342,9 @@ export const Analytics = ({ setActiveTab }: { setActiveTab?: (t: string) => void
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         {/* Category Breakdown */}
-        <section className="glass p-10 border-white/5 bg-white/[0.01]">
-          <h3 className="text-2xl font-bold text-white tracking-tight mb-2">Study Focus</h3>
-          <p className="mb-8 text-xs text-slate-500">Share of study minutes · last 300 session records</p>
+        <section className="rounded-3xl border border-slate-200 bg-white p-6 dark:border-slate-700 dark:bg-slate-900 sm:p-8">
+          <h3 className="mb-2 text-2xl font-bold tracking-tight text-slate-950 dark:text-white">{copy.studyFocus}</h3>
+          <p className="mb-8 text-xs leading-5 text-slate-500 dark:text-slate-400">{copy.focusShare}</p>
           {categoryData.length ? (
             <div className="flex flex-col md:flex-row items-center gap-12">
               <div className="w-full h-[220px]">
@@ -350,9 +361,7 @@ export const Analytics = ({ setActiveTab }: { setActiveTab?: (t: string) => void
                         <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} stroke="none" />
                       ))}
                     </Pie>
-                    <Tooltip 
-                      contentStyle={{ backgroundColor: "#0f172a", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "16px" }}
-                    />
+                    <Tooltip contentStyle={{ backgroundColor: "var(--noviq-card)", color: "var(--noviq-text)", border: "1px solid var(--noviq-border)", borderRadius: "16px" }} />
                   </PieChart>
                 </MeasuredChart>
               </div>
@@ -361,43 +370,41 @@ export const Analytics = ({ setActiveTab }: { setActiveTab?: (t: string) => void
                   <div key={item.name} className="flex items-center justify-between group">
                     <div className="flex items-center gap-4">
                       <div className="w-3 h-3 rounded-full shadow-lg" style={{ backgroundColor: COLORS[i % COLORS.length], boxShadow: `0 0 10px ${COLORS[i % COLORS.length]}44` }} />
-                      <span className="text-sm font-bold text-slate-400 group-hover:text-white transition-colors">{item.name}</span>
+                      <span className="text-sm font-bold text-slate-600 dark:text-slate-300">{item.name}</span>
                     </div>
-                    <span className="text-sm font-black font-display text-white">{Math.round((item.value / Math.max(totalCategoryMinutes, 1)) * 100)}%</span>
+                    <span className="font-display text-sm font-black text-slate-950 [font-variant-numeric:tabular-nums] dark:text-white">{Math.round((item.value / Math.max(totalCategoryMinutes, 1)) * 100)}%</span>
                   </div>
                 ))}
               </div>
             </div>
           ) : (
-            <div className="flex min-h-[220px] items-center justify-center rounded-3xl border border-dashed border-white/10 bg-white/[0.02] text-sm font-bold text-slate-500">
-              No study sessions yet.
+            <div className="flex min-h-[220px] items-center justify-center rounded-3xl border border-dashed border-slate-300 bg-slate-50 p-6 text-center text-sm font-bold text-slate-600 dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-300">
+              {copy.noSessions}
             </div>
           )}
         </section>
 
         {/* Prediction Card */}
-        <section className="glass p-10 border-orange-500/20 bg-gradient-to-tr from-orange-600/5 to-transparent relative group overflow-hidden">
-          <div className="absolute -right-10 -bottom-10 w-40 h-40 bg-orange-600/10 rounded-full blur-3xl opacity-50 group-hover:scale-150 transition-all duration-700" />
-          
+        <section className="relative overflow-hidden rounded-3xl border border-blue-200 bg-blue-50 p-6 dark:border-blue-500/25 dark:bg-blue-500/10 sm:p-8">
           <div className="flex items-center gap-3 mb-8">
-             <ShieldCheck className="text-orange-400" size={24} />
-             <h3 className="text-2xl font-bold text-orange-400 tracking-tight">Recall guidance</h3>
+             <ShieldCheck className="text-blue-700 dark:text-blue-300" size={24} aria-hidden="true" />
+             <h3 className="text-2xl font-bold tracking-tight text-slate-950 dark:text-white">{copy.recallGuidance}</h3>
           </div>
           
           <div className="space-y-3 mb-10">
-            <p className="text-slate-300 leading-relaxed font-medium">
+            <p className="font-medium leading-7 text-slate-700 dark:text-slate-200">
               {latestSession
-                ? `Your latest ${Math.round(latestSession.duration / 60)} minute ${latestSession.subject} session is ready for review. Convert it into recall cards before starting the next topic.`
-                : "No completed study session is available to guide your next review."}
+                ? formatAnalyticsCopy(copy.latestGuidance, { minutes: Math.round(latestSession.duration / 60), subject: latestSession.subject })
+                : copy.noGuidance}
             </p>
-            <p className="text-xs text-slate-500 font-bold">Retention and confidence are not measured without repeated recall assessments.</p>
+            <p className="text-xs font-bold leading-5 text-slate-500 dark:text-slate-400">{copy.retentionNote}</p>
           </div>
 
           <button 
             onClick={() => setActiveTab?.('flashcards')}
-            className="w-full py-5 rounded-[2rem] bg-orange-700 hover:bg-orange-800 text-white font-black uppercase tracking-[0.2em] text-xs transition-all shadow-2xl shadow-orange-500/30 active:scale-95 text-center"
+            className="min-h-12 w-full rounded-2xl bg-blue-600 px-5 py-3 text-center text-sm font-black text-white transition-colors hover:bg-blue-700 active:bg-blue-800"
           >
-             {activityMetrics.dueCards > 0 ? `Review ${activityMetrics.dueCards} due cards` : "Open Decks"}
+             {activityMetrics.dueCards > 0 ? formatAnalyticsCopy(copy.reviewDue, { count: activityMetrics.dueCards }) : copy.openDecks}
           </button>
         </section>
       </div>

@@ -11,9 +11,12 @@ export default defineConfig(({mode}) => ({
     name: 'noviq-local-ai',
     apply: 'serve',
     configureServer(server) {
-      if (mode !== 'local-ai') return;
+      if (mode === 'audit' || mode === 'test') return;
       const env = loadEnv(mode, path.resolve(__dirname, 'functions'), 'GEMINI_');
-      server.middlewares.use(require('./server/local-ai.cjs')({ apiKey: env.GEMINI_API_KEY, firebaseApiKey: firebaseConfig.apiKey }));
+      // A Vite restart must load the current middleware, not a cached model setup.
+      const middlewarePath = require.resolve('./server/local-ai.cjs');
+      delete require.cache[middlewarePath];
+      server.middlewares.use(require(middlewarePath)({ apiKey: env.GEMINI_API_KEY, firebaseApiKey: firebaseConfig.apiKey, models: (env.GEMINI_LOCAL_MODELS || "gemini-3.5-flash,gemini-3.1-flash-lite").split(",").map(value=>value.trim()) }));
     },
   }],
   resolve: {
@@ -25,6 +28,9 @@ export default defineConfig(({mode}) => ({
     // HMR is disabled in AI Studio via DISABLE_HMR env var.
     // Keep file watching quiet during agent edits.
     hmr: process.env.DISABLE_HMR !== 'true',
+    // Reports and private backups are not application source. Writing them must
+    // not reload a student's page during an AI request.
+    watch: { ignored: ['**/artifacts/**', '**/backups/**', '**/PRODUCTION_AUDIT.md'] },
   },
   build: {
     rollupOptions: {

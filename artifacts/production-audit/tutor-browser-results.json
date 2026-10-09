@@ -1,0 +1,17 @@
+{
+  "passed": [
+    "Latest messages load first and older history beyond 80 remains accessible",
+    "Desktop history is visible, searchable, and highlights the active conversation",
+    "Chat sidebar works in light and dark themes",
+    "New conversations stay separate and survive reload without duplicate messages",
+    "Tutor dedicates at least 420px to desktop reading and composer has no blue frame",
+    "Failed AI answer retries without duplicate question or artificial assistant response",
+    "Saidamin accepts custom questions at desktop/390/320px and short heights; focus and Escape work",
+    "Mobile chat drawer fits 390/320px, searches, restores focus, traps Tab and closes on selection/Escape/desktop resize",
+    "Widget and full Tutor share the saved conversation and keep the composer visible",
+    "Compact sync status preserves pending data and late acknowledgment clears stale warnings without reload",
+    "A different account cannot see the previous account device conversation",
+    "Corrupt device history is preserved and does not block an AI answer"
+  ],
+  "productionWrites": 0
+}

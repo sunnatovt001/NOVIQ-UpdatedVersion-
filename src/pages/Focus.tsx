@@ -2,8 +2,9 @@ import {
   loadLocalData,
   trySaveLocalData as saveLocalData,
 } from "@/src/lib/localStore";
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import { useAuth } from "@/src/contexts/AuthContext";
+import { useLocale } from "@/src/contexts/LocaleContext";
 import { trackUserEvent } from "@/src/lib/analytics";
 import {
   calculateSessionXp,
@@ -32,6 +33,7 @@ import {
 } from "lucide-react";
 import { formatTime, cn } from "@/src/lib/utils";
 import { withFocusTimeout } from "@/src/lib/focusTimer";
+import { formatFocusCopy, getFocusCopy } from "@/src/features/focus/focusCopy";
 
 const FOCUS_DURATION = 25 * 60;
 const SHORT_BREAK_DURATION = 5 * 60;
@@ -41,25 +43,25 @@ const DAILY_GOAL = 8;
 const tracks = [
   {
     id: "focus-beats",
-    name: "Focus Beats",
+    nameKey: "trackFocusBeats" as const,
     icon: Volume2,
     url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3",
   },
   {
     id: "lo-fi",
-    name: "Lo-fi",
+    nameKey: "trackLofi" as const,
     icon: Brain,
     url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3",
   },
   {
     id: "nature",
-    name: "Nature",
+    nameKey: "trackNature" as const,
     icon: Leaf,
     url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3",
   },
   {
     id: "white-noise",
-    name: "White Noise",
+    nameKey: "trackWhiteNoise" as const,
     icon: Volume2,
     url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-4.mp3",
   },
@@ -69,6 +71,8 @@ type FocusHistoryEntry = { id: string; duration: number; timestamp: string };
 
 export const Focus = () => {
   const { user, profile } = useAuth();
+  const { locale } = useLocale();
+  const copy = useMemo(() => getFocusCopy(locale), [locale]);
   const [cached] = useState(() =>
     loadLocalData<{
       time: number;
@@ -98,7 +102,7 @@ export const Focus = () => {
     validCache ? cached.mode : "focus",
   );
   const [deepWork, setDeepWork] = useState(false);
-  const [music, setMusic] = useState<string | null>("focus-beats");
+  const [music, setMusic] = useState<string | null>(null);
   const [breakDuration, setBreakDuration] = useState(
     validCache && cached.breakDuration === LONG_BREAK_DURATION
       ? LONG_BREAK_DURATION
@@ -117,7 +121,7 @@ export const Focus = () => {
     loadLocalData(`noviq-focus-history-${user?.uid}`, []),
   );
 
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const timerRef = useRef<number | ReturnType<typeof setInterval> | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const sessionIdRef = useRef<string | undefined>(
     validCache ? cached.sessionId : undefined,
@@ -156,9 +160,9 @@ export const Focus = () => {
       })
     )
       setSessionError(
-        "Device storage is unavailable. Keep this page open to preserve your timer.",
+        copy.storageUnavailable,
       );
-  }, [time, mode, isActive, localOnly, breakDuration, user?.uid]);
+  }, [time, mode, isActive, localOnly, breakDuration, user?.uid, copy.storageUnavailable]);
 
   useEffect(() => {
     if (user) saveLocalData(`noviq-focus-task-${user.uid}`, focusTask);
@@ -169,14 +173,12 @@ export const Focus = () => {
   }, [taskDone, user?.uid]);
 
   useEffect(() => {
-    if (isActive && time > 0) {
-      timerRef.current = setInterval(() => {
+    if (isActive) {
+      timerRef.current = window.setInterval(() => {
         setTime(
           Math.max(0, Math.ceil((deadlineRef.current - Date.now()) / 1000)),
         );
       }, 1000);
-    } else if (time === 0) {
-      handleTimerComplete();
     } else {
       if (timerRef.current) clearInterval(timerRef.current);
     }
@@ -184,7 +186,7 @@ export const Focus = () => {
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
     };
-  }, [isActive, time]);
+  }, [isActive]);
 
   useEffect(() => {
     if (music) {
@@ -196,11 +198,12 @@ export const Focus = () => {
     } else {
       audioRef.current?.pause();
     }
+    return () => audioRef.current?.pause();
   }, [music]);
 
   const recordFocusSession = async (sessionDuration: number) => {
     if (!user || sessionDuration < 60) {
-      setSessionError("Study for at least one minute before completing.");
+      setSessionError(copy.minimumMinute);
       return false;
     }
 
@@ -232,13 +235,13 @@ export const Focus = () => {
       ].slice(0, 100);
       if (!saveLocalData(key, nextHistory)) {
         setSessionError(
-          "Could not save on this device. Free up browser storage and try again.",
+          copy.localSaveFailed,
         );
         return false;
       }
       setFocusHistory(nextHistory);
       setSessionError(
-        "Session saved on this device. XP is unavailable because the server could not verify this session.",
+        copy.localSaved,
       );
       return true;
     }
@@ -271,7 +274,7 @@ export const Focus = () => {
       setSessionError(
         error instanceof Error
           ? error.message
-          : "Could not save this session. Please try again.",
+          : copy.saveFailed,
       );
       return false;
     }
@@ -323,6 +326,10 @@ export const Focus = () => {
     }
   };
 
+  useEffect(() => {
+    if (time === 0) void handleTimerComplete();
+  }, [time]);
+
   const toggleTimer = () => {
     if (completingRef.current) return;
     if (
@@ -348,7 +355,7 @@ export const Focus = () => {
         .catch(() => {
           if (generation !== generationRef.current) return;
           setSessionError(
-            "The session server is unavailable. Your timer still works; completed sessions are saved on this device without XP.",
+            copy.serverUnavailable,
           );
         })
         .finally(() => {
@@ -451,10 +458,10 @@ export const Focus = () => {
               </div>
               <div>
                 <h1 className="text-3xl font-black tracking-tight">
-                  Focus Zone
+                  {copy.title}
                 </h1>
                 <p className="mt-1 text-sm text-slate-500">
-                  Pomodoro technique for a sharper, more focused you.
+                  {copy.subtitle}
                 </p>
               </div>
             </div>
@@ -465,7 +472,7 @@ export const Focus = () => {
               onClick={() => setHelpOpen((current) => !current)}
               className="inline-flex items-center gap-2 rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-500 dark:border-slate-700"
             >
-              <Lightbulb size={16} /> How it works?
+              <Lightbulb size={16} /> {copy.howItWorks}
             </button>
           </header>
           {helpOpen && (
@@ -473,24 +480,21 @@ export const Focus = () => {
               id="focus-help"
               className="mt-4 rounded-2xl bg-blue-50 p-4 text-sm text-blue-900 dark:bg-blue-500/10 dark:text-blue-100"
             >
-              Focus for 25 minutes, then take a 5-minute break. After four focus
-              sessions, take a 15-minute break. Start pauses and resumes the
-              timer; Reset restarts it and Skip moves to the next mode. Only
-              completed, server-verified sessions earn account XP.
+              {copy.help}
             </p>
           )}
 
           <div className="mt-7 grid grid-cols-3 rounded-2xl border border-slate-200 bg-slate-50 p-1.5 dark:border-slate-700 dark:bg-slate-800">
             {[
               {
-                label: "Focus",
+                label: copy.focus,
                 duration: FOCUS_DURATION,
                 icon: TimerReset,
                 active: mode === "focus",
                 mode: "focus" as const,
               },
               {
-                label: "Short Break",
+                label: copy.shortBreak,
                 duration: SHORT_BREAK_DURATION,
                 icon: Coffee,
                 active:
@@ -498,7 +502,7 @@ export const Focus = () => {
                 mode: "break" as const,
               },
               {
-                label: "Long Break",
+                label: copy.longBreak,
                 duration: LONG_BREAK_DURATION,
                 icon: Palmtree,
                 active:
@@ -529,7 +533,7 @@ export const Focus = () => {
                       {item.label}
                     </span>
                     <span className="block text-sm font-bold">
-                      {item.duration / 60} min
+                      {formatFocusCopy(copy.minutes, { count: item.duration / 60 })}
                     </span>
                   </span>
                 </button>
@@ -552,10 +556,10 @@ export const Focus = () => {
                   className="rounded-xl bg-blue-50 px-4 py-3 text-sm font-medium text-blue-800 dark:bg-blue-950/50 dark:text-blue-200"
                 >
                   {sessionBusy
-                    ? "Saving session..."
+                    ? copy.savingSession
                     : verifying
-                      ? "Timer started. Connecting to the session server..."
-                      : "Device-only session: saved locally without XP."}
+                      ? copy.connecting
+                      : copy.deviceOnly}
                 </p>
               )}
             </div>
@@ -570,17 +574,17 @@ export const Focus = () => {
                 <Brain className="mx-auto text-blue-600" size={34} />
                 <p className="mt-3 text-lg font-black">
                   {mode === "focus"
-                    ? "Focus Session"
+                    ? copy.focusSession
                     : breakDuration === LONG_BREAK_DURATION
-                      ? "Long Break"
-                      : "Short Break"}
+                      ? copy.longBreak
+                      : copy.shortBreak}
                 </p>
                 <p className="text-sm text-slate-500">
-                  {mode === "focus" ? "Pomodoro mode" : "Take a mindful pause"}
+                  {mode === "focus" ? copy.pomodoroMode : copy.mindfulPause}
                 </p>
                 <button
                   type="button"
-                  aria-label={isActive ? "Pause timer" : "Start timer"}
+                  aria-label={isActive ? copy.pauseTimer : copy.startTimer}
                   disabled={sessionBusy}
                   onClick={toggleTimer}
                   className="mt-2 text-[clamp(4rem,9vw,6.5rem)] font-black leading-none tracking-[-0.08em] text-slate-900 transition hover:text-blue-600 disabled:opacity-50 dark:text-white"
@@ -590,47 +594,47 @@ export const Focus = () => {
                 <p className="mx-auto mt-3 inline-flex items-center gap-2 rounded-full bg-emerald-50 px-4 py-2 text-sm font-bold text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300">
                   <Leaf size={15} />{" "}
                   {isActive
-                    ? "Stay in the flow"
+                    ? copy.stayInFlow
                     : mode === "focus"
-                      ? "Time to focus!"
-                      : "Enjoy your break"}
+                      ? copy.timeToFocus
+                      : copy.enjoyBreak}
                 </p>
               </div>
             </div>
           </div>
 
-          <div className="mt-6 flex items-center justify-center gap-4 sm:gap-7">
+          <div className="mt-6 grid grid-cols-[minmax(0,1fr)_minmax(8.5rem,1.7fr)_minmax(0,1fr)] items-center gap-2 sm:flex sm:justify-center sm:gap-7">
             <button
               type="button"
-              aria-label="Reset timer"
+              aria-label={copy.resetTimer}
               disabled={sessionBusy}
               onClick={resetTimer}
-              className="inline-flex min-w-28 items-center justify-center gap-2 rounded-full border border-slate-200 bg-white px-5 py-3 text-sm font-bold text-slate-500 transition hover:border-blue-300 hover:text-blue-600 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800"
+              className="inline-flex min-w-0 items-center justify-center gap-1 rounded-full border border-slate-200 bg-white px-2 py-3 text-xs font-bold text-slate-500 transition hover:border-blue-300 hover:text-blue-600 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800 sm:min-w-28 sm:gap-2 sm:px-5 sm:text-sm"
             >
-              <RotateCcw size={18} /> Reset
+              <RotateCcw size={18} /> <span className="hidden min-[350px]:inline">{copy.reset}</span>
             </button>
             <button
               type="button"
-              aria-label={isActive ? "Pause timer" : "Start timer"}
+              aria-label={isActive ? copy.pauseTimer : copy.startTimer}
               disabled={sessionBusy}
               onClick={toggleTimer}
-              className="inline-flex min-w-48 items-center justify-center gap-3 rounded-full bg-blue-600 px-8 py-4 text-lg font-black text-white shadow-lg shadow-blue-500/25 transition hover:bg-blue-500 disabled:opacity-50"
+              className="inline-flex min-w-0 items-center justify-center gap-2 rounded-full bg-blue-600 px-3 py-4 text-base font-black text-white shadow-lg shadow-blue-500/25 transition hover:bg-blue-500 disabled:opacity-50 sm:min-w-48 sm:gap-3 sm:px-8 sm:text-lg"
             >
               {isActive ? (
                 <Pause size={23} fill="currentColor" />
               ) : (
                 <Play size={23} fill="currentColor" />
               )}{" "}
-              {isActive ? "Pause" : "Start"}
+              {isActive ? copy.pause : copy.start}
             </button>
             <button
               type="button"
-              aria-label="Skip timer"
+              aria-label={copy.skipTimer}
               disabled={sessionBusy || verifying}
               onClick={skipTimer}
-              className="inline-flex min-w-28 items-center justify-center gap-2 rounded-full border border-slate-200 bg-white px-5 py-3 text-sm font-bold text-slate-500 transition hover:border-blue-300 hover:text-blue-600 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800"
+              className="inline-flex min-w-0 items-center justify-center gap-1 rounded-full border border-slate-200 bg-white px-2 py-3 text-xs font-bold text-slate-500 transition hover:border-blue-300 hover:text-blue-600 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800 sm:min-w-28 sm:gap-2 sm:px-5 sm:text-sm"
             >
-              <SkipForward size={18} /> Skip
+              <SkipForward size={18} /> <span className="hidden min-[350px]:inline">{copy.skip}</span>
             </button>
           </div>
           {mode === "focus" && time < FOCUS_DURATION && (
@@ -641,12 +645,12 @@ export const Focus = () => {
               className="mx-auto mt-4 inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-bold text-emerald-700 hover:bg-emerald-50 disabled:opacity-50 dark:text-emerald-300"
             >
               <CheckCircle2 size={17} />{" "}
-              {sessionBusy ? "Saving session..." : "Complete focus session"}
+              {sessionBusy ? copy.savingSession : copy.completeSession}
             </button>
           )}
           <div className="mt-6 text-center">
             <p className="text-sm font-semibold text-slate-500">
-              Session {sessionNumber} of 4
+              {formatFocusCopy(copy.sessionOf, { current: sessionNumber, total: 4 })}
             </p>
             <div className="mt-2 flex justify-center gap-2">
               {Array.from({ length: 4 }, (_, index) => (
@@ -668,15 +672,15 @@ export const Focus = () => {
           <section className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
             <div className="flex items-center justify-between gap-3">
               <h2 className="flex items-center gap-2 text-lg font-black">
-                <Target className="text-blue-600" size={24} /> Today's focus
+                <Target className="text-blue-600" size={24} /> {copy.todaysFocus}
               </h2>
               <button
                 type="button"
-                aria-label="Add focus task"
+                aria-label={copy.addTask}
                 onClick={() => setTaskInputOpen((current) => !current)}
                 className="inline-flex items-center gap-1 rounded-xl border border-blue-200 px-3 py-2 text-sm font-bold text-blue-600 hover:bg-blue-50"
               >
-                <Plus size={16} /> Add task
+                <Plus size={16} /> {copy.addTask}
               </button>
             </div>
             {taskInputOpen && (
@@ -693,15 +697,15 @@ export const Focus = () => {
                   onChange={(event) => setTaskDraft(event.target.value)}
                   maxLength={120}
                   required
-                  aria-label="Focus task"
-                  placeholder="What will you focus on?"
+                  aria-label={copy.focusTask}
+                  placeholder={copy.taskPlaceholder}
                   className="min-w-0 flex-1 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm outline-none focus:border-blue-400 dark:border-slate-700 dark:bg-slate-800"
                 />
                 <button
                   type="submit"
                   className="rounded-xl bg-blue-600 px-3 text-sm font-bold text-white"
                 >
-                  Save
+                  {copy.save}
                 </button>
               </form>
             )}
@@ -709,7 +713,7 @@ export const Focus = () => {
               <div className="mt-4 flex items-center gap-3 rounded-2xl border border-slate-100 bg-slate-50 px-4 py-4 dark:border-slate-800 dark:bg-slate-800">
                 <button
                   type="button"
-                  aria-label="Complete focus task"
+                  aria-label={copy.completeTask}
                   aria-pressed={taskDone}
                   onClick={() => setTaskDone((current) => !current)}
                   className={cn(
@@ -731,7 +735,7 @@ export const Focus = () => {
                 </p>
                 <button
                   type="button"
-                  aria-label="Edit focus task"
+                  aria-label={copy.editTask}
                   onClick={() => {
                     setTaskDraft(focusTask);
                     setTaskInputOpen(true);
@@ -743,7 +747,7 @@ export const Focus = () => {
               </div>
             ) : (
               <p className="mt-4 rounded-2xl bg-slate-50 p-4 text-sm text-slate-500 dark:bg-slate-800">
-                No focus task yet. Add what you want to study today.
+                {copy.noTask}
               </p>
             )}
           </section>
@@ -754,7 +758,7 @@ export const Focus = () => {
               </span>
               <p className="mt-4 text-3xl font-black">{completedToday}</p>
               <p className="mt-1 text-xs font-bold text-slate-500">
-                Completed today
+                {copy.completedToday}
               </p>
             </div>
             <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
@@ -763,7 +767,7 @@ export const Focus = () => {
               </span>
               <p className="mt-4 text-3xl font-black">{focusMinutes}</p>
               <p className="mt-1 text-xs font-bold text-slate-500">
-                Focus minutes
+                {copy.focusMinutes}
               </p>
             </div>
             <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
@@ -774,18 +778,18 @@ export const Focus = () => {
                 {profile?.streak || 0}
               </p>
               <p className="mt-1 text-xs font-bold text-slate-500">
-                Current streak
+                {copy.currentStreak}
               </p>
             </div>
           </section>
           <section className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
             <div className="flex items-center justify-between">
               <h2 className="flex items-center gap-2 text-lg font-black">
-                <Target className="text-emerald-500" size={22} /> Daily Goal
+                <Target className="text-emerald-500" size={22} /> {copy.dailyGoal}
               </h2>
               <span className="font-black text-slate-700 dark:text-slate-200">
                 {completedToday} / {DAILY_GOAL}{" "}
-                <span className="text-sm text-slate-500">pomodoros</span>
+                <span className="text-sm text-slate-500">{copy.pomodoros}</span>
               </span>
             </div>
             <div className="mt-5 h-3 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
@@ -798,17 +802,17 @@ export const Focus = () => {
             </div>
             <p className="mt-3 text-sm text-slate-500">
               {completedToday
-                ? `Keep going! You're ${Math.round((completedToday / DAILY_GOAL) * 100)}% there.`
-                : "Start your first Pomodoro to build momentum."}
+                ? formatFocusCopy(copy.goalProgress, { percent: Math.round((completedToday / DAILY_GOAL) * 100) })
+                : copy.goalStart}
             </p>
           </section>
           <section className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
             <div className="flex items-center justify-between">
               <h2 className="flex items-center gap-2 text-lg font-black">
-                <Volume2 size={22} /> Ambient Sound
+                <Volume2 size={22} /> {copy.ambientSound}
               </h2>
               <span className="text-sm font-bold text-blue-600">
-                Focus mode
+                {copy.focusMode}
               </span>
             </div>
             <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4 xl:grid-cols-2">
@@ -829,7 +833,7 @@ export const Focus = () => {
                     )}
                   >
                     <Icon size={23} />
-                    {track.name}
+                    {copy[track.nameKey]}
                   </button>
                 );
               })}

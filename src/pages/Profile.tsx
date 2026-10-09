@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "@/src/contexts/AuthContext";
 import {
   Award,
@@ -25,15 +25,20 @@ import { db, functions, storage } from "@/src/lib/firebase";
 import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
 import { updateProfile } from "firebase/auth";
 import { motion, AnimatePresence } from "motion/react";
+import { createPortal } from "react-dom";
 import { getAppErrorMessage } from "@/src/lib/errors";
 import { calculateLevelName } from "@/src/lib/progress";
 import { useBodyScrollLock } from "@/src/lib/useBodyScrollLock";
 import { getNotificationPreferences, type NotificationPreferenceKey } from "@/src/lib/preferences";
 import { writeDocWithQueue } from "@/src/lib/offlineSync";
 import { isReadOnlyAudit } from "@/src/lib/auditMode";
+import { SyncRecovery } from "@/src/components/SyncRecovery";
+import { useLocale } from "@/src/contexts/LocaleContext";
+import { useDialogFocus } from "@/src/lib/useDialogFocus";
+import { getProfileCopy } from "@/src/features/profile/profileCopy";
 
 const AVATAR_SIZE = 512;
-const TELEGRAM_BOT_USERNAME = "noviqq_bot";
+const TELEGRAM_BOT_USERNAME = import.meta.env.VITE_TELEGRAM_BOT_USERNAME || "noviqq_bot";
 
 const blobToDataUrl = (blob: Blob) =>
   new Promise<string>((resolve, reject) => {
@@ -45,6 +50,8 @@ const blobToDataUrl = (blob: Blob) =>
 
 export const Profile = () => {
   const { profile, user, updateLocalProfile } = useAuth();
+  const { locale } = useLocale();
+  const copy = useMemo(() => getProfileCopy(locale), [locale]);
   const levelName = profile?.levelName || calculateLevelName(profile?.xp || 0);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [editing, setEditing] = useState(false);
@@ -64,6 +71,8 @@ export const Profile = () => {
   const [avatarPreview, setAvatarPreview] = useState("");
   const [showAvatarModal, setShowAvatarModal] = useState(false);
   useBodyScrollLock(showAvatarModal);
+  const avatarDialogRef = useRef<HTMLDivElement>(null);
+  useDialogFocus(showAvatarModal, avatarDialogRef, () => setShowAvatarModal(false));
   const [avatarZoom, setAvatarZoom] = useState(1);
   const [avatarOffsetX, setAvatarOffsetX] = useState(0);
   const [avatarOffsetY, setAvatarOffsetY] = useState(0);
@@ -71,7 +80,7 @@ export const Profile = () => {
   const [avatarError, setAvatarError] = useState("");
   const [telegramLinking, setTelegramLinking] = useState(false);
   const handleTelegramConnect = async () => {
-    if (isReadOnlyAudit) { setStatus("Bot linking is disabled in read-only audit mode."); return; }
+    if (isReadOnlyAudit) { setStatus(copy.auditBotDisabled); return; }
     if (!user || !TELEGRAM_BOT_USERNAME || telegramLinking) return;
     setTelegramLinking(true);
     try {
@@ -104,7 +113,7 @@ export const Profile = () => {
   }, [avatarPreview]);
 
   const handleSave = async () => {
-    if (isReadOnlyAudit) { setStatus("Saving is disabled in read-only audit mode."); return; }
+    if (isReadOnlyAudit) { setStatus(copy.auditSavingDisabled); return; }
     if (!user) return;
     setIsSaving(true);
     setStatus("");
@@ -116,31 +125,30 @@ export const Profile = () => {
       showActionButtons: formData.showActionButtons,
     };
 
-    updateLocalProfile(profilePatch);
-    setEditing(false);
-
     try {
+      const syncStatus = await writeDocWithQueue({ userId: user.uid, path: ["users", user.uid], kind: "update", data: profilePatch });
+      updateLocalProfile(profilePatch);
+      setEditing(false);
       if (formData.displayName !== user.displayName) {
         await updateProfile(user, { displayName: formData.displayName }).catch((error) => {
           console.warn("Firebase Auth profile update failed", error);
         });
       }
-      const syncStatus = await writeDocWithQueue({ userId: user.uid, path: ["users", user.uid], kind: "update", data: profilePatch });
-      setStatus(syncStatus === "synced" ? "Profile saved." : "Profile saved on this device. Cloud sync will retry when available.");
+      setStatus(syncStatus === "synced" ? copy.profileSaved : copy.profileSavedLocal);
     } catch (error) {
       console.warn("Cloud profile sync failed", error);
-      setStatus("Profile saved on this device. Cloud sync will resume after Firebase rules are deployed.");
+      setStatus(getAppErrorMessage(error));
     } finally {
       setIsSaving(false);
     }
   };
 
   const handleTelegramTest = async () => {
-    if (isReadOnlyAudit) { setStatus("Telegram sends are disabled in read-only audit mode."); return; }
+    if (isReadOnlyAudit) { setStatus(copy.auditTelegramDisabled); return; }
     if (!user || telegramTesting || !profile?.telegramId?.trim()) return;
     const chatId = profile.telegramId.trim();
     if (!chatId) {
-      setStatus("Telegram ID kiriting.");
+      setStatus(copy.telegramRequired);
       return;
     }
 
@@ -151,10 +159,10 @@ export const Profile = () => {
       await sendTelegramTestMessage({});
       setFormData((current) => ({ ...current, telegramId: chatId }));
       updateLocalProfile({ telegramId: chatId });
-      setStatus("Telegram test xabar yuborildi.");
+      setStatus(copy.telegramSent);
     } catch (error) {
       console.warn("Telegram test failed", error);
-      setStatus(getAppErrorMessage(error) || "Telegram test failed. Botni start qilganingizni tekshiring.");
+      setStatus(getAppErrorMessage(error) || copy.telegramFailed);
     } finally {
       setTelegramTesting(false);
     }
@@ -162,13 +170,13 @@ export const Profile = () => {
 
   const notificationPreferences = getNotificationPreferences(profile);
   const preferenceItems: Array<{ key: NotificationPreferenceKey; icon: React.ReactNode; label: string }> = [
-    { key: "studyReminders", icon: <Bell size={18} />, label: "Study reminders" },
-    { key: "dailyStreakSummary", icon: <Check size={18} />, label: "Daily streak summary" },
-    { key: "aiSourcePreviews", icon: <ImageIcon size={18} />, label: "AI source previews" },
+    { key: "studyReminders", icon: <Bell size={18} aria-hidden="true" />, label: copy.studyReminders },
+    { key: "dailyStreakSummary", icon: <Check size={18} aria-hidden="true" />, label: copy.dailyStreakSummary },
+    { key: "aiSourcePreviews", icon: <ImageIcon size={18} aria-hidden="true" />, label: copy.aiSourcePreviews },
   ];
 
   const handlePreferenceToggle = async (key: NotificationPreferenceKey) => {
-    if (isReadOnlyAudit) { setStatus("Preferences cannot be changed in read-only audit mode."); return; }
+    if (isReadOnlyAudit) { setStatus(copy.auditPreferencesDisabled); return; }
     if (!user || savingPreference) return;
 
     const nextNotifications = {
@@ -182,14 +190,13 @@ export const Profile = () => {
 
     setSavingPreference(key);
     setStatus("");
-    updateLocalProfile({ settings: nextSettings });
-
     try {
-      await updateDoc(doc(db, "users", user.uid), { settings: nextSettings });
-      setStatus(nextNotifications[key] ? "Preference enabled." : "Preference disabled.");
+      const syncStatus = await writeDocWithQueue({ userId: user.uid, path: ["users", user.uid], kind: "update", data: {settings: nextSettings} });
+      updateLocalProfile({ settings: nextSettings });
+      setStatus(syncStatus === "synced" ? (nextNotifications[key] ? copy.preferenceEnabled : copy.preferenceDisabled) : copy.preferenceSavedLocal);
     } catch (error) {
       console.warn("Preference sync failed", error);
-      setStatus("Preference saved on this device. Cloud sync will resume after Firebase rules are deployed.");
+      setStatus(getAppErrorMessage(error));
     } finally {
       setSavingPreference("");
     }
@@ -197,12 +204,12 @@ export const Profile = () => {
 
   const handleAvatarFile = (file: File) => {
     if (!file.type.startsWith("image/")) {
-      setAvatarError("Please choose an image file.");
+      setAvatarError(copy.chooseImage);
       return;
     }
 
     if (file.size > 8 * 1024 * 1024) {
-      setAvatarError("Avatar image must be under 8 MB.");
+      setAvatarError(copy.imageTooLarge);
       return;
     }
 
@@ -253,7 +260,7 @@ export const Profile = () => {
   };
 
   const handleSaveAvatar = async () => {
-    if (isReadOnlyAudit) { setStatus("Avatar uploads are disabled in read-only audit mode."); return; }
+    if (isReadOnlyAudit) { setStatus(copy.auditAvatarDisabled); return; }
     if (!user || !avatarFile) return;
     setIsAvatarSaving(true);
     setAvatarError("");
@@ -270,7 +277,7 @@ export const Profile = () => {
       setAvatarFile(null);
       if (avatarPreview) URL.revokeObjectURL(avatarPreview);
       setAvatarPreview("");
-      setStatus("Avatar saved on this device.");
+      setStatus(copy.avatarSavedLocal);
 
       const avatarRef = ref(storage, `users/${user.uid}/avatars/avatar-${Date.now()}.jpg`);
       await uploadBytes(avatarRef, blob, { contentType: "image/jpeg" });
@@ -280,14 +287,14 @@ export const Profile = () => {
       await updateProfile(user, { photoURL }).catch((error) => {
         console.warn("Firebase Auth avatar update failed", error);
       });
-      await updateDoc(doc(db, "users", user.uid), { photoURL });
+      const syncStatus = await writeDocWithQueue({ userId: user.uid, path: ["users", user.uid], kind: "update", data: {photoURL} });
 
-      setStatus("Avatar updated.");
+      setStatus(syncStatus === "synced" ? copy.avatarUpdated : copy.avatarCloudPending);
     } catch (error) {
       console.warn("Cloud avatar sync failed", error);
       if (savedLocally) {
         setAvatarError("");
-        setStatus("Avatar saved on this device. Cloud sync will resume after Firebase rules are deployed.");
+        setStatus(copy.avatarPreviewPending);
       } else {
         setAvatarError(getAppErrorMessage(error));
       }
@@ -303,7 +310,8 @@ export const Profile = () => {
     )}&hairColor=2c1b18&skinColor=f8d25c`;
 
   return (
-    <div className="mx-auto max-w-6xl space-y-8 pb-24">
+    <div className="mx-auto max-w-6xl space-y-8 pb-24 text-slate-950 dark:text-slate-50">
+      <SyncRecovery alwaysVisible />
       <input
         ref={fileInputRef}
         type="file"
@@ -320,11 +328,11 @@ export const Profile = () => {
         <div className="space-y-3">
           <div className="flex items-center gap-2">
             <div className="h-1 w-10 rounded-full bg-blue-500" />
-            <span className="text-[10px] font-black uppercase tracking-[0.4em] text-blue-400">Profile</span>
+            <span className="text-[10px] font-black uppercase tracking-[0.3em] text-blue-700 dark:text-blue-300">{copy.title}</span>
           </div>
-          <h2 className="font-display text-4xl font-bold tracking-tight text-white sm:text-5xl">Profile</h2>
-          <p className="max-w-2xl text-base text-slate-400 sm:text-lg">
-            Manage your account, avatar, exam preferences, and connected systems.
+          <h2 className="font-display text-4xl font-bold tracking-tight text-slate-950 dark:text-white sm:text-5xl">{copy.title}</h2>
+          <p className="max-w-2xl text-base leading-7 text-slate-600 dark:text-slate-300 sm:text-lg">
+            {copy.subtitle}
           </p>
         </div>
         <button
@@ -332,96 +340,95 @@ export const Profile = () => {
           onClick={() => (editing ? handleSave() : setEditing(true))}
           disabled={isSaving}
           className={cn(
-            "inline-flex min-h-14 items-center justify-center gap-3 rounded-[1.5rem] px-8 text-xs font-black uppercase tracking-widest text-white shadow-2xl transition active:scale-95 disabled:opacity-60",
-            editing ? "bg-emerald-500 shadow-emerald-500/20" : "bg-blue-600 shadow-blue-600/20"
+            "inline-flex min-h-12 items-center justify-center gap-3 rounded-2xl bg-blue-600 px-6 text-sm font-black text-white transition-colors hover:bg-blue-700 active:bg-blue-800 disabled:opacity-60",
           )}
         >
           {isSaving ? <Loader2 size={18} className="animate-spin" /> : editing ? <Save size={18} /> : <User size={18} />}
-          {editing ? "Save changes" : "Edit profile"}
+          {editing ? copy.saveChanges : copy.editProfile}
         </button>
       </header>
 
       {status && (
-        <div className="rounded-2xl border border-white/10 bg-white/[0.05] px-4 py-3 text-sm font-semibold text-slate-200">
+        <div role="status" className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
           {status}
         </div>
       )}
 
       <div className="grid gap-8 lg:grid-cols-12">
         <aside className="space-y-6 lg:col-span-4">
-          <section className="glass relative overflow-hidden border-white/10 bg-white/[0.02] p-8 text-center">
-            <Award className="pointer-events-none absolute -right-10 -top-10 text-white/[0.04]" size={180} />
+          <section className="relative overflow-hidden rounded-3xl border border-slate-200 bg-white p-6 text-center dark:border-slate-700 dark:bg-slate-900 sm:p-8">
+            <Award className="pointer-events-none absolute -right-10 -top-10 text-slate-100 dark:text-white/[0.04]" size={180} aria-hidden="true" />
 
             <div className="relative mx-auto mb-8 h-44 w-44">
-              <div className="h-44 w-44 overflow-hidden rounded-[3rem] border-8 border-white/5 bg-slate-900 shadow-3xl ring-1 ring-white/10">
-                <img src={avatarSrc} alt="Avatar" className="h-full w-full object-cover" />
+              <div className="h-44 w-44 overflow-hidden rounded-[3rem] border-8 border-slate-100 bg-slate-100 ring-1 ring-slate-200 dark:border-slate-800 dark:bg-slate-950 dark:ring-slate-700">
+                <img src={avatarSrc} alt={profile?.displayName || copy.student} className="h-full w-full object-cover" />
               </div>
               <button
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
-                className="absolute bottom-2 right-2 flex h-12 w-12 items-center justify-center rounded-2xl border-4 border-[#0B1020] bg-blue-600 text-white shadow-2xl transition hover:scale-105"
-                aria-label="Change avatar"
+                className="absolute bottom-2 right-2 flex h-12 w-12 items-center justify-center rounded-2xl border-4 border-white bg-blue-600 text-white transition-colors hover:bg-blue-700 dark:border-slate-900"
+                aria-label={copy.changeAvatar}
               >
                 <Camera size={18} />
               </button>
             </div>
 
-            <h3 className="font-display text-3xl font-bold text-white">{profile?.displayName || "Student"}</h3>
-            <p className="mt-2 text-sm text-slate-500">{profile?.email}</p>
+            <h3 className="font-display text-3xl font-bold text-slate-950 dark:text-white">{profile?.displayName || copy.student}</h3>
+            <p className="mt-2 break-all text-sm text-slate-500 dark:text-slate-400">{profile?.email}</p>
             <div className="mt-6 flex items-center justify-center gap-4">
               {formData.showActionButtons && (
                 <button
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
-                  className="inline-flex items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-5 py-3 text-sm font-bold text-slate-200 transition hover:bg-white/10"
+                  className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 transition-colors hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
                 >
                   <Upload size={16} />
-                  Change avatar
+                  {copy.changeAvatar}
                 </button>
               )}
 
               <button
                 type="button"
                 onClick={() => setFormData({ ...formData, showActionButtons: !formData.showActionButtons })}
-                className="inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-xs font-bold text-slate-200 transition hover:bg-white/10"
+                className="inline-flex min-h-11 items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 transition-colors hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
               >
-                {formData.showActionButtons ? "Hide buttons" : "Show buttons"}
+                {formData.showActionButtons ? copy.hideButtons : copy.showButtons}
               </button>
             </div>
 
             <div className="mt-8 grid grid-cols-3 gap-3">
-              <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-3">
-                <p className="text-xl font-black text-white">{profile?.level || 1}</p>
-                <p className="text-[9px] font-bold uppercase tracking-widest text-slate-500">{levelName}</p>
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-800">
+                <p className="text-xl font-black text-slate-950 [font-variant-numeric:tabular-nums] dark:text-white">{profile?.level || 1}</p>
+                <p className="text-[9px] font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400">{levelName}</p>
               </div>
-              <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-3">
-                <p className="text-xl font-black text-white">{profile?.xp || 0}</p>
-                <p className="text-[9px] font-bold uppercase tracking-widest text-slate-500">XP</p>
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-800">
+                <p className="text-xl font-black text-slate-950 [font-variant-numeric:tabular-nums] dark:text-white">{profile?.xp || 0}</p>
+                <p className="text-[9px] font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400">XP</p>
               </div>
-              <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-3">
-                <p className="text-xl font-black text-orange-300">{profile?.streak || 0}</p>
-                <p className="text-[9px] font-bold uppercase tracking-widest text-slate-500">Streak</p>
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-800">
+                <p className="text-xl font-black text-blue-700 [font-variant-numeric:tabular-nums] dark:text-blue-300">{profile?.streak || 0}</p>
+                <p className="text-[9px] font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400">{copy.streak}</p>
               </div>
             </div>
           </section>
 
-          <section className="glass border-white/10 bg-white/[0.02] p-6">
-            <h4 className="mb-4 flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">
-              <Smartphone className="text-blue-400" size={14} />
-              Linked systems
+          <section className="rounded-3xl border border-slate-200 bg-white p-6 dark:border-slate-700 dark:bg-slate-900">
+            <h4 className="mb-4 flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">
+              <Smartphone className="text-blue-600 dark:text-blue-300" size={14} aria-hidden="true" />
+              {copy.linkedSystems}
             </h4>
-            <div className="rounded-[1.5rem] border border-white/10 bg-white/[0.04] p-4">
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800">
               <div className="flex items-center justify-between gap-4">
                 <div>
-                  <span className="block text-sm font-bold text-white">Telegram Connect</span>
-                  <span className="text-[10px] font-bold uppercase text-emerald-400">
-                    {formData.telegramId ? "Configured" : "Not connected"}
+                  <span className="block text-sm font-bold text-slate-950 dark:text-white">{copy.telegramConnect}</span>
+                  <span className="text-[10px] font-bold uppercase text-blue-700 dark:text-blue-300">
+                    {formData.telegramId ? copy.configured : copy.notConnected}
                   </span>
                 </div>
                 <div className={cn("h-2 w-2 rounded-full", formData.telegramId ? "bg-emerald-400" : "bg-slate-600")} />
               </div>
-              <p className="mt-3 text-xs leading-5 text-slate-400">
-                Botni ochib Start bosing. Noviq Telegram ID ni avtomatik profilga ulaydi, keyin daily mission summary shu chatga boradi.
+              <p className="mt-3 text-xs leading-5 text-slate-600 dark:text-slate-300">
+                {copy.telegramHelp}
               </p>
               <div className="mt-4 flex flex-wrap gap-2">
                 {TELEGRAM_BOT_USERNAME && (
@@ -429,20 +436,20 @@ export const Profile = () => {
                     type="button"
                     onClick={handleTelegramConnect}
                     disabled={telegramLinking}
-                    className="inline-flex min-h-10 items-center justify-center gap-2 rounded-2xl bg-blue-500/15 px-4 text-[10px] font-black uppercase tracking-[0.18em] text-blue-200 transition hover:bg-blue-500/20 hover:text-white"
+                    className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 text-xs font-black text-white transition-colors hover:bg-blue-700"
                   >
                     <ExternalLink size={14} />
-                    {telegramLinking ? "Preparing link..." : "Connect bot"}
+                    {telegramLinking ? copy.preparingLink : copy.connectBot}
                   </button>
                 )}
                 <button
                   type="button"
                   onClick={handleTelegramTest}
                   disabled={!profile?.telegramId?.trim() || telegramTesting}
-                  className="inline-flex min-h-10 items-center justify-center gap-2 rounded-2xl bg-emerald-500/15 px-4 text-[10px] font-black uppercase tracking-[0.18em] text-emerald-300 transition hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-40"
+                  className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-4 text-xs font-black text-slate-700 transition-colors hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200"
                 >
                   {telegramTesting ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
-                  Send test
+                  {copy.sendTest}
                 </button>
               </div>
             </div>
@@ -450,56 +457,56 @@ export const Profile = () => {
         </aside>
 
         <main className="space-y-6 lg:col-span-8">
-          <section className="glass border-white/10 bg-white/[0.02] p-6 sm:p-8">
-            <h4 className="mb-8 flex items-center gap-4 text-2xl font-bold text-white">
+          <section className="rounded-3xl border border-slate-200 bg-white p-6 dark:border-slate-700 dark:bg-slate-900 sm:p-8">
+            <h4 className="mb-8 flex items-center gap-4 text-2xl font-bold text-slate-950 dark:text-white">
               <div className="h-8 w-2 rounded-full bg-blue-600" />
-              Account details
+              {copy.accountDetails}
             </h4>
             <div className="grid gap-6 md:grid-cols-2">
               <label className="space-y-3">
-                <span className="ml-1 text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">Full name</span>
+                <span className="ml-1 text-[10px] font-black uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">{copy.fullName}</span>
                 <div className="relative">
                   <User className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-600" size={16} />
                   <input
                     disabled={!editing}
                     value={formData.displayName}
                     onChange={(event) => setFormData({ ...formData, displayName: event.target.value })}
-                    className="w-full rounded-[1.5rem] border-2 border-white/5 bg-white/[0.03] py-4 pl-14 pr-5 text-base font-bold text-white outline-none transition focus:border-blue-500/50 disabled:opacity-50"
+                    className="w-full rounded-2xl border border-slate-200 bg-white py-4 pl-14 pr-5 text-base font-bold text-slate-950 outline-none transition-colors focus:border-blue-500 disabled:bg-slate-100 disabled:text-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-white dark:disabled:bg-slate-800/60"
                   />
                 </div>
               </label>
 
               <label className="space-y-3">
-                <span className="ml-1 text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">Email</span>
+                <span className="ml-1 text-[10px] font-black uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">{copy.email}</span>
                 <div className="relative">
                   <Mail className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-600" size={16} />
                   <input
                     disabled
                     value={profile?.email || ""}
-                    className="w-full cursor-not-allowed rounded-[1.5rem] border-2 border-white/5 bg-white/[0.03] py-4 pl-14 pr-5 text-base font-bold text-slate-400 outline-none opacity-60"
+                    className="w-full cursor-not-allowed rounded-2xl border border-slate-200 bg-slate-100 py-4 pl-14 pr-5 text-base font-bold text-slate-500 outline-none dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-400"
                   />
                 </div>
               </label>
 
               <label className="space-y-3">
-                <span className="ml-1 text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">Academic status</span>
+                <span className="ml-1 text-[10px] font-black uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">{copy.academicStatus}</span>
                 <select
                   disabled={!editing}
                   value={formData.currentLevel}
                   onChange={(event) => setFormData({ ...formData, currentLevel: event.target.value })}
-                  className="w-full rounded-[1.5rem] border-2 border-white/5 bg-white/[0.03] px-5 py-4 text-base font-bold text-white outline-none transition focus:border-blue-500/50 disabled:opacity-50"
+                  className="w-full rounded-2xl border border-slate-200 bg-white px-5 py-4 text-base font-bold text-slate-950 outline-none transition-colors focus:border-blue-500 disabled:bg-slate-100 disabled:text-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-white dark:disabled:bg-slate-800/60"
                 >
-                  <option>Beginner</option>
-                  <option>High School</option>
-                  <option>University Student</option>
-                  <option>IELTS Student</option>
-                  <option>DTM Preparer</option>
-                  <option>Independent Student</option>
+                  <option value="Beginner">{copy.beginner}</option>
+                  <option value="High School">{copy.highSchool}</option>
+                  <option value="University Student">{copy.university}</option>
+                  <option value="IELTS Student">{copy.ielts}</option>
+                  <option value="DTM Preparer">{copy.dtm}</option>
+                  <option value="Independent Student">{copy.independent}</option>
                 </select>
               </label>
 
               <label className="space-y-3">
-                <span className="ml-1 text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">Daily target</span>
+                <span className="ml-1 text-[10px] font-black uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">{copy.dailyTarget}</span>
                 <div className="relative">
                   <Target className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-600" size={16} />
                   <input
@@ -511,13 +518,13 @@ export const Profile = () => {
                     onChange={(event) =>
                       setFormData({ ...formData, dailyTargetMinutes: Number(event.target.value) || 30 })
                     }
-                    className="w-full rounded-[1.5rem] border-2 border-white/5 bg-white/[0.03] py-4 pl-14 pr-5 text-base font-bold text-white outline-none transition focus:border-blue-500/50 disabled:opacity-50"
+                    className="w-full rounded-2xl border border-slate-200 bg-white py-4 pl-14 pr-5 text-base font-bold text-slate-950 outline-none transition-colors focus:border-blue-500 disabled:bg-slate-100 disabled:text-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-white dark:disabled:bg-slate-800/60"
                   />
                 </div>
               </label>
 
               <label className="space-y-3 md:col-span-2">
-                <span className="ml-1 text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">Telegram ID</span>
+                <span className="ml-1 text-[10px] font-black uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">{copy.telegramId}</span>
                 <div className="relative">
                   <Shield className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-600" size={16} />
                   <input
@@ -525,20 +532,20 @@ export const Profile = () => {
                     placeholder="123456789"
                     value={formData.telegramId}
                     readOnly
-                    className="w-full rounded-[1.5rem] border-2 border-white/5 bg-white/[0.03] py-4 pl-14 pr-5 text-base font-bold text-white outline-none transition focus:border-blue-500/50 disabled:opacity-50"
+                    className="w-full rounded-2xl border border-slate-200 bg-slate-100 py-4 pl-14 pr-5 text-base font-bold text-slate-600 outline-none dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-300"
                   />
                 </div>
                 <p className="ml-1 text-xs leading-5 text-slate-500">
-                  Telegram hisobingizni Connect bot tugmasi orqali ulang. Chat ID tasdiqlangan ulanishdan keyin avtomatik to‘ladi.
+                  {copy.telegramHelp}
                 </p>
               </label>
             </div>
           </section>
 
-          <section className="glass border-white/10 bg-white/[0.02] p-6 sm:p-8">
-            <h4 className="mb-6 flex items-center gap-4 text-2xl font-bold text-white">
-              <div className="h-8 w-2 rounded-full bg-purple-600" />
-              Preferences
+          <section className="rounded-3xl border border-slate-200 bg-white p-6 dark:border-slate-700 dark:bg-slate-900 sm:p-8">
+            <h4 className="mb-6 flex items-center gap-4 text-2xl font-bold text-slate-950 dark:text-white">
+              <div className="h-8 w-2 rounded-full bg-blue-600" />
+              {copy.preferences}
             </h4>
             <div className="grid gap-4">
               {preferenceItems.map((item) => {
@@ -546,21 +553,21 @@ export const Profile = () => {
                 const isSavingPreference = savingPreference === item.key;
 
                 return (
-                <div key={item.key} className="flex items-center justify-between rounded-3xl border border-white/10 bg-white/[0.04] p-5">
+                <div key={item.key} className="flex items-center justify-between gap-4 rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800 sm:p-5">
                   <div className="flex items-center gap-4">
-                    <div className="rounded-2xl bg-white/5 p-3 text-blue-300">{item.icon}</div>
-                    <p className="font-bold text-white">{item.label}</p>
+                    <div className="rounded-2xl bg-blue-50 p-3 text-blue-700 dark:bg-blue-500/10 dark:text-blue-300">{item.icon}</div>
+                    <p className="font-bold text-slate-950 dark:text-white">{item.label}</p>
                   </div>
                   <button
                     type="button"
                     role="switch"
                     aria-checked={active}
-                    aria-label={`${item.label} ${active ? "enabled" : "disabled"}`}
+                    aria-label={`${item.label} ${active ? copy.enabled : copy.disabled}`}
                     onClick={() => handlePreferenceToggle(item.key)}
                     disabled={Boolean(savingPreference)}
                     className={cn(
                       "relative h-8 w-14 shrink-0 rounded-full p-1 transition active:scale-95 disabled:cursor-wait disabled:opacity-70",
-                      active ? "bg-blue-600 shadow-lg shadow-blue-600/20" : "bg-slate-700/80"
+                      active ? "bg-blue-600" : "bg-slate-300 dark:bg-slate-600"
                     )}
                   >
                     <span
@@ -581,7 +588,8 @@ export const Profile = () => {
         </main>
       </div>
 
-      <AnimatePresence>
+      {createPortal(
+        <AnimatePresence>
         {showAvatarModal && (
           <motion.div
             initial={{ opacity: 0 }}
@@ -592,32 +600,37 @@ export const Profile = () => {
           >
             <div className="noviq-modal-positioner noviq-modal-lg">
             <motion.div
+              ref={avatarDialogRef}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="avatar-editor-title"
+              tabIndex={-1}
               initial={{ opacity: 0, scale: 0.96 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.96 }}
               transition={{ duration: 0.2, ease: "easeOut" }}
-              className="noviq-modal-panel CustomScrollbar glass border-white/10 bg-[#0B1020] p-5 sm:p-8"
+              className="noviq-modal-panel CustomScrollbar border border-slate-200 bg-white p-5 text-slate-950 dark:border-slate-700 dark:bg-slate-900 dark:text-white sm:p-8"
             >
               <div className="mb-6 flex items-start justify-between">
                 <div>
-                  <p className="section-label">Avatar crop</p>
-                  <h3 className="text-3xl font-bold text-white">Preview avatar</h3>
+                  <p className="section-label">{copy.avatarCrop}</p>
+                  <h3 id="avatar-editor-title" className="text-3xl font-bold text-slate-950 dark:text-white">{copy.previewAvatar}</h3>
                 </div>
                 <button
                   type="button"
                   onClick={() => setShowAvatarModal(false)}
-                  aria-label="Close avatar editor"
-                  className="rounded-xl bg-white/5 p-2 text-slate-400 hover:text-white"
+                  aria-label={copy.closeAvatar}
+                  className="grid h-11 w-11 place-items-center rounded-xl bg-slate-100 text-slate-500 transition-colors hover:text-slate-950 dark:bg-slate-800 dark:text-slate-400 dark:hover:text-white"
                 >
                   <X size={18} />
                 </button>
               </div>
 
-              <div className="mx-auto h-[min(18rem,68vw)] w-[min(18rem,68vw)] overflow-hidden rounded-[3rem] border-8 border-white/10 bg-slate-950">
+              <div className="mx-auto h-[min(18rem,68vw)] w-[min(18rem,68vw)] overflow-hidden rounded-[3rem] border-8 border-slate-100 bg-slate-100 dark:border-slate-800 dark:bg-slate-950">
                 {avatarPreview && (
                   <img
                     src={avatarPreview}
-                    alt="Avatar preview"
+                    alt={copy.avatarPreviewAlt}
                     className="h-full w-full object-cover"
                     style={{
                       transform: `scale(${avatarZoom}) translate(${avatarOffsetX / 3}%, ${avatarOffsetY / 3}%)`,
@@ -628,7 +641,7 @@ export const Profile = () => {
 
               <div className="mt-6 grid gap-4">
                 <label className="space-y-2">
-                  <span className="text-xs font-bold uppercase tracking-widest text-slate-500">Zoom</span>
+                  <span className="text-xs font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400">{copy.zoom}</span>
                   <input
                     type="range"
                     min={1}
@@ -641,7 +654,7 @@ export const Profile = () => {
                 </label>
                 <div className="grid gap-4 sm:grid-cols-2">
                   <label className="space-y-2">
-                    <span className="text-xs font-bold uppercase tracking-widest text-slate-500">Horizontal</span>
+                    <span className="text-xs font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400">{copy.horizontal}</span>
                     <input
                       type="range"
                       min={-50}
@@ -652,7 +665,7 @@ export const Profile = () => {
                     />
                   </label>
                   <label className="space-y-2">
-                    <span className="text-xs font-bold uppercase tracking-widest text-slate-500">Vertical</span>
+                    <span className="text-xs font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400">{copy.vertical}</span>
                     <input
                       type="range"
                       min={-50}
@@ -666,7 +679,7 @@ export const Profile = () => {
               </div>
 
               {avatarError && (
-                <div className="mt-5 rounded-2xl border border-red-400/20 bg-red-400/10 px-4 py-3 text-sm font-semibold text-red-200">
+                <div role="alert" className="mt-5 rounded-2xl border border-red-300 bg-red-50 px-4 py-3 text-sm font-semibold text-red-800 dark:border-red-500/30 dark:bg-red-950/30 dark:text-red-200">
                   {avatarError}
                 </div>
               )}
@@ -675,9 +688,9 @@ export const Profile = () => {
                 <button
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
-                  className="flex-1 rounded-2xl border border-white/10 bg-white/5 py-3 font-bold text-slate-200 hover:bg-white/10"
+                  className="min-h-12 flex-1 rounded-2xl border border-slate-200 bg-white py-3 font-bold text-slate-700 transition-colors hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
                 >
-                  Choose another
+                  {copy.chooseAnother}
                 </button>
                 <button
                   type="button"
@@ -686,14 +699,16 @@ export const Profile = () => {
                   className="premium-action flex min-h-12 flex-1 items-center justify-center gap-2"
                 >
                   {isAvatarSaving ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />}
-                  Save avatar
+                  {copy.saveAvatar}
                 </button>
               </div>
             </motion.div>
             </div>
           </motion.div>
         )}
-      </AnimatePresence>
+        </AnimatePresence>,
+        document.body,
+      )}
     </div>
   );
 };

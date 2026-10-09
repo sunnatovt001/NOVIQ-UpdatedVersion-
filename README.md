@@ -6,7 +6,7 @@ Firestore, Storage, Gemini tutoring, planner, notes, flashcards and focus sessio
 ## Local development
 
 1. Install Node.js and run `npm ci` in this directory.
-2. Run `npm ci` in `functions`. Deployed functions use Node.js 20.
+2. Run `npm ci` in `functions`. Functions target Node.js 22.
 3. Copy `.env.example` to `.env.local` for public frontend settings.
 4. Copy `functions/.env.example` to `functions/.env` and configure server keys.
 5. Confirm `firebase-applet-config.json` and `firebase.json` target the intended
@@ -48,8 +48,8 @@ can work; this local task did not deploy them.
 
 Run `npm run verify` before pushing. It runs TypeScript, Functions syntax checks,
 all isolated tests and the production build. GitHub Actions also runs this command
-and the Firestore emulator suite on Node.js 22 with Java 21. Deployed Functions
-retain the Node.js 20 runtime specified in `firebase.json`.
+and the Firestore emulator and browser recovery suites on Node.js 22 with Java 21.
+Functions target the same Node.js 22 runtime in `firebase.json`.
 
 ```text
 npm run lint
@@ -67,8 +67,13 @@ tests or live provider verification.
 
 `npm run test:rules` runs the separate security-rule suite on a local demo
 Firestore emulator. It requires a current Java runtime (Java 21+) and Firebase
-CLI; it never targets the production project. The current machine has Java 8,
-so this emulator suite has not been executed here.
+CLI; it never targets the production project. All 9 rule tests passed locally
+using portable Java 21. Set JAVA_HOME and PATH to Java 21 before running it.
+
+`npm run test:browser:ci` starts and cleans up the isolated browser server.
+It uses installed Chrome by default; CI installs Playwright Chromium and sets
+NOVIQ_BROWSER_CHANNEL=chromium. See [LAUNCH_READINESS.md](LAUNCH_READINESS.md)
+for live blockers, domain configuration, backups and release/rollback checks.
 
 ## Server limits and progress
 

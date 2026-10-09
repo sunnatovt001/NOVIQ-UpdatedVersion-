@@ -1,9 +1,16 @@
+// Durable queues must fail closed: corrupt or inaccessible storage must never
+// be mistaken for an empty queue and overwritten by the next edit.
+export const loadLocalDataStrict = <T>(key: string, fallback: T): T => {
+  if (typeof window === "undefined") return fallback;
+  const raw = window.localStorage.getItem(key);
+  return raw === null ? fallback : JSON.parse(raw) as T;
+};
+
 export const loadLocalData = <T>(key: string, fallback: T): T => {
   if (typeof window === "undefined") return fallback;
 
   try {
-    const raw = window.localStorage.getItem(key);
-    return raw ? (JSON.parse(raw) as T) : fallback;
+    return loadLocalDataStrict(key, fallback);
   } catch {
     return fallback;
   }

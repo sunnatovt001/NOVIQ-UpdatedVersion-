@@ -4,32 +4,35 @@ import {
   ArrowRight,
   Check,
   CreditCard,
+  LoaderCircle,
   ShieldCheck,
   Sparkles,
   X,
 } from "lucide-react";
 import { cn } from "@/src/lib/utils";
 import {
-  FREE_FEATURES,
-  getPlanLabel,
   getSubscription,
   isPro,
   PAYMENT_METHODS,
-  PRO_FEATURES,
   PRO_PRICING,
   recordCheckout,
   recordSubscriptionChangeRequest,
 } from "@/src/lib/subscription";
 import type { BillingCycle, PaymentProvider } from "@/src/types";
 import { getAppErrorMessage } from "@/src/lib/errors";
+import { useLocale, type AppLocale } from "@/src/contexts/LocaleContext";
+import { formatPricingCopy, getPricingCopy } from "@/src/features/pricing/pricingCopy";
 
-const formatDate = (value?: string) => {
-  if (!value) return "No renewal date";
-  return new Date(value).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+const formatDate = (value: string | undefined, locale: AppLocale, fallback: string) => {
+  if (!value) return fallback;
+  const dateLocale = locale === "uz" ? "uz-UZ" : locale === "ru" ? "ru-RU" : "en-US";
+  return new Date(value).toLocaleDateString(dateLocale, { month: "short", day: "numeric", year: "numeric" });
 };
 
 export const Pricing = ({ setActiveTab }: { setActiveTab: (tab: string) => void }) => {
   const { profile, user, updateLocalProfile } = useAuth();
+  const { locale } = useLocale();
+  const copy = getPricingCopy(locale);
   const [billingCycle, setBillingCycle] = useState<BillingCycle>("monthly");
   const [provider, setProvider] = useState<PaymentProvider>("click");
   const [checkoutStatus, setCheckoutStatus] = useState("");
@@ -49,7 +52,7 @@ export const Pricing = ({ setActiveTab }: { setActiveTab: (tab: string) => void 
       updateLocalProfile({
         settings: { ...(profile?.settings || {}), preferredPaymentProvider: provider },
       });
-      setCheckoutStatus("Opening secure payment. Pro activates after verified payment.");
+      setCheckoutStatus(copy.openingPayment);
       window.location.assign(checkout.checkoutUrl);
     } catch (error) {
       console.warn("Checkout record failed", error);
@@ -68,53 +71,52 @@ export const Pricing = ({ setActiveTab }: { setActiveTab: (tab: string) => void 
         subscription,
       });
       setCheckoutStatus(result.syncStatus === "synced"
-        ? "Cancellation request created. Billing status updates after verification."
-        : "Cancellation request saved on this device. It will be sent when sync succeeds.");
+        ? copy.cancellationCreated
+        : copy.cancellationLocal);
     } catch (error) {
       console.warn("Cancel subscription request failed", error);
-      setCheckoutStatus("Cancellation request saved on this device. Cloud sync will retry automatically.");
+      setCheckoutStatus(copy.cancellationRetry);
     }
   };
 
   return (
-    <div className="space-y-6 pb-16 text-[#111827]">
-      <section className="rounded-[2rem] border border-[#E5E7EB] bg-white p-6 shadow-[0_20px_70px_rgba(17,24,39,0.06)] sm:p-8">
+    <div className="space-y-6 pb-16 text-slate-950 dark:text-slate-50">
+      <section className="rounded-3xl border border-slate-200 bg-white p-6 dark:border-slate-700 dark:bg-slate-900 sm:p-8">
         <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <p className="text-xs font-black uppercase tracking-[0.24em] text-[#3F7D58]">Noviq Billing</p>
+            <p className="text-xs font-black uppercase tracking-[0.24em] text-blue-700 dark:text-blue-300">{copy.eyebrow}</p>
             <h1 className="mt-3 max-w-3xl font-display text-4xl font-black tracking-tight sm:text-5xl">
-              Simple pricing for exam preparation.
+              {copy.title}
             </h1>
-            <p className="mt-4 max-w-2xl text-sm leading-7 text-[#6B7280]">
-              Free covers the core academic workflow. Pro adds unlimited AI evaluation and exam intelligence for IELTS, SAT, HSK, CEFR, school subjects, and university entrance prep.
-              {" "}AI usage is subject to a daily fair-use allowance and request-rate limits.
+            <p className="mt-4 max-w-2xl text-base leading-7 text-slate-600 dark:text-slate-300">
+              {copy.subtitle}
             </p>
           </div>
 
-          <div className="rounded-2xl border border-[#E5E7EB] bg-[#FAFAF8] p-4">
-            <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[#6B7280]">Current plan</p>
-            <p className="mt-2 text-xl font-black">{getPlanLabel(profile)}</p>
-            <p className="mt-1 text-xs font-semibold text-[#6B7280]">
-              {activePro ? `Renews ${formatDate(subscription.currentPeriodEnd)}` : "Free forever"}
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800">
+            <p className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-500 dark:text-slate-400">{copy.currentPlan}</p>
+            <p className="mt-2 text-xl font-black">{activePro ? "NOVIQ Pro" : copy.freePlan}</p>
+            <p className="mt-1 text-xs font-semibold text-slate-500 dark:text-slate-400">
+              {activePro ? formatPricingCopy(copy.renews, { date: formatDate(subscription.currentPeriodEnd, locale, copy.noRenewal) }) : copy.freeForever}
             </p>
           </div>
         </div>
       </section>
 
       <section className="grid gap-5 xl:grid-cols-[0.82fr_1.18fr]">
-        <article className="rounded-[2rem] border border-[#E5E7EB] bg-white p-6 shadow-[0_20px_70px_rgba(17,24,39,0.05)]">
+        <article className="flex flex-col rounded-3xl border border-slate-200 bg-white p-6 dark:border-slate-700 dark:bg-slate-900">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <h2 className="text-2xl font-black">Free Plan</h2>
-              <p className="mt-2 text-sm leading-6 text-[#6B7280]">Core study operating system for daily academic progress.</p>
+              <h2 className="text-2xl font-black">{copy.freePlan}</h2>
+              <p className="mt-2 text-sm leading-6 text-slate-600 dark:text-slate-300">{copy.freeDescription}</p>
             </div>
             <p className="text-2xl font-black">0 UZS</p>
           </div>
 
           <div className="mt-6 grid gap-3">
-            {FREE_FEATURES.slice(0, 7).map((feature) => (
-              <div key={feature} className="flex items-center gap-3 text-sm font-semibold text-[#374151]">
-                <Check size={17} className="text-[#3F7D58]" />
+            {copy.freeFeatures.map((feature) => (
+              <div key={feature} className="flex items-center gap-3 text-sm font-semibold text-slate-700 dark:text-slate-200">
+                <Check size={17} className="shrink-0 text-blue-600 dark:text-blue-300" aria-hidden="true" />
                 {feature}
               </div>
             ))}
@@ -123,63 +125,64 @@ export const Pricing = ({ setActiveTab }: { setActiveTab: (tab: string) => void 
           <button
             type="button"
             onClick={() => setActiveTab("dashboard")}
-            className="mt-8 inline-flex min-h-12 w-full items-center justify-center rounded-2xl border border-[#E5E7EB] bg-white px-5 text-sm font-black text-[#111827] transition hover:bg-[#FAFAF8]"
+            className="mt-8 inline-flex min-h-12 w-full items-center justify-center rounded-2xl border border-slate-300 bg-white px-5 py-3 text-sm font-black text-slate-800 transition-colors hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700"
           >
-            Continue Free
+            {copy.continueFree}
           </button>
         </article>
 
-        <article className="relative rounded-[2rem] border border-[#3F7D58]/35 bg-white p-6 shadow-[0_24px_80px_rgba(17,24,39,0.08)]">
-          <div className="absolute right-5 top-5 rounded-full bg-[#F0FDF4] px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.2em] text-[#3F7D58]">
-            Most Popular
+        <article className="relative rounded-3xl border-2 border-blue-300 bg-white p-6 dark:border-blue-500/50 dark:bg-slate-900">
+          <div className="absolute right-5 top-5 rounded-lg bg-blue-50 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.16em] text-blue-700 dark:bg-blue-500/10 dark:text-blue-300">
+            {copy.recommended}
           </div>
 
           <div className="pr-28">
-            <h2 className="text-2xl font-black">Pro Plan</h2>
-            <p className="mt-2 text-sm leading-6 text-[#6B7280]">Unlimited AI tools for serious exam preparation.</p>
+            <h2 className="text-2xl font-black">{copy.proPlan}</h2>
+            <p className="mt-2 text-sm leading-6 text-slate-600 dark:text-slate-300">{copy.proDescription}</p>
           </div>
 
           <div className="mt-6 grid gap-5 lg:grid-cols-[0.9fr_1.1fr]">
             <div>
-              <div className="inline-flex rounded-2xl border border-[#E5E7EB] bg-[#FAFAF8] p-1">
+              <div className="inline-flex rounded-2xl border border-slate-200 bg-slate-100 p-1 dark:border-slate-700 dark:bg-slate-800">
                 {(["monthly", "yearly"] as BillingCycle[]).map((cycle) => (
                   <button
                     key={cycle}
                     type="button"
                     onClick={() => setBillingCycle(cycle)}
+                    aria-pressed={billingCycle === cycle}
                     className={cn(
-                      "rounded-xl px-4 py-2 text-sm font-black capitalize transition",
-                      billingCycle === cycle ? "bg-white text-[#111827] shadow-sm" : "text-[#6B7280] hover:text-[#111827]"
+                      "min-h-11 rounded-xl px-4 py-2 text-sm font-black transition-colors",
+                      billingCycle === cycle ? "bg-white text-slate-950 shadow-sm dark:bg-slate-700 dark:text-white" : "text-slate-600 hover:text-slate-950 dark:text-slate-300 dark:hover:text-white"
                     )}
                   >
-                    {cycle}
+                    {cycle === "monthly" ? copy.monthly : copy.yearly}
                   </button>
                 ))}
               </div>
 
               <div className="mt-5 flex items-end gap-2">
                 <p className="text-4xl font-black tracking-tight">{PRO_PRICING[billingCycle].label.split(" / ")[0]}</p>
-                <p className="pb-1 text-sm font-bold text-[#6B7280]">/ {billingCycle === "monthly" ? "month" : "year"}</p>
+                <p className="pb-1 text-sm font-bold text-slate-500 dark:text-slate-400">/ {billingCycle === "monthly" ? copy.month : copy.year}</p>
               </div>
 
               <div className="mt-6 grid gap-3">
-                {PRO_FEATURES.slice(0, 7).map((feature) => (
-                  <div key={feature} className="flex items-center gap-3 text-sm font-semibold text-[#374151]">
-                    <Check size={17} className="text-[#3F7D58]" />
+                {copy.proFeatures.map((feature) => (
+                  <div key={feature} className="flex items-center gap-3 text-sm font-semibold text-slate-700 dark:text-slate-200">
+                    <Check size={17} className="shrink-0 text-blue-600 dark:text-blue-300" aria-hidden="true" />
                     {feature}
                   </div>
                 ))}
               </div>
             </div>
 
-            <div className="rounded-[1.5rem] border border-[#E5E7EB] bg-[#FAFAF8] p-4">
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800">
               <div className="flex items-center gap-3">
-                <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white text-[#3F7D58]">
-                  <ShieldCheck size={20} />
+                <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white text-blue-700 dark:bg-slate-900 dark:text-blue-300">
+                  <ShieldCheck size={20} aria-hidden="true" />
                 </div>
                 <div>
-                  <p className="text-xs font-black uppercase tracking-[0.2em] text-[#6B7280]">Checkout</p>
-                  <p className="text-sm font-bold text-[#111827]">One step. Secure payment method.</p>
+                  <p className="text-xs font-black uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">{copy.checkout}</p>
+                  <p className="text-sm font-bold text-slate-950 dark:text-white">{copy.checkoutDescription}</p>
                 </div>
               </div>
 
@@ -189,18 +192,19 @@ export const Pricing = ({ setActiveTab }: { setActiveTab: (tab: string) => void 
                     key={method.id}
                     type="button"
                     onClick={() => setProvider(method.id)}
+                    aria-pressed={provider === method.id}
                     className={cn(
-                      "flex min-h-12 items-center justify-between rounded-2xl border px-4 text-left text-sm font-black transition",
+                      "flex min-h-12 items-center justify-between rounded-2xl border px-4 text-left text-sm font-black transition-colors",
                       provider === method.id
-                        ? "border-[#3F7D58] bg-[#F0FDF4] text-[#2F6145]"
-                        : "border-[#E5E7EB] bg-white text-[#374151] hover:border-[#3F7D58]/40"
+                        ? "border-blue-500 bg-blue-50 text-blue-800 dark:bg-blue-500/10 dark:text-blue-200"
+                        : "border-slate-200 bg-white text-slate-700 hover:border-blue-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200"
                     )}
                   >
                     <span className="flex items-center gap-3">
-                      <CreditCard size={17} />
+                      <CreditCard size={17} aria-hidden="true" />
                       {method.label}
                     </span>
-                    <span className="text-[10px] font-black uppercase tracking-[0.18em] text-[#9CA3AF]">{method.region}</span>
+                    <span className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">{method.region === "Uzbekistan" ? copy.uzbekistan : copy.international}</span>
                   </button>
                 ))}
               </div>
@@ -209,25 +213,27 @@ export const Pricing = ({ setActiveTab }: { setActiveTab: (tab: string) => void 
                 type="button"
                 onClick={activatePro}
                 disabled={isCheckingOut}
-                className="mt-5 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl bg-[#3F7D58] px-5 text-sm font-black text-white transition hover:bg-[#2F6145] disabled:cursor-not-allowed disabled:opacity-60"
+                aria-busy={isCheckingOut}
+                className="mt-5 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl bg-blue-600 px-5 text-sm font-black text-white transition-colors hover:bg-blue-700 active:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                {activePro ? "Update Pro Billing" : "Upgrade to Pro"}
-                <ArrowRight size={17} />
+                {isCheckingOut && <LoaderCircle size={17} className="animate-spin motion-reduce:animate-none" aria-hidden="true" />}
+                {activePro ? copy.updateBilling : copy.upgrade}
+                {!isCheckingOut && <ArrowRight size={17} aria-hidden="true" />}
               </button>
 
               {activePro && (
                 <button
                   type="button"
                   onClick={cancelRenewal}
-                  className="mt-3 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-2xl border border-[#E5E7EB] bg-white px-5 text-sm font-bold text-[#6B7280] transition hover:bg-[#FAFAF8] hover:text-[#111827]"
+                  className="mt-3 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-2xl border border-slate-300 bg-white px-5 text-sm font-bold text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-950 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-700 dark:hover:text-white"
                 >
-                  <X size={16} />
-                  Cancel renewal
+                  <X size={16} aria-hidden="true" />
+                  {copy.cancelRenewal}
                 </button>
               )}
 
               {checkoutStatus && (
-                <p className="mt-4 rounded-2xl border border-[#E5E7EB] bg-white px-4 py-3 text-sm font-semibold text-[#374151]">
+                <p role="status" className="mt-4 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200">
                   {checkoutStatus}
                 </p>
               )}
@@ -236,18 +242,18 @@ export const Pricing = ({ setActiveTab }: { setActiveTab: (tab: string) => void 
         </article>
       </section>
 
-      <section className="rounded-[1.75rem] border border-[#E5E7EB] bg-white p-5 shadow-[0_16px_50px_rgba(17,24,39,0.04)]">
+      <section className="rounded-3xl border border-slate-200 bg-white p-5 dark:border-slate-700 dark:bg-slate-900">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#F0FDF4] text-[#3F7D58]">
-              <Sparkles size={20} />
+            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-blue-50 text-blue-700 dark:bg-blue-500/10 dark:text-blue-300">
+              <Sparkles size={20} aria-hidden="true" />
             </div>
             <div>
-              <h3 className="text-lg font-black">Supported payment methods</h3>
-              <p className="mt-1 text-sm text-[#6B7280]">Click, Payme, Visa / Mastercard. No unnecessary checkout steps.</p>
+              <h3 className="text-lg font-black">{copy.paymentMethods}</h3>
+              <p className="mt-1 text-sm leading-6 text-slate-600 dark:text-slate-300">{copy.paymentDescription}</p>
             </div>
           </div>
-          <p className="text-xs font-black uppercase tracking-[0.2em] text-[#6B7280]">UZS billing</p>
+          <p className="text-xs font-black uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">{copy.uzsBilling}</p>
         </div>
       </section>
     </div>

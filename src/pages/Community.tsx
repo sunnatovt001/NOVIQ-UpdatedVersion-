@@ -3,7 +3,6 @@ import {
   trySaveLocalData as saveLocalData,
 } from "@/src/lib/localStore";
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { createPortal } from "react-dom";
 import {
   ChevronRight,
   CircleUserRound,
@@ -38,7 +37,9 @@ import { useAuth } from "@/src/contexts/AuthContext";
 import { recordDate } from "@/src/lib/recordDate";
 import { isReadOnlyAudit } from "@/src/lib/auditMode";
 import { messageAuthor, resolveMessageAuthor } from "@/src/lib/activityEvidence";
-import { useDialogFocus } from "@/src/lib/useDialogFocus";
+import { useLocale } from "@/src/contexts/LocaleContext";
+import { formatCommunityCopy, getCommunityCopy } from "@/src/features/community/communityCopy";
+import { CommunityMembersDialog, type CommunityDirectory } from "@/src/features/community/CommunityMembersDialog";
 
 type Room = {
   id: string;
@@ -61,8 +62,6 @@ type Message = {
   content: string;
   createdAt?: unknown;
 };
-type GroupMember = { uid: string; displayName: string; username: string | null; role: string; online: boolean; lastSeenAt: string | null };
-type MemberDirectory = { count: number; onlineCount: number | null; members: GroupMember[]; nextCursor: string | null; measuredAt: string };
 const call = async <T,>(
   name: string,
   data: Record<string, unknown>,
@@ -70,35 +69,35 @@ const call = async <T,>(
   if (isReadOnlyAudit && !["getCommunityMemberCount", "getCommunityMembers", "getFriendInvite"].includes(name)) throw new Error("Group writes and invitations are disabled in read-only audit mode.");
   return (await httpsCallable<Record<string, unknown>, T>(functions, name, { timeout: 20000 })(data)).data;
 };
-const errorText = (error: unknown) =>
+const errorText = (error: unknown, fallback: string) =>
   error instanceof Error
     ? error.message
-    : "Something went wrong. Please try again.";
+    : fallback;
 const button =
   "rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-500";
 const field =
-  "w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-slate-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100";
-const panel = "rounded-2xl border border-slate-200 bg-white p-5 shadow-sm";
+  "w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-slate-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:focus:ring-blue-500/20";
+const panel = "rounded-2xl border border-slate-200 bg-white p-5 text-slate-900 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100";
 const selectableGroups = (groups: Room[]) => {
   const lastSat = groups.reduce((last, group, index) => group.name.trim().toLowerCase() === "sat" ? index : last, -1);
   return groups.filter((group, index) => group.name.trim().toLowerCase() !== "sat" || index === lastSat);
 };
 export const Community = () => {
   const { user } = useAuth();
+  const { locale } = useLocale();
+  const copy = getCommunityCopy(locale);
   const [rooms, setRooms] = useState<Room[]>([]),
     [joined, setJoined] = useState<Room[]>([]);
   const [invites, setInvites] = useState<Invite[]>([]),
     [friends, setFriends] = useState<Room[]>([]);
   const [active, setActive] = useState("");
   const [membersOpen, setMembersOpen] = useState(false);
-  const [directory, setDirectory] = useState<MemberDirectory | null>(null);
+  const [directory, setDirectory] = useState<CommunityDirectory | null>(null);
   const [directoryError, setDirectoryError] = useState("");
   const [directoryLoading, setDirectoryLoading] = useState(false);
   const [memberSearch, setMemberSearch] = useState("");
   const directoryRequest = useRef(false);
   const directoryVersion = useRef(0);
-  const membersPanel = useRef<HTMLDivElement>(null);
-  useDialogFocus(membersOpen, membersPanel, () => setMembersOpen(false));
   const [groupDetails, setGroupDetails] = useState<Record<string, { count?: number; state: "loading" | "ready" | "missing" | "error" }>>({});
   const [authorLabels, setAuthorLabels] = useState<Record<string, Record<string, string | null>>>({});
   const [authorLookupState, setAuthorLookupState] = useState<Record<string, "loading" | "ready" | "error">>({});
@@ -157,7 +156,7 @@ export const Community = () => {
   const run = async (key: string, action: () => Promise<void>) => {
     if (lock.current) return;
     if (!navigator.onLine) {
-      setError("You are offline. Reconnect to continue; your draft is kept.");
+      setError(copy.offlineAction);
       return;
     }
     lock.current = true;
@@ -167,7 +166,7 @@ export const Community = () => {
     try {
       await action();
     } catch (error) {
-      setError(errorText(error));
+      setError(errorText(error, copy.messagesLoadFailed));
     } finally {
       lock.current = false;
       setBusy("");
@@ -184,7 +183,7 @@ export const Community = () => {
       if (discoveryLoaded && joinedLoaded) setLoading(false);
     };
     const fail = (error: unknown) => {
-      setError(errorText(error));
+      setError(errorText(error, copy.messagesLoadFailed));
       setLoading(false);
     };
     setSocialState({ friends: "loading", invites: "loading" });
@@ -268,12 +267,12 @@ export const Community = () => {
     setDirectoryLoading(true);
     setDirectoryError("");
     try {
-      const result = await call<MemberDirectory>("getCommunityMembers", { communityId: roomId, after });
+      const result = await call<CommunityDirectory>("getCommunityMembers", { communityId: roomId, after });
       if (directoryRoom.current !== roomId || directoryVersion.current !== version) return;
       setDirectory((current) => ({ ...result, members: after && current ? [...current.members, ...result.members] : result.members }));
       setGroupDetails((current) => ({ ...current, [roomId]: { count: result.count, state: "ready" } }));
     } catch {
-      if (directoryRoom.current === roomId && directoryVersion.current === version) setDirectoryError("Group members could not be loaded. The members service may need updating. Please retry.");
+      if (directoryRoom.current === roomId && directoryVersion.current === version) setDirectoryError(copy.directoryLoadFailed);
     } finally {
       if (directoryVersion.current === version) { directoryRequest.current = false; setDirectoryLoading(false); }
     }
@@ -359,7 +358,7 @@ export const Community = () => {
         setChatLoading(false);
       },
       (error) => {
-        setChatError(errorText(error));
+        setChatError(errorText(error, copy.messagesLoadFailed));
         setChatPermissionDenied(error.code === "permission-denied");
         setChatLoading(false);
       },
@@ -377,7 +376,7 @@ export const Community = () => {
         if (current) setReceived(data);
       })
       .catch((error) => {
-        if (current) setError(errorText(error));
+        if (current) setError(errorText(error, copy.messagesLoadFailed));
       });
     return () => {
       current = false;
@@ -415,7 +414,7 @@ export const Community = () => {
         setDraft((current) => (current.trim() === content ? "" : current));
       saveLocalData(`noviq-chat-draft-${user.uid}-${room}`, "");
       scrollNext.current = true;
-      setStatus("Message sent.");
+      setStatus(copy.messageSent);
     });
   const room =
     rooms.find((r) => r.id === active) || joined.find((r) => r.id === active);
@@ -464,55 +463,56 @@ export const Community = () => {
   );
   const memberCountLabel = (entry: Room) => {
     const detail = groupDetails[entry.id];
-    if (detail?.state === "loading") return "Loading members…";
-    if (detail?.state === "error") return "Could not load member count";
-    if (detail?.state === "missing") return "Member count not recorded";
+    if (detail?.state === "loading") return copy.loadingMembers;
+    if (detail?.state === "error") return copy.memberCountFailed;
+    if (detail?.state === "missing") return copy.memberCountMissing;
     const count = detail?.count ?? entry.membersCount;
-    return typeof count === "number" ? `${count} member${count === 1 ? "" : "s"}` : "Member count not recorded";
+    return typeof count === "number"
+      ? count === 1 ? copy.oneMember : formatCommunityCopy(copy.membersCount, { count })
+      : copy.memberCountMissing;
   };
   if (!user)
     return (
       <div className={panel}>
-        Sign in to join study groups and chat with friends.
+        {copy.signIn}
       </div>
     );
   return (
-    <div className="min-h-[calc(100dvh-9rem)] rounded-[32px] border border-slate-200 bg-[#f8fbff] p-4 text-slate-900 shadow-[0_20px_70px_rgba(15,23,42,0.05)] dark:border-slate-800 dark:bg-slate-950 sm:p-6">
+    <div className="community-page min-h-[calc(100dvh-9rem)] rounded-[32px] border border-slate-200 bg-[#f8fbff] p-4 text-slate-900 shadow-[0_20px_70px_rgba(15,23,42,0.05)] dark:border-slate-800 dark:bg-slate-950 dark:text-slate-50 sm:p-6">
       <header className="rounded-[26px] border border-slate-200 bg-white px-5 py-6 shadow-sm dark:border-slate-800 dark:bg-slate-900 sm:px-7">
         <div className="flex flex-wrap items-center gap-4">
           <div className="grid h-14 w-14 place-items-center rounded-2xl bg-blue-50 text-blue-600 dark:bg-blue-500/10">
-            <UsersRound size={30} />
+            <UsersRound size={30} aria-hidden="true" />
           </div>
           <div>
-            <h1 className="text-3xl font-black tracking-tight">Nexus</h1>
+            <h1 className="text-3xl font-black tracking-tight">{copy.title}</h1>
             <p className="mt-1 text-sm text-slate-500 sm:text-base">
-              Study together, share ideas, and stay motivated with your friends.
+              {copy.subtitle}
             </p>
           </div>
         </div>
         <div className="mt-5 flex flex-wrap gap-x-6 gap-y-3 border-t border-slate-100 pt-5 text-sm font-medium text-slate-500 dark:border-slate-800">
           <span className="inline-flex items-center gap-2">
-            <UsersRound size={18} className="text-blue-600" /> Join study groups
+            <UsersRound size={18} className="text-blue-600" aria-hidden="true" /> {copy.joinStudyGroups}
           </span>
           <span className="inline-flex items-center gap-2">
-            <MessageCircle size={18} className="text-blue-600" /> Discuss
-            questions
+            <MessageCircle size={18} className="text-blue-600" aria-hidden="true" /> {copy.discussQuestions}
           </span>
           <span className="inline-flex items-center gap-2">
-            <UserPlus size={18} className="text-blue-600" /> Invite friends
+            <UserPlus size={18} className="text-blue-600" aria-hidden="true" /> {copy.inviteFriends}
           </span>
         </div>
       </header>
       {!online && (
         <p role="status" className="rounded-xl bg-amber-50 p-3 text-amber-900">
-          You are offline. Messages will update when your connection returns.
+          {copy.offline}
         </p>
       )}
       {error && (
         <p role="alert" className="rounded-xl bg-red-50 p-3 text-red-800">
           {error}{" "}
           <button onClick={() => setError("")} className="ml-2 underline">
-            Dismiss
+            {copy.dismiss}
           </button>
         </p>
       )}
@@ -527,13 +527,13 @@ export const Community = () => {
       )}
       {token && (
         <section className={panel}>
-          <h2 className="font-semibold">Friend invitation</h2>
+          <h2 className="font-semibold">{copy.friendInvitation}</h2>
           <p className="my-3">
             {received
               ? received.status === "accepted"
-                ? "This invitation has already been accepted."
-                : `${received.senderName} invited you to connect.`
-              : "Checking invitation… Sign in with the invited email address."}
+                ? copy.invitationAccepted
+                : formatCommunityCopy(copy.invitedBy, { name: received.senderName })
+              : copy.checkingInvitation}
           </p>
           {received?.status === "pending" && (
             <button
@@ -545,11 +545,11 @@ export const Community = () => {
                   await user.getIdToken(true);
                   await call("acceptFriendInvite", { token });
                   dismissInvite();
-                  setStatus("Friend added to both accounts.");
+                  setStatus(copy.friendAdded);
                 })
               }
             >
-              {busy === "accept" ? "Accepting…" : "Accept invitation"}
+              {busy === "accept" ? copy.accepting : copy.acceptInvitation}
             </button>
           )}
           {!user.emailVerified && (
@@ -559,17 +559,15 @@ export const Community = () => {
               onClick={() =>
                 run("verify", async () => {
                   await sendEmailVerification(user);
-                  setStatus(
-                    "Verification email sent. Open the link in your email, then accept the invitation again.",
-                  );
+                  setStatus(copy.verificationSent);
                 })
               }
             >
-              Verify my email
+              {copy.verifyEmail}
             </button>
           )}
           <button className="ml-3 underline" onClick={dismissInvite}>
-            Dismiss invitation
+            {copy.dismissInvitation}
           </button>
         </section>
       )}
@@ -578,11 +576,11 @@ export const Community = () => {
           <section className="rounded-[26px] border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
             <div className="flex items-center justify-between gap-3">
               <h2 className="flex items-center gap-2 text-lg font-black">
-                <UsersRound size={22} className="text-blue-600" /> My Groups
+                <UsersRound size={22} className="text-blue-600" aria-hidden="true" /> {copy.myGroups}
               </h2>
               <button
                 type="button"
-                aria-label="Create group"
+                aria-label={copy.createGroup}
                 onClick={() => setCreateOpen((current) => !current)}
                 className="inline-flex h-9 items-center justify-center rounded-xl bg-blue-600 px-3 text-sm font-bold text-white shadow-sm transition hover:bg-blue-500"
               >
@@ -603,29 +601,29 @@ export const Community = () => {
                     setName("");
                     setDescription("");
                     setCreateOpen(false);
-                    setStatus("Study group created.");
+                    setStatus(copy.studyGroupCreated);
                   });
                 }}
               >
                 <label className="sr-only" htmlFor="community-name">
-                  Group name
+                  {copy.groupName}
                 </label>
                 <input
                   id="community-name"
                   className={`${field} mb-2`}
-                  placeholder="Group name"
+                  placeholder={copy.groupName}
                   required
                   maxLength={80}
                   value={name}
                   onChange={(event) => setName(event.target.value)}
                 />
                 <label className="sr-only" htmlFor="community-description">
-                  Description
+                  {copy.description}
                 </label>
                 <textarea
                   id="community-description"
                   className={`${field} mb-2 min-h-20 resize-y`}
-                  placeholder="Description (optional)"
+                  placeholder={copy.descriptionOptional}
                   maxLength={500}
                   value={description}
                   onChange={(event) => setDescription(event.target.value)}
@@ -636,12 +634,12 @@ export const Community = () => {
                     className={`${button} flex-1`}
                     disabled={!!busy || !online || !name.trim()}
                   >
-                    {busy === "create" ? "Creating…" : "Create group"}
+                    {busy === "create" ? copy.creating : copy.createGroup}
                   </button>
                   <button
                     type="button"
                     onClick={() => setCreateOpen(false)}
-                    aria-label="Cancel group creation"
+                    aria-label={copy.cancelGroupCreation}
                     className="rounded-xl border border-slate-300 px-3 text-sm font-semibold text-slate-600 dark:border-slate-700 dark:text-slate-300"
                   >
                     <X size={17} />
@@ -655,17 +653,17 @@ export const Community = () => {
                 size={17}
               />
               <input
-                aria-label="Search groups"
+                aria-label={copy.searchGroups}
                 value={groupSearch}
                 onChange={(event) => setGroupSearch(event.target.value)}
-                className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-9 pr-3 text-sm outline-none transition focus:border-blue-400 dark:border-slate-700 dark:bg-slate-800"
-                placeholder="Search groups..."
+                className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-9 pr-3 text-sm outline-none transition-colors focus:border-blue-400 dark:border-slate-700 dark:bg-slate-800"
+                placeholder={copy.searchGroupsPlaceholder}
               />
             </label>
             <div className="mt-3 space-y-1">
               {loading ? (
                 <p role="status" className="py-4 text-sm text-slate-500">
-                  Loading groups…
+                  {copy.loadingGroups}
                 </p>
               ) : !joined.length ? (
                 <div className="py-7 text-center text-sm text-slate-500">
@@ -673,11 +671,11 @@ export const Community = () => {
                     className="mx-auto mb-2 text-slate-300"
                     size={28}
                   />
-                  You haven't joined any study groups yet.
+                  {copy.noJoinedGroups}
                 </div>
               ) : !visibleJoined.length ? (
                 <p className="py-5 text-center text-sm text-slate-500">
-                  No matching groups.
+                  {copy.noMatchingGroups}
                 </p>
               ) : (
                 visibleJoined.map((r) => (
@@ -685,7 +683,7 @@ export const Community = () => {
                     key={r.id}
                     aria-pressed={active === r.id}
                     onClick={() => selectRoom(r.id)}
-                    className={`flex w-full items-center gap-3 break-words rounded-2xl px-3 py-3 text-left transition ${active === r.id ? "bg-blue-50 font-semibold text-blue-700 dark:bg-blue-500/10 dark:text-blue-300" : "hover:bg-slate-50 dark:hover:bg-slate-800"}`}
+                    className={`flex w-full items-center gap-3 break-words rounded-2xl px-3 py-3 text-left transition-colors ${active === r.id ? "bg-blue-50 font-semibold text-blue-700 dark:bg-blue-500/10 dark:text-blue-300" : "hover:bg-slate-50 dark:hover:bg-slate-800"}`}
                   >
                     <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-blue-100 text-blue-600 dark:bg-blue-500/15">
                       <GraduationCap size={19} />
@@ -708,10 +706,10 @@ export const Community = () => {
           <section className="rounded-[26px] border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
             <div className="flex items-center gap-2">
               <Compass size={22} className="text-blue-600" />
-              <h2 className="text-lg font-black">Discover Groups</h2>
+              <h2 className="text-lg font-black">{copy.discoverGroups}</h2>
             </div>
             <p className="mt-1 text-sm text-slate-500">
-              Join public study groups with similar goals.
+              {copy.discoverDescription}
             </p>
             <div className="mt-4 space-y-3">
               {discoverableRooms.map((r) => (
@@ -735,17 +733,17 @@ export const Community = () => {
                       run(r.id, async () => {
                         await call("joinCommunity", { communityId: r.id });
                         setActive(r.id);
-                        setStatus("Group joined.");
+                        setStatus(copy.groupJoined);
                       })
                     }
                   >
-                    {busy === r.id ? "Joining…" : "Join group"}
+                    {busy === r.id ? copy.joining : copy.joinGroup}
                   </button>
                 </div>
               ))}
               {!loading && !discoverableRooms.length && (
                 <p className="py-4 text-center text-sm text-slate-500">
-                  No public groups available yet.
+                  {copy.noPublicGroups}
                 </p>
               )}
             </div>
@@ -759,19 +757,19 @@ export const Community = () => {
               </span>
               <div className="min-w-0">
                 <h2 className="truncate text-lg font-black">
-                  <button type="button" disabled={!membership} onClick={() => setMembersOpen(true)}>{room?.name || "Study chat"}</button>
+                  <button type="button" disabled={!membership} onClick={() => setMembersOpen(true)}>{room?.name || copy.studyChat}</button>
                 </h2>
                 <p className="mt-0.5 text-sm text-slate-500">
                   {room
-                    ? `${memberCountLabel(room)} · Messages are visible to group members.`
-                    : "Choose or join a group to start chatting."}
+                    ? formatCommunityCopy(copy.messagesVisible, { members: memberCountLabel(room) })
+                    : copy.chooseGroup}
                 </p>
-                {groupDetails[active]?.state === "error" && <button type="button" className="mt-2 text-sm text-blue-700 underline" onClick={() => setGroupRevision((current) => current + 1)}>Retry member count</button>}
-                {authorLookupState[active] === "error" && <p role="alert" className="mt-2 text-sm text-slate-500">Some author names could not be loaded. <button type="button" className="underline" onClick={() => setGroupRevision((value) => value + 1)}>Retry author names</button></p>}
+                {groupDetails[active]?.state === "error" && <button type="button" className="mt-2 text-sm text-blue-700 underline dark:text-blue-300" onClick={() => setGroupRevision((current) => current + 1)}>{copy.retryMemberCount}</button>}
+                {authorLookupState[active] === "error" && <p role="alert" className="mt-2 text-sm text-slate-500 dark:text-slate-400">{copy.authorNamesFailed} <button type="button" className="underline" onClick={() => setGroupRevision((value) => value + 1)}>{copy.retryAuthorNames}</button></p>}
               </div>
             </div>
             <div className="flex items-center gap-3">
-              {membership && <button type="button" className="rounded-xl border border-slate-200 p-2 text-blue-700" aria-label="View group members" onClick={() => setMembersOpen(true)}><UsersRound size={22} /></button>}
+              {membership && <button type="button" className="grid h-11 w-11 place-items-center rounded-xl border border-slate-200 text-blue-700 dark:border-slate-700 dark:text-blue-300" aria-label={copy.viewMembers} onClick={() => setMembersOpen(true)}><UsersRound size={22} aria-hidden="true" /></button>}
               {membership && membership.role !== "owner" && (
                 <button
                   className="text-sm font-semibold text-slate-500 underline hover:text-red-600"
@@ -779,35 +777,36 @@ export const Community = () => {
                   onClick={() =>
                     run("leave", async () => {
                       await call("leaveCommunity", { communityId: active });
-                      setStatus("You left the group.");
+                      setStatus(copy.leftGroup);
                     })
                   }
                 >
-                  Leave
+                  {copy.leave}
                 </button>
               )}
             </div>
           </header>
-          {directory && <p className="pt-2 text-xs text-slate-500">{directory.count} members · {directory.onlineCount === null ? "Online count unavailable for this group" : `${directory.onlineCount} online`} · Online means an active website tab within the last 2 minutes.</p>}
-          {membersOpen && createPortal(<div className="fixed inset-0 z-[150] flex items-center justify-center bg-slate-950/50 p-4" onClick={() => setMembersOpen(false)}>
-            <div ref={membersPanel} role="dialog" aria-modal="true" aria-labelledby="group-members-heading" className="flex max-h-[85dvh] w-full max-w-lg min-w-0 flex-col rounded-2xl bg-white p-5 text-slate-900 dark:bg-slate-900 dark:text-white" onClick={(event) => event.stopPropagation()}>
-              <div className="flex items-center justify-between gap-2"><h2 id="group-members-heading" className="text-xl font-bold">{room?.name} · Members</h2><button type="button" aria-label="Close group members" className="grid h-11 w-11 place-items-center" onClick={() => setMembersOpen(false)}><X /></button></div>
-              <p className="mb-3 text-sm text-slate-500">{directory ? `${directory.count} members · ${directory.onlineCount === null ? "Online count unavailable" : `${directory.onlineCount} online`}` : directoryLoading ? "Loading member directory…" : "Member directory unavailable"}</p>
-              <input className={field} aria-label="Search loaded group members" placeholder="Search loaded names or usernames" value={memberSearch} onChange={(event) => setMemberSearch(event.target.value)} />
-              {directory && <div className="mt-2 flex items-center justify-between gap-2 text-xs text-slate-500"><span>Updated {recordDate(directory.measuredAt)?.toLocaleTimeString()}</span><button type="button" className="text-blue-700 underline" disabled={directoryLoading} onClick={() => void loadMembers()}>Refresh members</button></div>}
-              {directoryError && <div role="alert" className="my-3 text-sm text-red-600">{directoryError} <button type="button" className="underline" disabled={directoryLoading} onClick={() => void loadMembers()}>Retry</button></div>}
-              <ul className="my-3 min-h-0 overflow-y-auto" aria-label="Group members">{directory?.members.filter((member) => `${member.displayName} ${member.username || ""}`.toLocaleLowerCase().includes(memberSearch.trim().toLocaleLowerCase())).map((member) => <li key={member.uid} className="flex items-center gap-3 border-b border-slate-100 py-3 dark:border-slate-800"><span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-blue-50 text-blue-700">{member.displayName.slice(0, 1).toUpperCase()}</span><div className="min-w-0 flex-1"><p className="break-words font-semibold">{member.displayName}{member.uid === user?.uid ? " (you)" : ""}</p><p className="break-words text-xs text-slate-500">{member.username ? `@${member.username.replace(/^@/, "")}` : "Username not set"} · {member.role}</p><p className="text-xs text-slate-500">{member.online ? "Online" : member.lastSeenAt && recordDate(member.lastSeenAt) ? `Last active ${recordDate(member.lastSeenAt)?.toLocaleString()}` : "Presence not available"}</p></div>{member.online && <span aria-label="Online" className="h-2 w-2 shrink-0 rounded-full bg-emerald-600" />}</li>)}</ul>
-              {directory?.nextCursor && <button type="button" className={button} disabled={directoryLoading} onClick={() => void loadMembers(directory.nextCursor || "")}>Load more members</button>}
-              {directoryLoading && <p role="status" className="mt-2 text-sm">Loading members…</p>}
-              {directory && !directory.members.length && !directoryLoading && <p>No members found.</p>}
-              {directory && directory.members.length > 0 && !directory.members.some((member) => `${member.displayName} ${member.username || ""}`.toLocaleLowerCase().includes(memberSearch.trim().toLocaleLowerCase())) && <p>No loaded members match your search.</p>}
-              <p className="mt-2 text-xs text-slate-500">Online indicates a visible website tab with a heartbeat in the last 2 minutes. Search applies to loaded members; load more to search further.</p>
-            </div>
-          </div>, document.body)}
+          {directory && <p className="pt-2 text-xs text-slate-500 dark:text-slate-400">{formatCommunityCopy(copy.onlineSummary, { members: directory.count === 1 ? copy.oneMember : formatCommunityCopy(copy.membersCount, { count: directory.count }), online: directory.onlineCount === null ? copy.onlineUnavailableGroup : formatCommunityCopy(copy.onlineCount, { count: directory.onlineCount }) })}</p>}
+          {membersOpen && (
+            <CommunityMembersDialog
+              copy={copy}
+              directory={directory}
+              error={directoryError}
+              loading={directoryLoading}
+              locale={locale}
+              onClose={() => setMembersOpen(false)}
+              onLoadMore={() => void loadMembers(directory?.nextCursor || "")}
+              onRefresh={() => void loadMembers()}
+              onSearchChange={setMemberSearch}
+              roomName={room?.name}
+              search={memberSearch}
+              userId={user.uid}
+            />
+          )}
           <div
             ref={chat}
             role="log"
-            aria-label="Group messages"
+            aria-label={copy.groupMessages}
             className="min-h-0 flex-1 space-y-3 overflow-y-auto px-1 py-5"
           >
             {hasOlder && cursor && (
@@ -838,7 +837,7 @@ export const Community = () => {
                   })
                 }
               >
-                {busy === "older" ? "Loading…" : "Load older messages"}
+                {busy === "older" ? copy.loading : copy.loadOlderMessages}
               </button>
             )}
             {chatError ? (
@@ -849,12 +848,11 @@ export const Community = () => {
                 />
                 <p className="font-semibold">
                   {chatPermissionDenied
-                    ? "This group needs its membership connection refreshed."
-                    : "Messages could not be loaded. Please try again."}
+                    ? copy.membershipRefreshNeeded
+                    : copy.messagesLoadFailed}
                 </p>
                 <p className="mt-2 text-sm opacity-80">
-                  Your group and messages are unchanged. Reconnect restores
-                  access for this account.
+                  {copy.reconnectHelp}
                 </p>
                 <button
                   className={`${button} mt-4`}
@@ -870,10 +868,10 @@ export const Community = () => {
                   }
                 >
                   {busy === "reconnect"
-                    ? "Reconnecting…"
+                    ? copy.reconnecting
                     : chatPermissionDenied
-                      ? "Reconnect to group"
-                      : "Retry messages"}
+                      ? copy.reconnectGroup
+                      : copy.retryMessages}
                 </button>
               </div>
             ) : chatLoading ? (
@@ -881,7 +879,7 @@ export const Community = () => {
                 role="status"
                 className="py-10 text-center text-sm text-slate-500"
               >
-                Loading messages…
+                {copy.loadingMessages}
               </p>
             ) : !allMessages.length ? (
               <div className="py-16 text-center text-slate-500">
@@ -890,8 +888,8 @@ export const Community = () => {
                   size={34}
                 />
                 {active
-                  ? "No messages yet. Start the conversation."
-                  : "Your group conversation will appear here."}
+                  ? copy.noMessages
+                  : copy.conversationPlaceholder}
               </div>
             ) : (
               allMessages.map((m) => (
@@ -902,12 +900,12 @@ export const Community = () => {
                   <p
                     className={`text-xs font-semibold ${m.userId === user.uid ? "text-blue-100" : "text-slate-500"}`}
                   >
-                    {m.userId === user.uid ? "You" : resolveMessageAuthor(m, authorLabels[active]?.[m.userId], authorLookupState[active])}
+                    {m.userId === user.uid ? copy.you : resolveMessageAuthor(m, authorLabels[active]?.[m.userId], authorLookupState[active])}
                     <time
                       className="ml-2 font-normal"
                       dateTime={recordDate(m.createdAt)?.toISOString()}
                     >
-                      {recordDate(m.createdAt)?.toLocaleTimeString([], {
+                      {recordDate(m.createdAt)?.toLocaleTimeString(locale === "uz" ? "uz-UZ" : locale === "ru" ? "ru-RU" : "en-US", {
                         hour: "2-digit",
                         minute: "2-digit",
                       })}
@@ -929,7 +927,7 @@ export const Community = () => {
             className="border-t border-slate-100 pt-4 dark:border-slate-800"
           >
             <label htmlFor="community-message" className="sr-only">
-              Message
+              {copy.message}
             </label>
             <div className="flex gap-2 rounded-2xl border border-slate-200 bg-slate-50 p-2 focus-within:border-blue-400 focus-within:bg-white dark:border-slate-700 dark:bg-slate-800">
               <textarea
@@ -940,10 +938,10 @@ export const Community = () => {
                 disabled={!active || !!chatError || busy === "send"}
                 placeholder={
                   chatError
-                    ? "Reconnect to send a message"
+                    ? copy.reconnectToSend
                     : active
-                      ? "Write a message…"
-                      : "Join a group to send messages"
+                      ? copy.writeMessage
+                      : copy.joinToSend
                 }
                 value={draft}
                 onChange={(e) => {
@@ -965,17 +963,17 @@ export const Community = () => {
                 }}
               />
               <button
-                aria-label="Send message"
-                className="grid h-11 w-11 place-items-center rounded-xl bg-blue-600 text-white shadow-sm transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
+                aria-label={copy.sendMessage}
+                className="grid h-11 w-11 place-items-center rounded-xl bg-blue-600 text-white shadow-sm transition-colors hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
                 disabled={
                   !active || !!chatError || !draft.trim() || !!busy || !online
                 }
               >
-                <Send size={18} />
+                <Send size={18} aria-hidden="true" />
               </button>
             </div>
             <span className="mt-2 block text-xs text-slate-500">
-              Enter to send · Shift + Enter for a new line
+              {copy.sendHint}
             </span>
           </form>
         </section>
@@ -991,14 +989,10 @@ export const Community = () => {
                 );
                 const link = `${window.location.origin}${window.location.pathname}?invite=${result.token}#/community`;
                 setEmail("");
-                setStatus(
-                  "Invitation link created. Copy it below and share it with your friend; it expires in 7 days.",
-                );
+                setStatus(copy.inviteCreated);
                 try {
                   await navigator.clipboard.writeText(link);
-                  setStatus(
-                    "Invitation link copied. Share it with your friend; it expires in 7 days.",
-                  );
+                  setStatus(copy.inviteCopiedLong);
                 } catch {
                   /* The visible link remains available for manual copying. */
                 }
@@ -1006,17 +1000,17 @@ export const Community = () => {
             }}
           >
             <h2 className="flex items-center gap-2 text-lg font-black">
-              <Send className="text-blue-600" size={21} /> Invite Friends
+              <Send className="text-blue-600" size={21} aria-hidden="true" /> {copy.inviteFriendsTitle}
             </h2>
             <p className="mt-2 text-sm text-slate-500">
-              Bring friends to Noviq and study together.
+              {copy.inviteDescription}
             </p>
             <label className="text-sm">
-              <span className="sr-only">Friend's email</span>
+              <span className="sr-only">{copy.friendEmail}</span>
               <input
                 className={`${field} my-2`}
                 type="email"
-                placeholder="Friend's email"
+                placeholder={copy.friendEmail}
                 required
                 maxLength={254}
                 value={email}
@@ -1027,20 +1021,20 @@ export const Community = () => {
               className={`${button} w-full`}
               disabled={!!busy || !online || !email.trim()}
             >
-              {busy === "invite" ? "Creating…" : "Create invitation link"}
+              {busy === "invite" ? copy.creating : copy.createInvitationLink}
             </button>
             <p className="mt-2 text-xs text-slate-500">
-              Share the link yourself. Only the invited email can accept it.
+              {copy.inviteHelp}
             </p>
           </form>
           <section className="rounded-[26px] border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
             <h2 className="flex items-center gap-2 text-lg font-black">
-              <Sparkles className="text-amber-500" size={21} /> Sent invitations
+              <Sparkles className="text-blue-600" size={21} aria-hidden="true" /> {copy.sentInvitations}
             </h2>
-            {socialState.invites === "loading" && <p role="status" className="text-sm text-slate-500">Loading invitations…</p>}
-            {socialState.invites === "error" && <p role="alert" className="text-sm text-slate-500">Invitations could not be loaded. <button type="button" className="underline" onClick={() => setSocialRevision((value) => value + 1)}>Retry invitations</button></p>}
+            {socialState.invites === "loading" && <p role="status" className="text-sm text-slate-500">{copy.loadingInvitations}</p>}
+            {socialState.invites === "error" && <p role="alert" className="text-sm text-slate-500">{copy.invitationsFailed} <button type="button" className="underline" onClick={() => setSocialRevision((value) => value + 1)}>{copy.retryInvitations}</button></p>}
             {socialState.invites === "ready" && !invites.length && (
-              <p className="text-sm text-slate-500">No invitations sent yet.</p>
+              <p className="text-sm text-slate-500">{copy.noInvitations}</p>
             )}
             {invites.map((invite) => {
               const expired =
@@ -1054,17 +1048,17 @@ export const Community = () => {
                   <p className="break-all text-sm">{invite.email}</p>
                   <p className="my-1 text-xs text-slate-500">
                     {invite.status === "accepted"
-                      ? "Accepted"
+                      ? copy.accepted
                       : expired
-                        ? "Expired"
+                        ? copy.expired
                         : link
-                          ? "Awaiting your friend"
-                          : "Old invitation — create a new link"}
+                          ? copy.awaitingFriend
+                          : copy.oldInvitation}
                   </p>
                   {link && !expired && invite.status === "pending" && (
                     <>
                       <input
-                        aria-label={`Invitation link for ${invite.email}`}
+                        aria-label={formatCommunityCopy(copy.invitationLinkFor, { email: invite.email })}
                         readOnly
                         className={`${field} mb-2 text-xs`}
                         value={link}
@@ -1076,14 +1070,14 @@ export const Community = () => {
                           run("copy", async () => {
                             if (!navigator.clipboard)
                               throw new Error(
-                                "Select and copy the invitation link above.",
+                                copy.selectCopyLink,
                               );
                             await navigator.clipboard.writeText(link);
-                            setStatus("Invitation link copied.");
+                            setStatus(copy.invitationCopied);
                           })
                         }
                       >
-                        Copy link
+                        {copy.copyLink}
                       </button>
                     </>
                   )}
@@ -1093,10 +1087,10 @@ export const Community = () => {
           </section>
           <section className="rounded-[26px] border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
             <h2 className="flex items-center gap-2 text-lg font-black">
-              <CircleUserRound className="text-emerald-600" size={21} /> Friends
+              <CircleUserRound className="text-blue-600" size={21} aria-hidden="true" /> {copy.friends}
             </h2>
-            {socialState.friends === "loading" && <p role="status" className="text-sm text-slate-500">Loading friends…</p>}
-            {socialState.friends === "error" && <p role="alert" className="text-sm text-slate-500">Friends could not be loaded. <button type="button" className="underline" onClick={() => setSocialRevision((value) => value + 1)}>Retry friends</button></p>}
+            {socialState.friends === "loading" && <p role="status" className="text-sm text-slate-500">{copy.loadingFriends}</p>}
+            {socialState.friends === "error" && <p role="alert" className="text-sm text-slate-500">{copy.friendsFailed} <button type="button" className="underline" onClick={() => setSocialRevision((value) => value + 1)}>{copy.retryFriends}</button></p>}
             {friends.length ? (
               friends.map((friend) => (
                 <p
@@ -1110,7 +1104,7 @@ export const Community = () => {
                 </p>
               ))
             ) : socialState.friends === "ready" ? (
-              <p className="text-sm text-slate-500">No friends here yet.</p>
+              <p className="text-sm text-slate-500">{copy.noFriends}</p>
             ) : null}
           </section>
         </aside>

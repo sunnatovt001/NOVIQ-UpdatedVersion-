@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
+import { withDeadline } from "@/src/lib/asyncRequest";
 import { isReadOnlyAudit } from "@/src/lib/auditMode";
 import { onAuthStateChanged, User } from "firebase/auth";
 import { doc, onSnapshot, runTransaction } from "firebase/firestore";
@@ -157,8 +158,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     let latestTrustedProgress: Partial<UserProfile> = {};
     let latestResolvedAdmin = false;
 
+    let loadTimer: ReturnType<typeof setTimeout>;
+    const deadline = () => {
+      clearTimeout(loadTimer);
+      loadTimer = setTimeout(() => {
+        if (isDisposed) return;
+        const current = auth.currentUser;
+        const cached = current ? loadLocalData<UserProfile | null>(profileCacheKey(current.uid), null) : null;
+        if (cached) { latestBaseProfile = cached; latestResolvedAdmin = false; publishProfile(); }
+        else setAuthError("Account data temporarily unavailable. Check your connection and try again.");
+        setLoading(false);
+        console.error("Auth/profile initialization timed out");
+      }, 15000);
+    };
     const publishProfile = () => {
       if (!latestBaseProfile) return;
+      clearTimeout(loadTimer);
       setProfile(
         withCurrentProgressDisplay({
           ...withLocalProfilePatch(latestBaseProfile),
@@ -169,7 +184,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setIsAdmin(latestResolvedAdmin);
     };
 
-    authPersistenceReady.finally(() => {
+    deadline();
+    withDeadline(authPersistenceReady, 10000).catch(error => console.error("Auth persistence deadline", error)).finally(() => {
       if (isDisposed) return;
 
       unsubscribeAuth = onAuthStateChanged(auth, async (firebaseUser) => {
@@ -180,6 +196,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       latestBaseProfile = null;
       latestTrustedProgress = {};
       latestResolvedAdmin = false;
+      deadline();
       setUser(firebaseUser);
       setAuthError("");
       setProfile(null);
@@ -187,6 +204,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setLoading(Boolean(firebaseUser));
 
       if (!firebaseUser) {
+        clearTimeout(loadTimer);
         setProfile(null);
         setIsAdmin(false);
         setLoading(false);
@@ -215,6 +233,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         async (snapshot) => {
           if (isDisposed || auth.currentUser?.uid !== firebaseUser.uid) return;
           if (snapshot.exists()) {
+            setAuthError("");
             const rawProfile = snapshot.data() as UserProfile;
             const profileData = { ...rawProfile, displayName: rawProfile.displayName || firebaseUser.displayName || "" };
             const queued = getQueuedOperation("update", ["users", firebaseUser.uid]);
@@ -236,16 +255,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             setLoading(false);
             return;
           }
-          await firebaseUser.reload().catch(() => undefined);
+          await withDeadline(firebaseUser.reload(), 10000).catch(error => console.warn("Auth user refresh failed", error));
           if (isDisposed || auth.currentUser?.uid !== firebaseUser.uid) return;
           const newProfile = createInitialProfile(firebaseUser);
-          const resolvedProfile = await runTransaction(db, async (transaction) => {
+          const resolvedProfile = await withDeadline(runTransaction(db, async (transaction) => {
             const existing = await transaction.get(userDocRef);
             if (existing.exists()) return existing.data() as UserProfile;
             if (isReadOnlyAudit) throw new Error("Create profiles outside read-only audit mode.");
             transaction.set(userDocRef, newProfile);
             return newProfile;
-          }).catch((error) => {
+          }), 15000).catch((error) => {
+            console.error("Profile bootstrap failed", error);
             setAuthError(getAppErrorMessage(error));
             return cached;
           });
@@ -272,6 +292,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     return () => {
       isDisposed = true;
+      clearTimeout(loadTimer);
       unsubscribeProfile?.();
       unsubscribeTrustedProgress?.();
       unsubscribeAuth?.();

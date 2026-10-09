@@ -22,7 +22,7 @@ test('local AI verifies account token, sends header-only server key and excludes
   }});
   const result=await run(handler,request());
   assert.equal(result.statusCode,200);assert.equal(result.body.text,'Actual answer');
-  assert.ok(calls[1].url.includes('gemini-3.8-flash'));assert.ok(!calls[1].url.includes('server-secret'));
+  assert.ok(calls[1].url.includes('gemini-3.5-flash-lite'));assert.ok(!calls[1].url.includes('server-secret'));
   assert.equal(calls[1].options.headers['x-goog-api-key'],'server-secret');
   assert.ok(!JSON.stringify(result.body).includes('server-secret'));
 });
@@ -39,4 +39,38 @@ test('local AI rejects empty/malformed requests and bounds per-account request r
   assert.equal((await run(handler,request({}, {contents:'   '}))).statusCode,400);
   for(let i=0;i<9;i++)assert.equal((await run(handler,request())).statusCode,200);
   assert.equal((await run(handler,request())).statusCode,429);assert.equal(providerCalls,9);
+});
+
+test('Tutor retries a transient rejection once on the same fast model, with minimal thinking',async()=>{
+ const calls=[];let generations=0;
+ const handler=localAi({apiKey:'server-secret',models:['obsolete-model'],logger:{warn(){}},fetchImpl:async(url,options)=>{
+  calls.push({url,options});
+  if(url.includes('accounts:lookup'))return {ok:true,json:async()=>({users:[{localId:'fixture'}]})};
+  if(++generations===1)return {ok:false,status:503};
+  return {ok:true,json:async()=>({candidates:[{content:{parts:[{text:'Actual retry fixture response'}]}}]})};
+ }});
+ const result=await run(handler,request());assert.equal(result.statusCode,200);assert.equal(result.body.model,'gemini-3.5-flash-lite');assert.equal(calls.length,3);
+ assert.equal(calls[1].url,calls[2].url);assert.equal(JSON.parse(calls[1].options.body).generationConfig.thinkingConfig.thinkingLevel,'minimal');
+ assert.equal(calls[1].options.signal,calls[2].options.signal);
+});
+test('Tutor never repeats a timed-out generation or a successful response',async()=>{
+ for(const timedOut of [false,true]) {
+  let count=0;
+  const handler=localAi({apiKey:'server-secret',logger:{warn(){}},fetchImpl:async url=>{
+   if(url.includes('accounts:lookup'))return {ok:true,json:async()=>({users:[{localId:'fixture'}]})};
+   count++;if(timedOut)throw Object.assign(new Error('Provider timeout'),{name:'TimeoutError'});
+   return {ok:true,json:async()=>({candidates:[{content:{parts:[{text:'One actual response'}]}}]})};
+  }});
+  const result=await run(handler,request());assert.equal(count,1);assert.equal(result.statusCode,timedOut?503:200);
+ }
+});
+test('non-Tutor AI keeps its configured model and structured response settings',async()=>{
+ const calls=[];
+ const handler=localAi({apiKey:'server-secret',models:['configured-notebook-model'],logger:{warn(){}},fetchImpl:async(url,options)=>{
+  calls.push({url,options});return {ok:true,json:async()=>calls.length===1?{users:[{localId:'fixture'}]}:{candidates:[{content:{parts:[{text:'{"answer":"fixture"}'}]}}]}};
+ }});
+ const result=await run(handler,request({}, {feature:'notebook',contents:'Isolated source',config:{responseMimeType:'application/json'}}));
+ assert.equal(result.statusCode,200);assert.ok(calls[1].url.includes('configured-notebook-model'));
+ const settings=JSON.parse(calls[1].options.body).generationConfig;
+ assert.equal(settings.responseMimeType,'application/json');assert.equal(settings.maxOutputTokens,8192);assert.equal(settings.thinkingConfig,undefined);
 });

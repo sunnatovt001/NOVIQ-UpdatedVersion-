@@ -43,6 +43,7 @@ import { db, functions } from "@/src/lib/firebase";
 import { useAuth } from "@/src/contexts/AuthContext";
 import { cn } from "@/src/lib/utils";
 import { useUserActivityMetrics } from "@/src/lib/useUserActivityMetrics";
+import { ClientErrorMonitor } from "@/src/components/ClientErrorMonitor";
 
 type RangeKey = "today" | "7d" | "30d";
 type PlanFilter = "all" | "free" | "pro";
@@ -1190,6 +1191,7 @@ export const Admin = ({ setActiveTab }: { setActiveTab?: (t: string) => void }) 
 
   return (
     <div className="admin-dashboard space-y-6 pb-24">
+      <ClientErrorMonitor />
       <header className="admin-hero relative overflow-hidden rounded-[2rem] border p-6 sm:p-8">
         <div className="relative z-10 flex flex-col gap-7 xl:flex-row xl:items-end xl:justify-between">
           <div className="max-w-3xl">

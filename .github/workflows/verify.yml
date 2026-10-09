@@ -28,3 +28,12 @@ jobs:
       - run: npm ci --prefix functions
       - run: npm run verify
       - run: npm run test:rules
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:browser:ci
+        env:
+          NOVIQ_BROWSER_CHANNEL: chromium
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: production-audit
+          path: artifacts/production-audit

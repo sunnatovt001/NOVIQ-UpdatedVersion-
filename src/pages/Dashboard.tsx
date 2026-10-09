@@ -1,30 +1,17 @@
 import React from "react";
-import { missionCompletion, reviewGuidance, isMeaningfulSession } from "@/src/lib/activityEvidence";
+import { isMeaningfulSession } from "@/src/lib/activityEvidence";
 import { useAuth } from "@/src/contexts/AuthContext";
-import { ProgressRing } from "@/src/components/Dashboard/ProgressRing";
 import { TaskStarterModal } from "@/src/components/TaskStarterModal";
+import { TodayDashboardView } from "@/src/components/Dashboard/TodayDashboardView";
 import { motion, AnimatePresence } from "motion/react";
-import { 
-  Flame, 
-  Target, 
-  CheckCircle2, 
-  Clock, 
-  Brain,
-  ArrowUpRight,
-  BookOpen,
-  Sparkles,
-  Search,
-  Command,
-  Zap,
-  X
-} from "lucide-react";
-import { cn } from "@/src/lib/utils";
+import { CheckCircle2 } from "lucide-react";
 import { collection, doc, query, orderBy, limit, onSnapshot } from "firebase/firestore";
 import { db } from "@/src/lib/firebase";
 import { useBodyScrollLock } from "@/src/lib/useBodyScrollLock";
 import { writeDocWithQueue, type SyncStatus } from "@/src/lib/offlineSync";
 import { trackUserEvent } from "@/src/lib/analytics";
 import { useUserActivityMetrics } from "@/src/lib/useUserActivityMetrics";
+import { useLocale } from "@/src/contexts/LocaleContext";
 import {
   getLocalDayKey,
   NOVIQ_XP,
@@ -32,9 +19,6 @@ import {
   XP_KEYS,
   type XpAward,
 } from "@/src/lib/progress";
-import { isPro } from "@/src/lib/subscription";
-
-type JournalEntry = { id: string; title: string; content: string; createdAt: string; syncStatus?: SyncStatus };
 type DashboardStudySession = {
   id: string;
   userId: string;
@@ -63,9 +47,6 @@ type DashboardMissionTask = {
   source: "roadmap" | "planner";
   order: number;
 };
-
-const makeClientId = (prefix: string) =>
-  `${prefix}-${typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`}`;
 
 const serializeDate = (value: any): string => {
   if (!value) return "";
@@ -97,127 +78,24 @@ const getDateForWeekday = (day: WeekdayLabel, baseDate: Date) => {
   return date;
 };
 
-type TrendDirection = "up" | "down" | "neutral";
-
-const getTrendDirection = (trend?: string): TrendDirection => {
-  const normalized = trend?.trim() || "";
-  if (normalized.startsWith("-")) return "down";
-  if (normalized.startsWith("+")) return "up";
-  return "neutral";
-};
-
-const MiniSparkline = ({ direction, seed = 0 }: { direction: TrendDirection; seed?: number }) => {
-  const tone =
-    direction === "down"
-      ? {
-          stroke: "#fb7185",
-          fill: "rgba(251, 113, 133, 0.13)",
-          glow: "rgba(251, 113, 133, 0.3)",
-          rail: "rgba(251, 113, 133, 0.14)",
-        }
-      : direction === "up"
-        ? {
-            stroke: "#34d399",
-            fill: "rgba(52, 211, 153, 0.13)",
-            glow: "rgba(52, 211, 153, 0.3)",
-            rail: "rgba(52, 211, 153, 0.14)",
-          }
-        : {
-            stroke: "#22d3ee",
-            fill: "rgba(34, 211, 238, 0.11)",
-            glow: "rgba(34, 211, 238, 0.25)",
-            rail: "rgba(34, 211, 238, 0.13)",
-          };
-
-  const values = Array.from({ length: 9 }, (_, index) => {
-    const drift = direction === "down" ? 72 - index * 5.8 : direction === "up" ? 30 + index * 6 : 50;
-    const wave = ((seed + index * 11) % 13) - 6;
-    return Math.max(16, Math.min(86, drift + wave));
-  });
-  const points = values.map((value, index) => `${4 + index * 12},${92 - value}`).join(" ");
-  const area = `M${points.replaceAll(" ", " L")} L100,92 L4,92 Z`;
-
-  return (
-    <div className="relative h-10 w-20 opacity-80 transition duration-300 group-hover:opacity-100">
-      <div className="absolute inset-0 rounded-2xl blur-xl" style={{ backgroundColor: tone.glow }} />
-      <svg viewBox="0 0 104 96" className="relative h-full w-full overflow-visible">
-        <path d="M4 78 H100" stroke={tone.rail} strokeWidth="1.5" strokeDasharray="4 5" />
-        <path d="M4 52 H100" stroke={tone.rail} strokeWidth="1.5" strokeDasharray="4 5" />
-        <path d={area} fill={tone.fill} />
-        <polyline
-          points={points}
-          fill="none"
-          stroke={tone.stroke}
-          strokeWidth="5"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-        <circle cx={4 + (values.length - 1) * 12} cy={92 - values[values.length - 1]} r="4.5" fill={tone.stroke} />
-      </svg>
-    </div>
-  );
-};
-
-interface StatCardProps {
-  icon: React.ElementType;
-  label: string;
-  value: string;
-  trend?: string;
-  color: string;
-  accentColor: string;
-}
-
-const StatCard = ({ icon: Icon, label, value, trend, color, accentColor }: StatCardProps) => {
-  const trendDirection = getTrendDirection(trend);
-  const trendClass =
-    trendDirection === "down"
-      ? "border-rose-400/25 bg-rose-400/10 text-rose-300"
-      : trendDirection === "up"
-        ? "border-emerald-400/25 bg-emerald-400/10 text-emerald-300"
-        : "border-cyan-400/25 bg-cyan-400/10 text-cyan-300";
-
-  return (
-    <div className="dashboard-card group rounded-[1.75rem] p-6">
-      <div className={cn("absolute -right-5 -top-5 h-24 w-24 rounded-full blur-[46px] opacity-[0.12]", accentColor)} />
-      <div className="relative z-10 mb-4 flex items-start justify-between gap-4">
-        <div className={cn("rounded-2xl p-3 text-white shadow-lg shadow-slate-950/20 ring-1 ring-white/10", color)}>
-          <Icon size={20} className="opacity-90" />
-        </div>
-        <div className="flex flex-col items-end gap-1.5">
-          {trend && (
-            <span className={cn("rounded-full border px-2.5 py-1 text-[10px] font-black", trendClass)}>
-              {trend}
-            </span>
-          )}
-        </div>
-      </div>
-      <p className="relative z-10 mb-1 text-[10px] font-black uppercase tracking-[0.22em] text-slate-500">{label}</p>
-      <p className="relative z-10 font-display text-3xl font-black tracking-tight text-white">{value}</p>
-    </div>
-  );
-};
-
 export const Dashboard = ({ setActiveTab }: { setActiveTab: (tab: string) => void }) => {
   const { profile, user } = useAuth();
+  const { t } = useLocale();
   const [selectedTask, setSelectedTask] = React.useState<string | null>(null);
   const [dashboardNow, setDashboardNow] = React.useState(() => new Date());
   const [selectedDay, setSelectedDay] = React.useState<WeekdayLabel>(() => getWeekdayLabel(new Date()));
-  const [journalOpen, setJournalOpen] = React.useState(false);
-  const [journalTitle, setJournalTitle] = React.useState("Study Journal Entry");
-  const [journalInput, setJournalInput] = React.useState("");
   const [commandQuery, setCommandQuery] = React.useState("");
-  const [selectedPrompt, setSelectedPrompt] = React.useState<string | null>(null);
-  const [recentJournals, setRecentJournals] = React.useState<JournalEntry[]>([]);
   const [studySessions, setStudySessions] = React.useState<DashboardStudySession[]>([]);
   const [notebookNotes, setNotebookNotes] = React.useState<NotebookNotePreview[]>([]);
   const [roadmapTasks, setRoadmapTasks] = React.useState<DashboardMissionTask[]>([]);
   const [plannerTasks, setPlannerTasks] = React.useState<DashboardMissionTask[]>([]);
   const [tasksLoading, setTasksLoading] = React.useState(true);
   const [tasksError, setTasksError] = React.useState("");
+  const [feedState, setFeedState] = React.useState<Record<string, string>>({ sessions: "loading", notes: "loading" });
+  const [feedRevision, setFeedRevision] = React.useState(0);
   const [tasksRevision, setTasksRevision] = React.useState(0);
-  const [journalStatus, setJournalStatus] = React.useState<string>("");
   const [missionCelebrationOpen, setMissionCelebrationOpen] = React.useState(false);
-  useBodyScrollLock(missionCelebrationOpen || journalOpen);
+  useBodyScrollLock(missionCelebrationOpen);
 
   React.useEffect(() => {
     const interval = window.setInterval(() => setDashboardNow(new Date()), 60_000);
@@ -233,46 +111,20 @@ export const Dashboard = ({ setActiveTab }: { setActiveTab: (tab: string) => voi
   }, [todayLabel]);
 
   const selectedDayDate = React.useMemo(() => getDateForWeekday(selectedDay, dashboardToday), [dashboardToday, selectedDay]);
-  const selectedDayStamp = selectedDayDate.toDateString();
-  const selectedDayIsFuture = selectedDayDate.getTime() > dashboardToday.getTime();
   const activityMetrics = useUserActivityMetrics(user?.uid, { scopeDate: selectedDayDate });
   const libraryMetrics = useUserActivityMetrics(user?.uid);
 
   React.useEffect(() => {
     if (!user) {
-      setRecentJournals([]);
       setStudySessions([]);
       setNotebookNotes([]);
       return undefined;
     }
 
-    const journalsQuery = query(
-      collection(db, "users", user.uid, "journals"),
-      orderBy("createdAt", "desc"),
-      limit(5)
-    );
-    const unsubscribeJournals = onSnapshot(
-      journalsQuery,
-      (snapshot) => {
-        const remoteJournals = snapshot.docs.map((doc) => {
-          const data = doc.data() as any;
-          return {
-            id: doc.id,
-            title: data.title,
-            content: data.content,
-            createdAt: serializeDate(data.createdAt),
-            syncStatus: data.syncStatus || "synced",
-          };
-        });
-
-        setRecentJournals(remoteJournals);
-      },
-      (error) => {
-        console.warn("Cloud journal listener failed", error);
-        setRecentJournals([]);
-      }
-    );
-
+    setFeedState({ sessions: "loading", notes: "loading" });
+    const feedPending = new Set(["sessions", "notes"]);
+    const feedSettled = (source: string, state = "ready") => { feedPending.delete(source); setFeedState(current => ({ ...current, [source]: state })); };
+    const feedTimer = window.setTimeout(() => { for (const source of feedPending) feedSettled(source, "error"); }, 15000);
     const sessionsQuery = query(
       collection(db, "users", user.uid, "studySessions"),
       orderBy("timestamp", "desc"),
@@ -280,6 +132,7 @@ export const Dashboard = ({ setActiveTab }: { setActiveTab: (tab: string) => voi
     );
     const unsubscribeSessions = onSnapshot(
       sessionsQuery,
+      { includeMetadataChanges: true },
       (snapshot) => {
         const remoteSessions = snapshot.docs.map((doc) => {
           const data = doc.data() as any;
@@ -295,18 +148,21 @@ export const Dashboard = ({ setActiveTab }: { setActiveTab: (tab: string) => voi
           } as DashboardStudySession;
         });
 
+        if (!snapshot.metadata.fromCache) feedSettled("sessions");
         setStudySessions(remoteSessions.filter(isMeaningfulSession));
       },
       (error) => {
         console.warn("Cloud study session listener failed", error);
-        setStudySessions([]);
+        feedSettled("sessions", "error");
       }
     );
 
     const notesQuery = query(collection(db, "users", user.uid, "notebookNotes"), orderBy("updatedAt", "desc"), limit(100));
     const unsubscribeNotes = onSnapshot(
       notesQuery,
+      { includeMetadataChanges: true },
       (snapshot) => {
+        if (!snapshot.metadata.fromCache) feedSettled("notes");
         setNotebookNotes(snapshot.docs.map((noteDoc) => {
           const data = noteDoc.data() as any;
           return {
@@ -320,58 +176,16 @@ export const Dashboard = ({ setActiveTab }: { setActiveTab: (tab: string) => voi
       },
       (error) => {
         console.warn("Notebook notes listener failed", error);
-        setNotebookNotes([]);
+        feedSettled("notes", "error");
       }
     );
 
     return () => {
-      unsubscribeJournals();
+      window.clearTimeout(feedTimer);
       unsubscribeSessions();
       unsubscribeNotes();
     };
-  }, [user]);
-
-  const handlePromptCard = (title: string, suggestion: string) => {
-    setSelectedPrompt(title);
-    setJournalTitle(title);
-    setJournalInput(suggestion);
-    setJournalOpen(true);
-  };
-
-  const handleSaveJournal = async () => {
-    if (!user || !journalInput.trim()) {
-      setJournalStatus("Please add a study note before saving.");
-      return;
-    }
-
-    const entry: JournalEntry = {
-      id: makeClientId("journal"),
-      title: journalTitle,
-      content: journalInput.trim(),
-      createdAt: new Date().toISOString(),
-      syncStatus: "pending",
-    };
-    setJournalInput("");
-    setJournalOpen(false);
-    setJournalStatus("Saving study note...");
-
-    try {
-      await writeDocWithQueue({
-        userId: user.uid,
-        path: ["users", user.uid, "journals", entry.id],
-        data: {
-          title: journalTitle,
-          content: entry.content,
-          createdAt: entry.createdAt,
-        },
-        merge: true,
-      });
-      setJournalStatus("Study note saved.");
-    } catch (error) {
-      console.warn("Cloud journal sync failed", error);
-      setJournalStatus("Study note could not be saved. Please try again.");
-    }
-  };
+  }, [user, feedRevision]);
 
   const handleTaskCompletion = async (taskId: string, sessionTime: number) => {
     const existingTask = roadmapTasks.find((task) => task.id === taskId);
@@ -435,8 +249,10 @@ export const Dashboard = ({ setActiveTab }: { setActiveTab: (tab: string) => voi
     setTasksLoading(true);
     setTasksError("");
     const pending = new Set(["roadmap", "planner"]);
-    const receivedTasks = (part: string) => { pending.delete(part); setTasksLoading(pending.size > 0); };
-    const failedTasks = (part: string) => { receivedTasks(part); setTasksError("Saved mission tasks could not be refreshed. Your records are unchanged."); };
+    const taskTimer = window.setTimeout(() => { if (pending.size) { setTasksLoading(false); setTasksError("Saved tasks temporarily unavailable. Retry to refresh."); } }, 15000);
+    const taskFailures = new Set<string>();
+    const receivedTasks = (part: string) => { pending.delete(part); taskFailures.delete(part); setTasksLoading(pending.size > 0); if (!pending.size && !taskFailures.size) setTasksError(""); };
+    const failedTasks = (part: string) => { receivedTasks(part); taskFailures.add(part); setTasksError("Saved mission tasks could not be refreshed. Your records are unchanged."); };
 
     const tasksQuery = query(
       collection(db, "users", user.uid, "roadmapTasks"),
@@ -445,7 +261,9 @@ export const Dashboard = ({ setActiveTab }: { setActiveTab: (tab: string) => voi
 
     const unsubscribe = onSnapshot(
       tasksQuery,
+      { includeMetadataChanges: true },
       (snapshot) => {
+        if (snapshot.metadata.fromCache) return;
         const tasks = snapshot.docs.map((doc) => {
           const data = doc.data() as any;
           const rawStatus = String(data.status || "").toLowerCase();
@@ -479,7 +297,9 @@ export const Dashboard = ({ setActiveTab }: { setActiveTab: (tab: string) => voi
 
     const unsubscribePlanner = onSnapshot(
       doc(db, "users", user.uid, "planner", "state"),
+      { includeMetadataChanges: true },
       (snapshot) => {
+        if (snapshot.metadata.fromCache) return;
         const state = snapshot.exists() ? (snapshot.data() as any).state : null;
         const tasks = Array.isArray(state?.tasks) ? state.tasks : [];
         const progress = state?.taskProgress && typeof state.taskProgress === "object" ? state.taskProgress : {};
@@ -513,6 +333,7 @@ export const Dashboard = ({ setActiveTab }: { setActiveTab: (tab: string) => voi
     );
 
     return () => {
+      window.clearTimeout(taskTimer);
       unsubscribe();
       unsubscribePlanner();
     };
@@ -543,22 +364,18 @@ export const Dashboard = ({ setActiveTab }: { setActiveTab: (tab: string) => voi
     }
   };
 
-  const firstName = profile?.displayName?.split(" ")[0] || "Student";
+  const firstName = profile?.displayName?.split(" ")[0] || t("today.student");
   const dashboardTasks = React.useMemo(
     () => [...roadmapTasks, ...plannerTasks].sort((a, b) => a.order - b.order),
     [plannerTasks, roadmapTasks]
   );
-  const progressXp = activityMetrics.xp;
+  const statValue = (metrics: typeof activityMetrics, value: string) => metrics.error ? "—" : metrics.loading ? t("today.loading") : value;
   const completedTaskCount = dashboardTasks.filter((task) => task.done).length;
   const taskTotalCount = dashboardTasks.length;
-  const pendingTaskCount = dashboardTasks.filter((task) => !task.done).length;
   const nextOpenTask = dashboardTasks.find((task) => !task.done);
   const dailyCompletion = taskTotalCount ? Math.round((completedTaskCount / taskTotalCount) * 100) : 0;
+  const taskCompletionLabel = tasksError ? "—" : tasksLoading ? t("today.loading") : taskTotalCount ? `${dailyCompletion}%` : t("today.noMission");
   const dailyTargetMinutes = profile?.dailyTargetMinutes || 30;
-  const focusSessions = studySessions.filter((session) => session.category === "focus" || session.subject.toLowerCase().includes("focus"));
-  const selectedDaySessions = selectedDayIsFuture
-    ? []
-    : focusSessions.filter((session) => new Date(session.timestamp).toDateString() === selectedDayStamp);
   const focusMinutes = activityMetrics.focusMinutes;
   const focusTimeLabel =
     focusMinutes >= 60
@@ -567,39 +384,7 @@ export const Dashboard = ({ setActiveTab }: { setActiveTab: (tab: string) => voi
   const focusTargetProgress = Math.min(100, Math.round((focusMinutes / Math.max(dailyTargetMinutes, 1)) * 100));
   const notesCount = libraryMetrics.notesCreated;
   const recentNotebookNotes = notebookNotes.slice(0, 5);
-  const latestNotebookTitle = recentNotebookNotes[0]?.title || "No notebook notes yet";
-  const notebookActivityCount = activityMetrics.notesCreated + activityMetrics.sourcesUploaded + activityMetrics.notebookMessages;
-  const hasRealActivity =
-    activityMetrics.focusMinutes > 0 ||
-    activityMetrics.tasksDone > 0 ||
-    notebookActivityCount > 0 ||
-    activityMetrics.tutorMessages > 0 ||
-    activityMetrics.decksCreated > 0 ||
-    activityMetrics.flashcardsCreated > 0 ||
-    activityMetrics.xp > 0;
-  const reviewRate = missionCompletion(libraryMetrics.flashcardsCreated, libraryMetrics.reviewedCards) ?? 0;
-  const retentionBoost = reviewRate;
-  const revisionVelocity = focusTargetProgress;
-  const predictiveMastery = dailyCompletion;
-  const examReadinessScore = dailyCompletion;
-  const activePro = isPro(profile);
-  const successProbability = missionCompletion(libraryMetrics.missionTotal, libraryMetrics.missionCompleted);
-  const missionEmptyText = tasksLoading ? "Loading saved mission tasks…" : tasksError || "No mission created yet. Create your first study mission.";
-  const weakAreas = dashboardTasks
-    .filter((task) => !task.done)
-    .slice(0, 3)
-    .map((task) => ({
-      label: task.category,
-      score: Math.max(1, 100 - dailyCompletion),
-      task: task.title,
-    }));
-  const studyPulseScore = libraryMetrics.dueCards;
-  const targetCardCount = notesCount > 0 ? Math.min(20, pendingTaskCount * 5 + notesCount * 3) : 0;
-  const focusWindowLabel = selectedDaySessions[0]
-    ? new Date(selectedDaySessions[0].timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
-    : "No focus sessions yet";
-  const taskStatusLabel = (status: DashboardMissionTask["status"]) =>
-    status === "completed" ? "Completed" : status === "inProgress" ? "In progress" : "Not started";
+  const latestNotebookTitle = feedState.notes === "error" ? t("today.notesUnavailable") : feedState.notes === "loading" ? t("today.loadingNotes") : recentNotebookNotes[0]?.title || t("today.noNotes");
   const weeklyRhythm = ["M", "T", "W", "T", "F", "S", "S"].map((day, index) => {
     const now = new Date();
     const mondayOffset = (now.getDay() + 6) % 7;
@@ -613,21 +398,15 @@ export const Dashboard = ({ setActiveTab }: { setActiveTab: (tab: string) => voi
       level: minutes > 0 ? Math.min(100, Math.max(8, Math.round((minutes / Math.max(dailyTargetMinutes, 1)) * 100))) : 0,
     };
   });
-  const recommendedSequence = nextOpenTask
-    ? [{ step: "01", label: nextOpenTask.title, time: nextOpenTask.time || `${nextOpenTask.duration} min` }]
-    : notesCount > 0
-      ? [{ step: "01", label: "Generate cards from latest note", time: targetCardCount ? `${targetCardCount} cards` : "Ready" }]
-      : [];
-
   const runCommand = (query = commandQuery) => {
     const normalized = query.toLowerCase();
-    if (normalized.includes("flash") || normalized.includes("deck") || normalized.includes("card")) {
+    if (["flash", "deck", "card", "kart", "карточ"].some((keyword) => normalized.includes(keyword))) {
       setActiveTab("flashcards");
-    } else if (normalized.includes("note") || normalized.includes("summar")) {
+    } else if (["note", "summar", "qayd", "konspekt", "замет", "конспект"].some((keyword) => normalized.includes(keyword))) {
       setActiveTab("notes");
-    } else if (normalized.includes("tutor") || normalized.includes("ask") || normalized.includes("ai")) {
+    } else if (["tutor", "ask", "ai", "so‘ra", "sora", "тьютор", "спрос"].some((keyword) => normalized.includes(keyword))) {
       setActiveTab("tutor");
-    } else if (normalized.includes("plan")) {
+    } else if (["plan", "reja", "план"].some((keyword) => normalized.includes(keyword))) {
       setActiveTab("planner");
     } else {
       setActiveTab("tutor");
@@ -636,1014 +415,85 @@ export const Dashboard = ({ setActiveTab }: { setActiveTab: (tab: string) => voi
   };
 
   return (
-    <div className="dashboard-shell space-y-7 pb-16">
-      {/* TaskStarterModal */}
-      {selectedTask && roadmapTasks.find((t) => t.id === selectedTask) && (
-        <TaskStarterModal
-          task={roadmapTasks.find((t) => t.id === selectedTask)!}
-          onClose={() => setSelectedTask(null)}
-          onComplete={async (sessionTime) => {
-            await handleTaskCompletion(selectedTask!, sessionTime);
-            setSelectedTask(null);
-          }}
-        />
-      )}
+      <>
+        {selectedTask && roadmapTasks.find((task) => task.id === selectedTask) && (
+          <TaskStarterModal
+            task={roadmapTasks.find((task) => task.id === selectedTask)!}
+            onClose={() => setSelectedTask(null)}
+            onComplete={async (sessionTime) => {
+              await handleTaskCompletion(selectedTask, sessionTime);
+              setSelectedTask(null);
+            }}
+          />
+        )}
 
-      <AnimatePresence>
-        {missionCelebrationOpen && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.2 }}
-            className="noviq-modal-backdrop z-[210]"
-          >
-            <div className="pointer-events-none absolute inset-0 overflow-hidden">
-              {Array.from({ length: 28 }, (_, index) => (
-                <span
-                  key={index}
-                  className="confetti-piece"
-                  style={{
-                    left: `${(index * 37) % 100}%`,
-                    animationDelay: `${(index % 7) * 0.12}s`,
-                    backgroundColor: ["#3F7D58", "#6EE7A8", "#F59E0B", "#60A5FA"][index % 4],
-                  }}
-                />
-              ))}
-            </div>
-            <div className="noviq-modal-positioner noviq-modal-sm">
+        <AnimatePresence>
+          {missionCelebrationOpen && (
             <motion.div
-              initial={{ opacity: 0, scale: 0.96 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.96 }}
-              transition={{ duration: 0.2, ease: "easeOut" }}
-              className="noviq-modal-panel CustomScrollbar relative rounded-[2rem] border border-[#E5E7EB] bg-white p-7 text-center text-[#111827] shadow-[0_30px_90px_rgba(17,24,39,0.18)]"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.16 }}
+              className="noviq-modal-backdrop z-[210]"
             >
-              <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-[#F0FDF4] text-3xl">
-                🎉
-              </div>
-              <h2 className="mt-5 text-2xl font-black tracking-tight">Daily Mission Completed</h2>
-              <div className="mt-5 grid grid-cols-2 gap-3">
-                <div className="rounded-2xl border border-[#E5E7EB] bg-[#FAFAF8] p-4">
-                  <p className="text-2xl font-black text-[#3F7D58]">+500</p>
-                  <p className="mt-1 text-[10px] font-black uppercase tracking-[0.2em] text-[#6B7280]">XP</p>
-                </div>
-                <div className="rounded-2xl border border-[#E5E7EB] bg-[#FAFAF8] p-4">
-                  <p className="text-2xl font-black text-[#3F7D58]">+1</p>
-                  <p className="mt-1 text-[10px] font-black uppercase tracking-[0.2em] text-[#6B7280]">Day Streak</p>
-                </div>
-              </div>
-              <p className="mt-5 text-sm leading-6 text-[#6B7280]">
-                Momentum saved. Keep tomorrow's mission small, focused, and consistent.
-              </p>
-              <button
-                type="button"
-                onClick={() => setMissionCelebrationOpen(false)}
-                className="mt-6 inline-flex min-h-12 w-full items-center justify-center rounded-2xl bg-[#3F7D58] px-5 text-sm font-black text-white transition hover:bg-[#2F6145]"
-              >
-                Continue
-              </button>
-            </motion.div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      <AnimatePresence>
-        {journalOpen && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.2 }}
-            className="noviq-modal-backdrop z-50"
-          >
-            <div className="noviq-modal-positioner noviq-modal-lg">
-            <motion.div
-              initial={{ scale: 0.96, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.96, opacity: 0 }}
-              transition={{ duration: 0.2, ease: "easeOut" }}
-              className="noviq-modal-panel CustomScrollbar dashboard-panel relative rounded-[2.5rem] p-6 shadow-2xl sm:p-8"
-            >
-              <button
-                onClick={() => setJournalOpen(false)}
-                aria-label="Close study log"
-                className="absolute top-6 right-6 p-2 rounded-xl bg-white/5 hover:bg-white/10 transition"
-              >
-                <X size={20} className="text-slate-300" />
-              </button>
-              <div className="space-y-6">
-                <div>
-                  <p className="text-xs uppercase tracking-[0.26em] text-cyan-300 font-black">Study Log</p>
-                  <h2 className="mt-3 text-3xl font-black text-white">{selectedPrompt || journalTitle}</h2>
-                  <p className="mt-2 text-sm text-slate-400">Save the summary of your study session and keep progress aligned to your subjects.</p>
-                </div>
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-xs font-black uppercase tracking-[0.26em] text-slate-500 mb-2">Title</label>
-                    <input
-                      value={journalTitle}
-                      onChange={(e) => setJournalTitle(e.target.value)}
-                      className="premium-input rounded-3xl px-5 py-4"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-black uppercase tracking-[0.26em] text-slate-500 mb-2">Notes</label>
-                    <textarea
-                      value={journalInput}
-                      onChange={(e) => setJournalInput(e.target.value)}
-                      rows={8}
-                      className="premium-input resize-none rounded-3xl px-5 py-4"
-                    />
-                  </div>
-                </div>
-                <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">
-                  <button
-                    onClick={() => setJournalOpen(false)}
-                    className="btn-secondary w-full rounded-3xl px-6 py-4 sm:w-auto"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={handleSaveJournal}
-                    className="btn-primary w-full rounded-3xl px-6 py-4 sm:w-auto"
-                  >
-                    Save Study Note
-                  </button>
-                </div>
-                {journalStatus && <p className="text-sm text-emerald-300">{journalStatus}</p>}
-              </div>
-            </motion.div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Header */}
-      <div className="mb-10 space-y-6">
-        <div className="dashboard-panel rounded-[2.75rem] p-6 md:p-8">
-          <div className="relative z-10 flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
-          <div className="space-y-3">
-            <p className="dashboard-kicker">Hi, {firstName}</p>
-            <h1 className="max-w-4xl font-display text-4xl font-black tracking-tight text-white md:text-6xl">
-              AI exam command center
-            </h1>
-            <p className="max-w-2xl text-sm text-slate-500">
-              Plan, review, ask AI, and keep your study momentum in one focused operating workspace.
-            </p>
-            <form
-              onSubmit={(event) => {
-                event.preventDefault();
-                runCommand();
-              }}
-              className="dashboard-command mt-5 flex max-w-3xl flex-col gap-3 rounded-[1.65rem] p-2 transition sm:flex-row sm:items-center"
-            >
-              <div className="flex min-h-14 flex-1 items-center gap-3 px-3">
-                <Search size={20} className="text-cyan-200" />
-                <input
-                  value={commandQuery}
-                  onChange={(event) => setCommandQuery(event.target.value)}
-                  placeholder="Which exam target are you working on today?"
-                  className="w-full bg-transparent text-base font-semibold text-white outline-none placeholder:text-slate-600"
-                />
-              </div>
-              <button
-                type="submit"
-                className="btn-primary min-h-12 rounded-[1.25rem] px-5"
-              >
-                <Command size={16} />
-                Run
-              </button>
-            </form>
-            <div className="grid max-w-3xl gap-3 sm:grid-cols-3">
-              {[
-                { label: "Saved task completion", value: `${dailyCompletion}%`, icon: Target },
-                { label: "Cards due · all decks", value: libraryMetrics.loading ? "Loading…" : libraryMetrics.error ? "Unavailable" : `${libraryMetrics.dueCards}`, icon: Brain },
-                { label: "Focus points", value: `${progressXp}`, icon: Zap },
-              ].map((item) => (
-                <div key={item.label} className="dashboard-card rounded-2xl p-3">
-                  <div className="mb-2 flex items-center justify-between">
-                    <span className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">{item.label}</span>
-                    <item.icon size={15} className="text-cyan-300" />
-                  </div>
-                  <p className="text-2xl font-black text-white">{item.value}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-              <div className="flex flex-wrap items-center gap-2">
-            {WEEKDAY_LABELS.map((day) => (
-              <button
-                key={day}
-                onClick={() => setSelectedDay(day)}
-                className={cn(
-                  'px-4 py-2 rounded-full text-xs font-semibold tracking-wide transition',
-                  selectedDay === day
-                    ? 'bg-cyan-300 text-slate-950 shadow-lg shadow-cyan-300/20'
-                    : 'border border-white/10 bg-white/[0.05] text-slate-400 hover:border-cyan-300/30 hover:bg-white/[0.09] hover:text-white'
-                )}
-              >
-                {day}
-              </button>
-            ))}
-          </div>
-          </div>
-        </div>
-
-        {tasksError && <div role="alert" className="rounded-2xl border border-red-300 p-4 text-sm">{tasksError} <button type="button" className="underline" onClick={() => setTasksRevision((value) => value + 1)}>Retry saved mission</button></div>}
-        {(activityMetrics.loading || activityMetrics.error || libraryMetrics.error) && (
-          <div
-            className={cn(
-              "rounded-[1.5rem] border px-5 py-4 text-sm font-bold",
-              activityMetrics.error
-                ? "border-red-400/25 bg-red-500/10 text-red-200"
-                : "border-cyan-300/20 bg-cyan-300/10 text-cyan-100"
-            )}
-          >
-            {activityMetrics.error || libraryMetrics.error
-              ? `Live stats sync issue: ${activityMetrics.error || libraryMetrics.error}`
-              : "Loading live stats from your study sessions, notebooks, and progress history..."}
-            {(activityMetrics.error || libraryMetrics.error) && <button type="button" className="ml-3 underline" onClick={() => { activityMetrics.retry(); libraryMetrics.retry(); }}>Retry statistics</button>}
-          </div>
-        )}
-
-        <div className="dashboard-panel rounded-[2rem] p-6 md:p-7">
-          <div className="relative z-10 grid gap-6 xl:grid-cols-[1fr_0.9fr]">
-            <div>
-              <div className="flex flex-wrap items-center gap-3">
-                <p className="text-xs font-black uppercase tracking-[0.26em] text-cyan-300">Pro Intelligence</p>
-                <span className={cn(
-                  "rounded-full border px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em]",
-                  activePro ? "border-emerald-300/25 bg-emerald-300/10 text-emerald-300" : "border-white/10 bg-white/[0.05] text-slate-400"
-                )}>
-                  {activePro ? "Active" : "Real data only"}
-                </span>
-              </div>
-              <h2 className="mt-3 text-2xl font-black tracking-tight text-white">Open Tasks and Mission Completion</h2>
-              <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-400">
-                Noviq Pro uses mistakes, reviews, writing, and speaking practice to decide what you should study next.
-              </p>
-            </div>
-
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div className="dashboard-card rounded-[1.5rem] p-5">
-                <p className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-500">Target Score</p>
-                <p className="mt-3 text-3xl font-black text-white">{profile?.goals?.[0] || profile?.onboardingAnswers?.mainGoal || "Not set"}</p>
-                <p className="mt-2 text-xs leading-5 text-slate-400">Taken from your profile and onboarding data.</p>
-              </div>
-              <div className="dashboard-card rounded-[1.5rem] p-5">
-                <p className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-500">Mission completion</p>
-                <p className="mt-3 text-3xl font-black text-white">{libraryMetrics.loading ? "Loading…" : libraryMetrics.error ? "Unavailable" : successProbability === null ? "Not enough data" : `${successProbability}%`}</p>
-                <p className="mt-2 text-xs leading-5 text-slate-400">
-                  {libraryMetrics.missionCompleted} of {libraryMetrics.missionTotal} saved mission tasks completed. This measures task completion, not exam success probability.
-                </p>
-              </div>
-            </div>
-
-            <div className="xl:col-span-2 grid gap-3 md:grid-cols-3">
-              {weakAreas.length > 0 ? (
-                weakAreas.map((area, index) => (
-                  <div key={`${area.label}-${index}`} className="dashboard-card rounded-[1.5rem] p-5">
-                    <div className="flex items-center justify-between">
-                      <p className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-500">Open Task {index + 1}</p>
-                    </div>
-                    <p className="mt-3 text-xl font-black text-white">{area.label}</p>
-                    <p className="mt-2 text-sm leading-6 text-slate-400">{area.task}</p>
-                  </div>
-                ))
-              ) : (
-                <div className="dashboard-card rounded-[1.5rem] p-5 md:col-span-3">
-                  <p className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-500">Open Tasks</p>
-                  <p className="mt-3 text-xl font-black text-white">Not enough activity yet</p>
-                  <p className="mt-2 text-sm leading-6 text-slate-400">Complete real mission tasks or study sessions to surface weak topics.</p>
-                </div>
-              )}
-            </div>
-
-            {!activePro && (
-              <div className="xl:col-span-2 flex flex-col gap-3 rounded-[1.5rem] border border-cyan-300/15 bg-cyan-300/10 p-5 sm:flex-row sm:items-center sm:justify-between">
-                <p className="text-sm font-semibold leading-6 text-slate-200">
-                  Core exam prep remains free. Pro unlocks deeper AI diagnostics when you are ready.
-                </p>
-                <button
-                  type="button"
-                  onClick={() => setActiveTab("pricing")}
-                  className="btn-primary shrink-0 rounded-2xl px-5 py-3"
+              <div className="noviq-modal-positioner noviq-modal-sm">
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.98 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.98 }}
+                  transition={{ duration: 0.16 }}
+                  className="noviq-modal-panel rounded-[1.5rem] border border-[var(--noviq-border)] bg-[var(--noviq-card)] p-6 text-center text-[var(--noviq-text)]"
                 >
-                  View Pro
-                  <ArrowUpRight size={16} />
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 xl:grid-cols-[1.7fr_1.3fr] gap-6">
-          <div className="dashboard-panel relative rounded-[2.5rem] p-8 shadow-2xl shadow-blue-950/20 [--glow-x:18%] [--glow-y:0%]">
-            <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_0%,rgba(59,130,246,0.18),transparent_34%),radial-gradient(circle_at_90%_20%,rgba(34,211,238,0.12),transparent_28%)]" />
-            <div className="absolute inset-0 opacity-[0.08] [background-image:linear-gradient(rgba(255,255,255,.7)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,.7)_1px,transparent_1px)] [background-size:56px_56px]" />
-            <div className="relative z-10 space-y-8">
-              <div className="flex items-center gap-3 text-xs uppercase tracking-[0.3em] text-cyan-300 font-black">
-                <span className="block h-6 w-1 rounded-full bg-cyan-300" />
-                Smart workspace
-              </div>
-              <div className="space-y-4">
-                <h2 className="text-3xl md:text-4xl font-black text-white">Capture progress without breaking flow</h2>
-                <p className="max-w-xl text-sm text-slate-300">Save lesson notes, AI summaries, and key wins into the same activity stream.</p>
-              </div>
-              <div className="flex flex-wrap gap-4">
-                <button
-                  onClick={() => setActiveTab('planner')}
-                  className="btn-primary rounded-3xl px-6 py-4"
-                >
-                  Create Next Plan
-                </button>
-                <button
-                  onClick={() => setActiveTab('notes')}
-                  className="btn-secondary rounded-3xl px-6 py-4"
-                >
-                  Review Notes
-                </button>
-              </div>
-              <div className="dashboard-card space-y-4 rounded-[2rem] p-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm uppercase tracking-[0.24em] text-slate-500">Recent study notes</p>
-                    <h3 className="text-lg font-bold text-white">Journal Highlights</h3>
-                  </div>
-                  <span className="text-[10px] uppercase tracking-[0.3em] text-cyan-300">Synced</span>
-                </div>
-                {recentNotebookNotes.length > 0 ? (
-                  <div className="space-y-3">
-                    {recentNotebookNotes.map((entry) => (
-                      <div key={entry.id} className="rounded-3xl border border-white/10 bg-white/[0.05] p-4 transition hover:border-cyan-300/20 hover:bg-white/[0.08]">
-                        <p className="text-sm font-bold text-white">{entry.title}</p>
-                        <p className="mt-2 text-xs text-slate-400 line-clamp-2">{entry.content}</p>
-                        <p className="mt-3 text-[10px] uppercase tracking-[0.24em] text-slate-500">{entry.updatedAt || entry.createdAt ? new Date(entry.updatedAt || entry.createdAt || "").toLocaleDateString() : "No date"}</p>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-sm text-slate-400">{libraryMetrics.loading ? "Loading notes…" : libraryMetrics.error ? "Notes could not be refreshed. Open Notebook to retry." : "No notes yet. Create your first note."}</p>
-                )}
-              </div>
-            </div>
-          </div>
-
-          <div className="grid gap-4">
-            {[
-              { title: 'Review Notes', description: 'Summarize the key concepts from your latest lessons.', tag: 'Review', color: 'from-blue-500 to-cyan-400', icon: BookOpen, action: () => setActiveTab('notes') },
-              { title: 'Plan Next Session', description: 'Set your next study target with clear goals.', tag: 'Planner', color: 'from-violet-500 to-blue-500', icon: Target, action: () => setActiveTab('planner') },
-              { title: 'Practice Recall', description: 'Quiz yourself on what you practiced without notes.', tag: 'Revision', color: 'from-emerald-400 to-cyan-400', icon: Brain, action: () => { setSelectedPrompt('Practice Recall'); setJournalTitle('Practice Recall'); setJournalInput('Write the main idea behind one exam topic from memory.'); setJournalOpen(true); } },
-            ].map((item) => (
-              <button
-                key={item.title}
-                onClick={item.action}
-                className="dashboard-card group rounded-[2rem] p-6 text-left"
-              >
-                <div className="flex items-center justify-between gap-4 mb-4">
-                  <div>
-                    <p className="text-sm font-black uppercase tracking-[0.24em] text-slate-500">{item.tag}</p>
-                    <h3 className="mt-3 text-lg font-bold text-white">{item.title}</h3>
-                  </div>
-                  <div className={cn('h-11 w-11 rounded-3xl bg-gradient-to-br', item.color, 'shadow-lg shadow-slate-950/20 flex items-center justify-center')}>
-                    <item.icon size={18} className="text-white" />
-                  </div>
-                </div>
-                <p className="text-sm leading-6 text-slate-400">{item.description}</p>
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {/* Main Stats - Clean Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-5">
-        <StatCard icon={Clock} label="Focus time · selected day" value={focusTimeLabel} color="bg-blue-500" accentColor="bg-blue-400" />
-        <StatCard icon={CheckCircle2} label="Tasks done · selected day" value={`${activityMetrics.tasksDone}`} color="bg-purple-500" accentColor="bg-purple-400" />
-        <StatCard icon={Brain} label="Notes · total" value={libraryMetrics.loading ? "Loading…" : libraryMetrics.error ? "Unavailable" : `${notesCount}`} color="bg-pink-500" accentColor="bg-pink-400" />
-        <StatCard icon={Sparkles} label="Tutor questions · selected day" value={`${activityMetrics.tutorMessages}`} color="bg-emerald-500" accentColor="bg-emerald-400" />
-        <StatCard icon={Target} label="Saved task completion" value={`${dailyCompletion}%`} color="bg-cyan-500" accentColor="bg-cyan-400" />
-      </div>
-
-      {/* Daily Study Momentum */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="dashboard-panel rounded-[2.5rem] p-8">
-          <div className="flex items-start justify-between gap-4 mb-8">
-            <div>
-              <p className="text-xs uppercase tracking-[0.3em] text-cyan-300 font-black">Daily Progress</p>
-              <h3 className="mt-3 text-3xl font-black text-white">Study Momentum</h3>
-            </div>
-            <span className="text-[10px] uppercase tracking-[0.3em] text-cyan-300">Premium</span>
-          </div>
-          <div className="space-y-6">
-            {[
-              { title: 'Active Study Time', value: focusTimeLabel, detail: `${selectedDaySessions.length} study session${selectedDaySessions.length === 1 ? "" : "s"} logged on ${selectedDay}` },
-              { title: 'Saved task completion', value: `${dailyCompletion}%`, detail: taskTotalCount ? `${completedTaskCount} of ${taskTotalCount} saved tasks completed` : "No saved tasks yet" },
-              { title: 'Card review coverage', value: libraryMetrics.flashcardsCreated ? `${reviewRate}%` : "Not enough data", detail: `${libraryMetrics.reviewedCards} of ${libraryMetrics.flashcardsCreated} cards reviewed at least once across all decks` },
-            ].map((item) => (
-              <div key={item.title} className="dashboard-card rounded-3xl p-5">
-                <div className="flex items-center justify-between gap-4 mb-3">
-                  <p className="text-sm font-semibold text-slate-300">{item.title}</p>
-                  <p className="text-lg font-black text-white">{item.value}</p>
-                </div>
-                <p className="text-[11px] text-slate-500">{item.detail}</p>
-              </div>
-            ))}
-
-            <div className="rounded-[1.75rem] border border-cyan-300/15 bg-cyan-300/10 p-5">
-              <div className="mb-4 flex items-center justify-between gap-4">
-                <div>
-                  <p className="text-[10px] font-black uppercase tracking-[0.24em] text-cyan-300">Highest leverage</p>
-                  <h4 className="mt-2 text-lg font-black text-white">{libraryMetrics.dueCards > 0 ? "Cards ready for review" : "Build your recall history"}</h4>
-                </div>
-                <span className="rounded-full border border-amber-300/20 bg-amber-300/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-amber-200">
-                  {libraryMetrics.dueCards} cards due
-                </span>
-              </div>
-              <p className="text-sm leading-6 text-slate-400">
-                {libraryMetrics.loading ? "Loading card review records…" : libraryMetrics.error ? "Review records could not be refreshed. Open Decks to retry." : reviewGuidance(libraryMetrics.flashcardsCreated, libraryMetrics.reviewedCards, libraryMetrics.dueCards)}
-              </p>
-              <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-1 2xl:grid-cols-2">
-                <button
-                  onClick={() => setActiveTab("flashcards")}
-                  className="btn-primary min-h-11 rounded-2xl px-4 py-3 text-xs"
-                >
-                  Build recall cards
-                </button>
-                <button
-                  onClick={() => setActiveTab("notes")}
-                  className="btn-secondary min-h-11 rounded-2xl px-4 py-3 text-xs"
-                >
-                  Open notes
-                </button>
-              </div>
-            </div>
-
-            <div className="grid gap-3">
-              {[
-                { label: "Next task", value: nextOpenTask?.title || "No mission yet", action: nextOpenTask ? "Continue the next real mission task." : "Create your study plan to unlock task guidance." },
-                { label: "Latest note", value: latestNotebookTitle, action: notesCount > 0 ? "Use it as flashcard input." : "Create your first note before generating cards." },
-              ].map((item) => (
-                <div key={item.label} className="rounded-3xl border border-white/10 bg-white/[0.035] p-4">
-                  <p className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-500">{item.label}</p>
-                  <p className="mt-2 text-sm font-black text-white">{item.value}</p>
-                  <p className="mt-1 text-xs leading-5 text-slate-500">{item.action}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        <div className="lg:col-span-2 grid gap-6">
-          <div className="dashboard-panel rounded-[2.5rem] p-8 [--glow-x:88%] [--glow-y:8%]">
-            <div className="flex items-center justify-between mb-6">
-              <div>
-                <p className="text-xs uppercase tracking-[0.3em] text-slate-500 font-black">Weekly sprint</p>
-                <h3 className="mt-3 text-3xl font-black text-white">Your exam prep streak</h3>
-              </div>
-              <div className="rounded-3xl bg-white/5 px-4 py-2 text-[11px] uppercase tracking-[0.22em] text-blue-300 font-black">
-                {activityMetrics.streak} day{activityMetrics.streak === 1 ? "" : "s"}
-              </div>
-            </div>
-            <div className="grid gap-4 sm:grid-cols-2">
-              {[
-                { label: 'Card Review', progress: reviewRate },
-                { label: 'Saved task completion', progress: examReadinessScore },
-                { label: 'Selected day focus goal', progress: focusTargetProgress },
-              ].map((item) => (
-                <div key={item.label} className="dashboard-card rounded-3xl p-5">
-                  <p className="text-sm font-bold text-white mb-3">{item.label}</p>
-                  <div className="mb-3 h-3 overflow-hidden rounded-full border border-white/10 bg-white/10">
-                    <div className="dashboard-progress h-full rounded-full bg-gradient-to-r from-blue-500 to-cyan-400" style={{ width: `${item.progress}%` }} />
-                  </div>
-                  <p className="text-[11px] text-slate-400">{item.progress}% · recorded completion or coverage</p>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="dashboard-panel rounded-[2.5rem] p-8">
-            <div className="flex items-center justify-between mb-6">
-              <div>
-                <p className="text-xs uppercase tracking-[0.3em] text-slate-500 font-black">Focus roadmap</p>
-                <h3 className="mt-3 text-3xl font-black text-white">Saved mission tasks</h3>
-              </div>
-              <div className="rounded-full bg-blue-500/10 px-3 py-1 text-[10px] uppercase tracking-[0.3em] text-blue-300 font-black">Saved</div>
-            </div>
-            <div className="space-y-4">
-              {dashboardTasks.length > 0 ? (
-                dashboardTasks.slice(0, 3).map((item) => (
-                  <div key={`${item.source}-${item.id}`} className="dashboard-card flex items-center justify-between gap-4 rounded-3xl p-5">
-                    <div>
-                      <p className="text-sm font-bold text-white">{item.title}</p>
-                      <p className="text-[11px] text-slate-500">{item.time || `${item.duration} min`} / {item.source}</p>
-                    </div>
-                    <span className={cn(
-                      "rounded-full px-3 py-1 text-[11px] font-black uppercase tracking-[0.18em]",
-                      item.status === "completed" ? "bg-emerald-500/15 text-emerald-300 border border-emerald-500/20" :
-                      item.status === "inProgress" ? "bg-amber-500/15 text-amber-300 border border-amber-500/20" :
-                      "bg-slate-700/80 text-slate-300 border border-white/10"
-                    )}>
-                      {taskStatusLabel(item.status)}
-                    </span>
-                  </div>
-                ))
-              ) : (
-                <div className="dashboard-card rounded-3xl p-5">
-                  <p className="text-sm font-bold text-white">{missionEmptyText}</p>
-                  <button onClick={() => setActiveTab("planner")} className="btn-secondary mt-4 min-h-10 rounded-xl px-4 py-2 text-xs">
-                    Create mission
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Main Content Grid */}
-      <div className="grid grid-cols-1 xl:grid-cols-12 gap-8">
-        {/* Left: Sprint & Tasks */}
-        <div className="xl:col-span-7 space-y-8">
-          {/* Current Sprint Section */}
-          <motion.section 
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="dashboard-panel rounded-[2.5rem] p-8 md:p-10"
-          >
-            {/* Top Label */}
-            <div className="flex items-center gap-3 mb-8">
-              <div className="w-1 h-6 bg-gradient-to-b from-blue-500 to-cyan-400 rounded-full" />
-              <h2 className="text-lg font-black text-white uppercase tracking-[0.25em]">Current Sprint</h2>
-            </div>
-
-            {/* Tasks List */}
-            <div className="space-y-4">
-              {dashboardTasks.length > 0 ? (
-                dashboardTasks.map((task, index) => (
-                  <motion.div
-                    key={`${task.source}-${task.id}`}
-                    whileHover={{ x: 4 }}
-                    className="dashboard-card group cursor-pointer rounded-[1.5rem] p-5"
-                  >
-                    <div className="flex items-start gap-5">
-                      <div className={cn(
-                        "w-12 h-12 rounded-xl flex items-center justify-center font-black text-lg flex-shrink-0 transition-all",
-                        task.done
-                          ? "bg-slate-700/50 border border-slate-600/30 text-slate-500"
-                          : "bg-blue-500/15 border border-blue-500/30 text-blue-400 shadow-lg shadow-blue-500/20"
-                      )}>
-                        {index + 1}
-                      </div>
-
-                      <div className="flex-1 min-w-0">
-                        <p className={cn(
-                          "font-bold text-white transition-all mb-1",
-                          task.done && "opacity-50 line-through"
-                        )}>
-                          {task.title}
-                        </p>
-                        <p className="text-xs text-slate-500 font-medium uppercase tracking-wide">
-                          {task.time} / {taskStatusLabel(task.status)}
-                        </p>
-                      </div>
-
-                      <div className="flex-shrink-0">
-                        {!task.done ? (
-                          <button
-                            onClick={() => task.source === "roadmap" ? setSelectedTask(task.id) : setActiveTab("planner")}
-                            className="btn-primary min-h-10 whitespace-nowrap rounded-xl px-6 py-2.5 text-xs uppercase tracking-wider"
-                          >
-                            {task.source === "roadmap" ? "Start" : "Open"}
-                          </button>
-                        ) : (
-                          <div className="p-2.5 rounded-lg bg-emerald-500/15 border border-emerald-500/30">
-                            <CheckCircle2 size={20} className="text-emerald-400" />
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </motion.div>
-                ))
-              ) : (
-                <div className="dashboard-card rounded-[1.5rem] p-6">
-                  <p className="font-bold text-white">{missionEmptyText}</p>
-                  <button onClick={() => setActiveTab("planner")} className="btn-primary mt-5 min-h-11 rounded-xl px-5 py-3 text-xs uppercase tracking-wider">
-                    Create mission
-                  </button>
-                </div>
-              )}
-            </div>
-          </motion.section>
-
-          {/* AI Synthesis Card */}
-          <motion.section
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.1 }}
-            className="dashboard-panel group rounded-[2.5rem] p-8 md:p-10 [--glow-x:92%] [--glow-y:0%]"
-          >
-            <div className="absolute top-0 right-0 w-40 h-40 bg-blue-500/10 rounded-full blur-[80px] -mr-20 -mt-20 group-hover:scale-150 transition-transform duration-1000" />
-            
-            <div className="flex items-center gap-3 mb-6 relative z-10">
-              <div className="w-1 h-5 bg-blue-500 rounded-full" />
-              <h3 className="text-xs font-black text-blue-400 uppercase tracking-[0.25em]">AI Insight</h3>
-            </div>
-            
-            <p className="text-base font-medium leading-relaxed text-slate-200 mb-6 relative z-10">
-              {hasRealActivity
-                ? nextOpenTask
-                  ? `Your next real mission task is "${nextOpenTask.title}".`
-                  : "All visible mission tasks are completed."
-                : "Not enough activity yet. Complete your first session."}
-            </p>
-
-            <div className="flex items-center gap-3 relative z-10">
-              <div className="w-8 h-8 rounded-lg bg-blue-600/30 border border-blue-500/30 flex items-center justify-center">
-                <Brain size={16} className="text-blue-400" />
-              </div>
-              <span className="text-xs text-slate-400 font-black uppercase tracking-widest">Saidamin AI</span>
-            </div>
-          </motion.section>
-
-          <div className="grid gap-6 lg:grid-cols-2">
-            <motion.section
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.12 }}
-              className="dashboard-panel rounded-[2.5rem] p-7 [--glow-x:15%] [--glow-y:0%]"
-            >
-              <div className="absolute inset-0 bg-[radial-gradient(circle_at_15%_0%,rgba(34,211,238,0.12),transparent_32%)]" />
-              <div className="relative z-10">
-                <div className="mb-7 flex items-center justify-between gap-4">
-                  <div>
-                    <p className="text-xs font-black uppercase tracking-[0.28em] text-cyan-300">Focus map</p>
-                    <h3 className="mt-2 text-2xl font-black text-white">Weekly rhythm</h3>
-                  </div>
-                  <div className="rounded-2xl border border-white/10 bg-white/[0.05] p-3 text-cyan-200">
-                    <Flame size={19} />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-7 gap-2">
-                  {weeklyRhythm.map((item, index) => (
-                    <div key={`${item.day}-${index}`} className="space-y-2 text-center">
-                      <div className="flex h-24 items-end rounded-2xl border border-white/10 bg-white/[0.035] p-1.5 shadow-inner shadow-slate-950/40">
-                        <div
-                          className="w-full rounded-xl bg-gradient-to-t from-blue-600 to-cyan-300 shadow-lg shadow-cyan-500/10"
-                          style={{ height: `${item.level}%` }}
-                        />
-                      </div>
-                      <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">{item.day}</p>
-                    </div>
-                  ))}
-                </div>
-
-                <div className="mt-6 rounded-2xl border border-cyan-300/15 bg-cyan-300/10 p-4">
-                  <p className="text-sm font-bold text-white">Latest focus session: {focusWindowLabel}</p>
-                  <p className="mt-1 text-xs leading-5 text-slate-400">{selectedDaySessions.length ? "Time recorded by your latest completed focus session on the selected day." : "No completed focus session is available for the selected day."}</p>
-                </div>
-              </div>
-            </motion.section>
-
-            <motion.section
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.16 }}
-              className="dashboard-panel rounded-[2.5rem] p-7 [--glow-x:85%] [--glow-y:0%]"
-            >
-              <div className="absolute inset-0 bg-[radial-gradient(circle_at_85%_0%,rgba(59,130,246,0.14),transparent_34%)]" />
-              <div className="relative z-10">
-                <div className="mb-7 flex items-center justify-between gap-4">
-                  <div>
-                    <p className="text-xs font-black uppercase tracking-[0.28em] text-blue-300">Recorded progress</p>
-                    <h3 className="mt-2 text-2xl font-black text-white">Recorded progress</h3>
-                  </div>
-                  <div className="rounded-2xl border border-white/10 bg-white/[0.05] p-3 text-blue-200">
-                    <Target size={19} />
-                  </div>
-                </div>
-
-                <div className="space-y-4">
-                  {[
-                    { label: "Cards reviewed at least once", value: retentionBoost, color: "from-cyan-400 to-blue-500" },
-                    { label: "Saved tasks pending", value: taskTotalCount ? Math.round((pendingTaskCount / Math.max(taskTotalCount, 1)) * 100) : 0, color: "from-violet-400 to-blue-500" },
-                    { label: "Selected day focus goal", value: focusTargetProgress, color: "from-emerald-300 to-cyan-400" },
-                  ].map((item) => (
-                    <div key={item.label} className="space-y-2">
-                      <div className="flex items-center justify-between text-xs font-black uppercase tracking-[0.18em]">
-                        <span className="text-slate-500">{item.label}</span>
-                        <span className="text-white">{item.value}%</span>
-                      </div>
-                      <div className="h-3 overflow-hidden rounded-full border border-white/10 bg-white/[0.05]">
-                        <div className={cn("dashboard-progress h-full rounded-full bg-gradient-to-r", item.color)} style={{ width: `${item.value}%` }} />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-
-                <button
-                  onClick={() => setActiveTab("planner")}
-                  className="btn-secondary mt-7 w-full rounded-2xl px-5 py-4"
-                >
-                  Optimize plan
-                  <ArrowUpRight size={16} />
-                </button>
-              </div>
-            </motion.section>
-          </div>
-
-          <motion.section
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.2 }}
-            className="dashboard-panel flex min-h-[520px] flex-col justify-between rounded-[2.5rem] p-8 [--glow-x:18%] [--glow-y:0%]"
-          >
-            <div className="relative z-10">
-              <div className="mb-7 flex items-start justify-between gap-4">
-                <div>
-                  <p className="text-xs font-black uppercase tracking-[0.28em] text-cyan-300">Review focus</p>
-                  <h3 className="mt-3 max-w-2xl text-3xl font-black tracking-tight text-white">Today’s highest-value study move</h3>
-                  <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-400">
-                    {nextOpenTask
-                      ? `Continue "${nextOpenTask.title}" from your real mission.`
-                      : notesCount > 0
-                        ? "Your latest notebook note can be used for review cards."
-                        : "Not enough activity yet. Complete your first session."}
+                  <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-[#E8F7F1] text-[#237A5C]">
+                    <CheckCircle2 size={23} aria-hidden="true" />
+                  </span>
+                  <h2 className="mt-4 text-2xl font-bold tracking-tight">{t("today.completeTitle")}</h2>
+                  <p className="mt-2 text-sm leading-6 text-[var(--noviq-muted)]">
+                    {t("today.completeBody")}
                   </p>
-                </div>
-                <div className="rounded-2xl border border-cyan-300/20 bg-cyan-300/10 p-3 text-cyan-200">
-                  <Sparkles size={20} />
-                </div>
+                  <button
+                    type="button"
+                    onClick={() => setMissionCelebrationOpen(false)}
+                    className="today-primary-button mt-5 min-h-11 w-full rounded-xl px-4 text-sm font-semibold"
+                  >
+                    {t("today.continue")}
+                  </button>
+                </motion.div>
               </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
-              <div className="grid gap-4 md:grid-cols-3">
-                {[
-                  { label: "Focus", value: "Recall first", detail: "Do not open a new topic until one review pass is done." },
-                  { label: "Input", value: latestNotebookTitle, detail: notesCount > 0 ? "Use the freshest note as the flashcard source." : "No notebook source is available yet." },
-                  { label: "Recall cards · all decks", value: libraryMetrics.loading ? "Loading…" : libraryMetrics.error ? "Unavailable" : `${libraryMetrics.flashcardsCreated} cards`, detail: libraryMetrics.loading ? "Loading saved cards…" : libraryMetrics.error ? "Card records could not be refreshed." : libraryMetrics.flashcardsCreated > 0 ? `${libraryMetrics.dueCards} cards due for review.` : "Generate flashcards from a real note first." },
-                ].map((item) => (
-                  <div key={item.label} className="dashboard-card rounded-[1.5rem] p-5">
-                    <p className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-500">{item.label}</p>
-                    <p className="mt-3 text-xl font-black text-white">{item.value}</p>
-                    <p className="mt-2 text-sm leading-6 text-slate-400">{item.detail}</p>
-                  </div>
-                ))}
-              </div>
-
-              <div className="mt-6 rounded-[1.75rem] border border-white/10 bg-slate-950/50 p-5">
-                <div className="mb-4 flex items-center justify-between text-xs font-black uppercase tracking-[0.2em]">
-                  <span className="text-slate-500">Recommended sequence</span>
-                  <span className="text-cyan-300">{recommendedSequence.length ? "Ready" : "Empty"}</span>
-                </div>
-                <div className="grid gap-3 md:grid-cols-3">
-                  {recommendedSequence.length > 0 ? (
-                    recommendedSequence.map((item) => (
-                      <div key={item.step} className="rounded-2xl border border-white/10 bg-white/[0.035] p-4">
-                        <p className="text-[10px] font-black uppercase tracking-[0.2em] text-cyan-300">{item.step}</p>
-                        <p className="mt-2 text-sm font-black text-white">{item.label}</p>
-                        <p className="mt-1 text-xs text-slate-500">{item.time}</p>
-                      </div>
-                    ))
-                  ) : (
-                    <div className="rounded-2xl border border-white/10 bg-white/[0.035] p-4 md:col-span-3">
-                      <p className="text-sm font-black text-white">No sequence yet</p>
-                      <p className="mt-1 text-xs text-slate-500">Create a mission or notebook note to generate a real next action.</p>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            <div className="relative z-10 mt-7 grid gap-3 sm:grid-cols-2">
-              <button
-                onClick={() => setActiveTab("flashcards")}
-                className="btn-primary rounded-2xl px-5 py-4"
-              >
-                Generate flashcards
-                <ArrowUpRight size={16} />
-              </button>
-              <button
-                onClick={() => setActiveTab("notes")}
-                className="btn-secondary rounded-2xl px-5 py-4"
-              >
-                Open source notes
-                <BookOpen size={16} />
-              </button>
-            </div>
-          </motion.section>
-
-        </div>
-
-        {/* Right: AI Queue & Progress */}
-        <div className="xl:col-span-5 space-y-8">
-          {/* Study Pulse Summary */}
-          <motion.section
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.15 }}
-            className="dashboard-panel rounded-[2.5rem] p-8 [--glow-x:80%] [--glow-y:0%]"
-          >
-            <div className="absolute inset-0 bg-[radial-gradient(circle_at_80%_0%,rgba(34,211,238,0.12),transparent_32%)]" />
-            <div className="relative z-10 space-y-6">
-              <div className="flex items-center gap-3 text-xs uppercase tracking-[0.3em] text-cyan-300 font-black">
-                <span className="block h-6 w-1 rounded-full bg-cyan-300" />
-                Cards due · all decks
-              </div>
-              <div className="space-y-2">
-                <p className="text-5xl font-black text-white">{libraryMetrics.loading ? "Loading…" : libraryMetrics.error ? "Unavailable" : studyPulseScore}</p>
-                <p className="text-sm text-slate-400 max-w-lg">Due cards across your saved decks. The indicators below show their own recorded scopes.</p>
-              </div>
-
-              <div className="grid gap-4">
-                {[
-                  { label: 'Selected day focus goal', value: focusTargetProgress, color: 'bg-cyan-400' },
-                  { label: 'Card review coverage · all decks', value: reviewRate, color: 'bg-blue-500' },
-                  { label: 'Tasks completed', value: examReadinessScore, color: 'bg-emerald-400' },
-                  { label: 'Cards reviewed', value: retentionBoost, color: 'bg-violet-500' },
-                ].map((item) => (
-                  <div key={item.label} className="space-y-2">
-                    <div className="flex items-center justify-between text-xs uppercase tracking-[0.24em] text-slate-500">
-                      <span>{item.label}</span>
-                      <span>{item.value}%</span>
-                    </div>
-                    <div className="h-3 overflow-hidden rounded-full border border-white/10 bg-white/5">
-                      <div className={cn('dashboard-progress h-full rounded-full', item.color)} style={{ width: `${item.value}%` }} />
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              <button
-                onClick={() => {
-                  setSelectedPrompt(null);
-                  setJournalTitle("New Study Journal");
-                  setJournalInput("");
-                  setJournalOpen(true);
-                }}
-                className="btn-primary mt-4 w-full rounded-3xl py-4"
-              >
-                Add Study Log
-              </button>
-            </div>
-          </motion.section>
-
-          {/* AI Study Queue */}
-          <motion.section
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.2 }}
-            className="dashboard-panel rounded-[2.5rem] p-8 shadow-2xl [--glow-x:18%] [--glow-y:10%]"
-          >
-            <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_10%,rgba(59,130,246,0.16),transparent_34%),radial-gradient(circle_at_90%_0%,rgba(34,211,238,0.12),transparent_28%)]" />
-
-            <div className="relative z-10 mb-7 flex items-start justify-between gap-4">
-              <div>
-                <p className="text-xs font-black uppercase tracking-[0.3em] text-cyan-300">AI study queue</p>
-                <h2 className="mt-3 text-3xl font-black tracking-tight text-white">Next best actions</h2>
-                <p className="mt-2 text-sm leading-6 text-slate-400">
-                  Prioritized actions based on your progress, notes, and pending reviews.
-                </p>
-              </div>
-              <div className="rounded-2xl border border-cyan-300/20 bg-cyan-300/10 p-3 text-cyan-200 shadow-lg shadow-cyan-500/10">
-                <Sparkles size={22} />
-              </div>
-            </div>
-
-            <div className="relative z-10 grid gap-3">
-              {[
-                {
-                  title: "Ask Noviq Tutor",
-                  detail: "Clarify the weakest topic before you review.",
-                  icon: Brain,
-                  action: () => setActiveTab("tutor"),
-                },
-                {
-                  title: "Generate flashcards",
-                  detail: "Turn today’s notes into quick recall cards.",
-                  icon: BookOpen,
-                  action: () => setActiveTab("flashcards"),
-                },
-                {
-                  title: "Review due cards",
-                  detail: `${libraryMetrics.dueCards} cards waiting across all decks.`,
-                  icon: CheckCircle2,
-                  action: () => setActiveTab("flashcards"),
-                },
-              ].map((item) => (
-                <button
-                  key={item.title}
-                  onClick={item.action}
-                  className="dashboard-card group flex items-center gap-4 rounded-[1.5rem] p-4 text-left"
-                >
-                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-white/10 bg-slate-950/70 text-cyan-200">
-                    <item.icon size={19} />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="font-black text-white">{item.title}</p>
-                    <p className="mt-1 text-sm leading-5 text-slate-500">{item.detail}</p>
-                  </div>
-                  <ArrowUpRight size={17} className="text-slate-600 transition group-hover:translate-x-0.5 group-hover:-translate-y-0.5 group-hover:text-cyan-200" />
-                </button>
-              ))}
-            </div>
-
-            <button
-              onClick={() => setActiveTab("tutor")}
-              className="btn-primary relative z-10 mt-6 min-h-13 w-full rounded-[1.35rem] px-5 py-4"
-            >
-              <Sparkles size={17} />
-              Open Noviq Tutor
-            </button>
-
-            {/* Status Indicator */}
-            <p className={cn(
-              "relative z-10 mt-4 text-xs font-black uppercase tracking-[0.25em] transition-all duration-500",
-              "text-cyan-300"
-            )}>
-              {taskTotalCount > 0 ? "Saved mission evidence" : tasksLoading ? "Loading saved tasks" : "No saved mission tasks"}
-            </p>
-          </motion.section>
-
-          {/* Exam Readiness Progress */}
-          <motion.section
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.3 }}
-            className="dashboard-panel rounded-[2.5rem] p-10 [--glow-x:50%] [--glow-y:0%]"
-          >
-            <h2 className="text-xs font-black text-slate-500 uppercase tracking-[0.3em] mb-8">Saved task completion</h2>
-
-            {/* Progress Ring */}
-            <div className="flex justify-center mb-10">
-              <div className="relative">
-                <ProgressRing progress={examReadinessScore} size={160} strokeWidth={10} color="#3b82f6" showValue={false} />
-                <div className="absolute inset-0 flex flex-col items-center justify-center">
-                  <p className="text-4xl font-black font-display text-white">{examReadinessScore}</p>
-                  <p className="text-xs font-bold text-blue-400 mt-1">{taskTotalCount > 0 ? "RECORDED" : "NO TASKS"}</p>
-                </div>
-              </div>
-            </div>
-
-            {/* Metrics */}
-            <div className="space-y-4">
-              {[
-                { label: "Saved tasks completed", score: predictiveMastery },
-                { label: "Selected day focus goal", score: revisionVelocity },
-                { label: "Cards reviewed at least once", score: retentionBoost },
-              ].map((item) => (
-                <div key={item.label} className="space-y-2">
-                  <div className="flex justify-between items-center text-xs font-bold uppercase tracking-wider">
-                    <span className="text-slate-400">{item.label}</span>
-                    <span className="text-white">{item.score}%</span>
-                  </div>
-                  <div className="h-2.5 overflow-hidden rounded-full border border-white/5 bg-slate-800/50">
-                    <motion.div
-                      initial={{ width: 0 }}
-                      animate={{ width: `${item.score}%` }}
-                      transition={{ duration: 1.5, ease: "easeOut" }}
-                      className="dashboard-progress h-full rounded-full bg-gradient-to-r from-blue-500 to-cyan-400"
-                    />
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            <div className="mt-7 rounded-[1.75rem] border border-amber-300/20 bg-amber-300/10 p-5">
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <p className="text-[10px] font-black uppercase tracking-[0.24em] text-amber-200">Next saved task</p>
-                  <h4 className="mt-2 text-lg font-black text-white">
-                    {nextOpenTask ? nextOpenTask.title : "No unfinished mission tasks"}
-                  </h4>
-                </div>
-                <span className="rounded-full border border-amber-300/20 bg-slate-950/45 px-3 py-1 text-xs font-black text-amber-200">
-                  {revisionVelocity}%
-                </span>
-              </div>
-              <p className="mt-3 text-sm leading-6 text-slate-400">
-                {nextOpenTask ? "Open the saved task to view its instructions, then start it when you are ready." : "Create a mission in Planner when you are ready to study."}
-              </p>
-              <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
-                <button
-                  onClick={() => setActiveTab("flashcards")}
-                  className="btn-primary min-h-11 rounded-2xl px-4 py-3 text-xs"
-                >
-                  Start review sprint
-                </button>
-                <button
-                  onClick={() => setActiveTab("planner")}
-                  className="btn-secondary min-h-11 rounded-2xl px-4 py-3 text-xs"
-                >
-                  Schedule review
-                </button>
-              </div>
-            </div>
-          </motion.section>
-        </div>
-      </div>
-    </div>
+        <TodayDashboardView
+          firstName={firstName}
+          tasks={dashboardTasks}
+          tasksLoading={tasksLoading}
+          tasksError={tasksError}
+          completedTaskCount={completedTaskCount}
+          taskCompletionLabel={taskCompletionLabel}
+          nextTask={nextOpenTask}
+          focusTimeLabel={statValue(activityMetrics, focusTimeLabel)}
+          focusTargetProgress={activityMetrics.loading || activityMetrics.error ? 0 : focusTargetProgress}
+          dailyTargetMinutes={dailyTargetMinutes}
+          notesCount={notesCount}
+          latestNotebookTitle={latestNotebookTitle}
+          dueCardsLabel={statValue(libraryMetrics, t("today.cardsDue", { count: libraryMetrics.dueCards }))}
+          weeklyRhythm={weeklyRhythm}
+          sessionsReady={feedState.sessions === "ready"}
+          commandQuery={commandQuery}
+          statsUnavailable={Boolean(activityMetrics.error || libraryMetrics.error)}
+          recentUnavailable={Object.values(feedState).includes("error")}
+          onCommandChange={setCommandQuery}
+          onRunCommand={() => runCommand()}
+          onOpenTask={(task) => task.source === "roadmap" ? setSelectedTask(task.id) : setActiveTab("planner")}
+          onNavigate={setActiveTab}
+          onRetryStatistics={() => {
+            activityMetrics.retry();
+            libraryMetrics.retry();
+          }}
+          onRetryTasks={() => setTasksRevision((value) => value + 1)}
+          onRetryRecent={() => setFeedRevision((value) => value + 1)}
+        />
+      </>
   );
 };

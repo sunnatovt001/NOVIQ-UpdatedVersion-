@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import {
   ArrowRight,
@@ -27,6 +27,9 @@ import {
   resetPasswordWithEmail,
   type SocialAuthProviderId,
 } from "@/src/lib/firebase";
+import { createPortal } from "react-dom";
+import { useAuth } from "@/src/contexts/AuthContext";
+import { useDialogFocus } from "@/src/lib/useDialogFocus";
 import { useBodyScrollLock } from "@/src/lib/useBodyScrollLock";
 
 type AuthMode = "login" | "signup";
@@ -66,7 +69,6 @@ const getAuthErrorMessage = (error: unknown) => {
 };
 
 const LOGO_SRC = "/noviq-logo.jpeg";
-const LANDING_VIDEO_SRC = "/noviq-landing-background.mp4";
 
 interface AuthDialogProps {
   mode: AuthMode;
@@ -150,6 +152,20 @@ const examFeatureCards: Array<{
 
 const AuthDialog = ({ mode, onClose, onModeChange }: AuthDialogProps) => {
   useBodyScrollLock(true);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const emailRef = useRef<HTMLInputElement>(null);
+  const nameRef = useRef<HTMLInputElement>(null);
+  const passwordRef = useRef<HTMLInputElement>(null);
+  const requestRef = useRef(false);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  useDialogFocus(true, dialogRef, onClose);
+  useEffect(() => {
+    const background = document.getElementById("root");
+    if (!background) return;
+    const previous = background.inert;
+    background.inert = true;
+    return () => { background.inert = previous; };
+  }, []);
 
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
@@ -174,6 +190,8 @@ const AuthDialog = ({ mode, onClose, onModeChange }: AuthDialogProps) => {
   const submitLabel = useMemo(() => (isSignup ? "Create account" : "Sign in"), [isSignup]);
 
   const switchMode = (nextMode: AuthMode) => {
+    if (requestRef.current) return;
+    setFieldErrors({});
     onModeChange(nextMode);
     setPassword("");
     setShowPassword(false);
@@ -182,6 +200,8 @@ const AuthDialog = ({ mode, onClose, onModeChange }: AuthDialogProps) => {
   };
 
   const handleSocialAuth = async (providerId: SocialAuthProviderId) => {
+    if (requestRef.current) return;
+    requestRef.current = true;
     try {
       setSocialSubmittingProvider(providerId);
       setErrorMessage("");
@@ -190,15 +210,17 @@ const AuthDialog = ({ mode, onClose, onModeChange }: AuthDialogProps) => {
     } catch (error) {
       setErrorMessage(getAuthErrorMessage(error));
       setSocialSubmittingProvider(null);
-    }
+    } finally { requestRef.current = false; }
   };
 
   const handlePasswordReset = async () => {
-    if (!email.trim()) {
-      setErrorMessage("Enter your email first, then use Forgot password.");
-      setSuccessMessage("");
+    if (requestRef.current) return;
+    if (!email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+      setFieldErrors({ email: email.trim() ? "Enter a valid email address." : "Enter your email to reset your password." });
+      setErrorMessage(""); setSuccessMessage(""); emailRef.current?.focus();
       return;
     }
+    setFieldErrors({}); requestRef.current = true;
 
     try {
       setIsResetting(true);
@@ -210,29 +232,26 @@ const AuthDialog = ({ mode, onClose, onModeChange }: AuthDialogProps) => {
       setErrorMessage(getAuthErrorMessage(error));
     } finally {
       setIsResetting(false);
+      requestRef.current = false;
     }
   };
 
   const handleEmailAuth = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
-    if (!email.trim() || !password) {
-      setErrorMessage("Enter email and password.");
-      setSuccessMessage("");
+    if (requestRef.current) return;
+    const errors: Record<string, string> = {};
+    if (isSignup && !fullName.trim()) errors.fullName = "Enter your full name.";
+    if (!email.trim()) errors.email = "Enter your email address.";
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) errors.email = "Enter a valid email address.";
+    if (!password) errors.password = "Enter your password.";
+    else if (isSignup && password.length < 6) errors.password = "Use at least 6 characters.";
+    setFieldErrors(errors); setErrorMessage(""); setSuccessMessage("");
+    if (Object.keys(errors).length) {
+      (errors.fullName ? nameRef : errors.email ? emailRef : passwordRef).current?.focus();
       return;
     }
-
-    if (isSignup && !fullName.trim()) {
-      setErrorMessage("Enter your name for the new account.");
-      setSuccessMessage("");
-      return;
-    }
-
-    if (isSignup && password.length < 6) {
-      setErrorMessage("Password must be at least 6 characters.");
-      setSuccessMessage("");
-      return;
-    }
+    requestRef.current = true;
 
     try {
       setIsSubmitting(true);
@@ -254,10 +273,10 @@ const AuthDialog = ({ mode, onClose, onModeChange }: AuthDialogProps) => {
     } catch (error) {
       setErrorMessage(getAuthErrorMessage(error));
       setIsSubmitting(false);
-    }
+    } finally { requestRef.current = false; }
   };
 
-  return (
+  return createPortal(
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
@@ -271,6 +290,11 @@ const AuthDialog = ({ mode, onClose, onModeChange }: AuthDialogProps) => {
         animate={{ opacity: 1, scale: 1 }}
         exit={{ opacity: 0, scale: 0.96 }}
         transition={{ duration: 0.2, ease: "easeOut" }}
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="auth-dialog-title"
+        tabIndex={-1}
         className="noviq-modal-panel CustomScrollbar relative grid rounded-[28px] border border-white/15 bg-white text-slate-950 shadow-[0_36px_120px_rgba(2,6,23,0.45)]"
       >
         <button
@@ -376,7 +400,7 @@ const AuthDialog = ({ mode, onClose, onModeChange }: AuthDialogProps) => {
             <p className="text-xs font-black uppercase tracking-[0.2em] text-cyan-600">
               {isSignup ? "New account" : "Returning account"}
             </p>
-            <h2 className="mt-3 text-3xl font-black tracking-tight text-slate-950 sm:text-4xl">
+            <h2 id="auth-dialog-title" className="mt-3 text-3xl font-black tracking-tight text-slate-950 sm:text-4xl">
               {title}
             </h2>
             <p className="mt-3 max-w-md text-sm leading-6 text-slate-500">{subtitle}</p>
@@ -392,7 +416,7 @@ const AuthDialog = ({ mode, onClose, onModeChange }: AuthDialogProps) => {
                   key={provider.id}
                   type="button"
                   onClick={() => handleSocialAuth(provider.id)}
-                  disabled={isSubmitting || Boolean(socialSubmittingProvider)}
+                  disabled={isSubmitting || isResetting || Boolean(socialSubmittingProvider)}
                   className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-black text-slate-900 shadow-sm shadow-slate-950/[0.04] transition hover:-translate-y-0.5 hover:border-slate-300 hover:bg-slate-50 active:translate-y-0 disabled:cursor-not-allowed disabled:opacity-70"
                 >
                   {isLoading ? <Loader2 size={18} className="animate-spin" /> : <Icon size={18} />}
@@ -408,13 +432,17 @@ const AuthDialog = ({ mode, onClose, onModeChange }: AuthDialogProps) => {
             <div className="h-px flex-1 bg-slate-200" />
           </div>
 
-          <form onSubmit={handleEmailAuth} className="space-y-4">
+          <form noValidate aria-busy={isSubmitting || isResetting || Boolean(socialSubmittingProvider)} onSubmit={handleEmailAuth} className="space-y-4">
             {isSignup && (
               <label className="block">
                 <span className="mb-2 block text-sm font-semibold text-slate-700">Full name</span>
                 <div className={inputShellClass}>
                   <User size={18} className="text-slate-400 transition group-focus-within:text-slate-700" />
                   <input
+                    ref={nameRef}
+                    required
+                    aria-invalid={Boolean(fieldErrors.fullName)}
+                    aria-describedby={fieldErrors.fullName ? "auth-fullName-error" : undefined}
                     value={fullName}
                     onChange={(event) => setFullName(event.target.value)}
                     type="text"
@@ -423,6 +451,7 @@ const AuthDialog = ({ mode, onClose, onModeChange }: AuthDialogProps) => {
                     className="min-h-8 w-full bg-transparent text-sm font-semibold text-slate-950 outline-none placeholder:text-slate-400"
                   />
                 </div>
+                {fieldErrors.fullName && <p id="auth-fullName-error" role="alert" className="mt-2 text-sm text-red-700">{fieldErrors.fullName}</p>}
               </label>
             )}
 
@@ -431,7 +460,11 @@ const AuthDialog = ({ mode, onClose, onModeChange }: AuthDialogProps) => {
               <div className={inputShellClass}>
                 <Mail size={18} className="text-slate-400 transition group-focus-within:text-slate-700" />
                 <input
-                  value={email}
+                  ref={emailRef}
+                    required
+                    aria-invalid={Boolean(fieldErrors.email)}
+                    aria-describedby={fieldErrors.email ? "auth-email-error" : undefined}
+                    value={email}
                   onChange={(event) => setEmail(event.target.value)}
                   type="email"
                   autoComplete={isSignup ? "email" : "username"}
@@ -439,6 +472,7 @@ const AuthDialog = ({ mode, onClose, onModeChange }: AuthDialogProps) => {
                   className="min-h-8 w-full bg-transparent text-sm font-semibold text-slate-950 outline-none placeholder:text-slate-400"
                 />
               </div>
+                {fieldErrors.email && <p id="auth-email-error" role="alert" className="mt-2 text-sm text-red-700">{fieldErrors.email}</p>}
             </label>
 
             <label className="block">
@@ -446,7 +480,11 @@ const AuthDialog = ({ mode, onClose, onModeChange }: AuthDialogProps) => {
               <div className={inputShellClass}>
                 <Lock size={18} className="text-slate-400 transition group-focus-within:text-slate-700" />
                 <input
-                  value={password}
+                  ref={passwordRef}
+                    required
+                    aria-invalid={Boolean(fieldErrors.password)}
+                    aria-describedby={fieldErrors.password ? "auth-password-error" : undefined}
+                    value={password}
                   onChange={(event) => setPassword(event.target.value)}
                   type={showPassword ? "text" : "password"}
                   autoComplete={isSignup ? "new-password" : "current-password"}
@@ -462,6 +500,7 @@ const AuthDialog = ({ mode, onClose, onModeChange }: AuthDialogProps) => {
                   {showPassword ? <EyeOff size={17} /> : <Eye size={17} />}
                 </button>
               </div>
+                {fieldErrors.password && <p id="auth-password-error" role="alert" className="mt-2 text-sm text-red-700">{fieldErrors.password}</p>}
             </label>
 
             <label className="flex items-center justify-between gap-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
@@ -484,7 +523,7 @@ const AuthDialog = ({ mode, onClose, onModeChange }: AuthDialogProps) => {
                 <button
                   type="button"
                   onClick={handlePasswordReset}
-                  disabled={isResetting}
+                  disabled={isResetting || isSubmitting || Boolean(socialSubmittingProvider)}
                   className="text-sm font-bold text-slate-600 transition hover:text-slate-950 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   {isResetting ? "Sending..." : "Forgot password?"}
@@ -493,18 +532,18 @@ const AuthDialog = ({ mode, onClose, onModeChange }: AuthDialogProps) => {
             )}
 
             {errorMessage && (
-              <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
+              <div role="alert" className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
                 {errorMessage}
               </div>
             )}
 
             {successMessage && (
-              <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700">
+              <div role="status" className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700">
                 {successMessage}
               </div>
             )}
 
-            <button type="submit" disabled={isSubmitting || Boolean(socialSubmittingProvider)} className={primaryButtonClass}>
+            <button type="submit" disabled={isSubmitting || isResetting || Boolean(socialSubmittingProvider)} className={primaryButtonClass}>
               {isSubmitting ? (
                 <>
                   <Loader2 size={18} className="animate-spin" />
@@ -533,32 +572,17 @@ const AuthDialog = ({ mode, onClose, onModeChange }: AuthDialogProps) => {
         </motion.div>
       </div>
     </motion.div>
-  );
+  , document.body);
 };
 
 export const Landing = () => {
+  const { user } = useAuth();
+  const startExamPrep = () => {
+    window.location.hash = "/planner";
+    if (!user) openAuth("signup");
+  };
   const [authMode, setAuthMode] = useState<AuthMode | null>(null);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [showBackgroundVideo, setShowBackgroundVideo] = useState(false);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const videoQuery = window.matchMedia("(min-width: 768px)");
-    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
-    const reducedData = window.matchMedia("(prefers-reduced-data: reduce)");
-    const updateVideoState = () =>
-      setShowBackgroundVideo(videoQuery.matches && !reducedMotion.matches && !reducedData.matches);
-
-    updateVideoState();
-    videoQuery.addEventListener("change", updateVideoState);
-    reducedMotion.addEventListener("change", updateVideoState);
-    reducedData.addEventListener("change", updateVideoState);
-    return () => {
-      videoQuery.removeEventListener("change", updateVideoState);
-      reducedMotion.removeEventListener("change", updateVideoState);
-      reducedData.removeEventListener("change", updateVideoState);
-    };
-  }, []);
 
   const openAuth = (mode: AuthMode) => {
     setAuthMode(mode);
@@ -567,30 +591,11 @@ export const Landing = () => {
 
   return (
     <div className="relative min-h-screen overflow-x-hidden bg-[#FAFAF8] text-[#14213D] selection:bg-[#DDB967]/30">
-      <div className="pointer-events-none fixed inset-0 overflow-hidden bg-[#08111F]">
-        {showBackgroundVideo ? (
-          <video
-            className="h-full w-full object-cover opacity-80 saturate-[1.08]"
-            src={LANDING_VIDEO_SRC}
-            autoPlay
-            muted
-            loop
-            playsInline
-            preload="metadata"
-            aria-hidden="true"
-          />
-        ) : (
-          <div className="absolute inset-0 bg-[#E8EEE9]">
-            <img
-              src={LOGO_SRC}
-              alt=""
-              aria-hidden="true"
-              className="absolute left-1/2 top-1/2 h-56 w-56 -translate-x-1/2 -translate-y-1/2 rounded-[3rem] object-cover opacity-[0.08] blur-[1px]"
-            />
-          </div>
-        )}
-        <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(250,250,248,0.88)_0%,rgba(250,250,248,0.66)_46%,rgba(250,250,248,0.2)_100%),linear-gradient(180deg,rgba(250,250,248,0.78)_0%,rgba(239,244,242,0.34)_48%,rgba(250,250,248,0.96)_100%)]" />
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_18%_0%,rgba(20,33,61,0.13),transparent_30%),radial-gradient(circle_at_84%_18%,rgba(221,185,103,0.24),transparent_28%)]" />
+      <div className="landing-backdrop pointer-events-none fixed inset-0 overflow-hidden" aria-hidden="true">
+        <div className="landing-backdrop-grid absolute inset-0" />
+        <div className="absolute -right-[12rem] -top-[8rem] h-[34rem] w-[34rem] rounded-full bg-[#C9D8FF]/55" />
+        <div className="absolute -bottom-[16rem] left-[18%] h-[34rem] w-[34rem] rounded-full bg-[#F4D7A6]/45" />
+        <div className="absolute left-[7%] top-[18%] h-24 w-24 rounded-[2rem] border border-[#B8C7E8]/70 bg-white/55" />
       </div>
 
       <header className="relative z-30 px-4 py-4 sm:px-6">
@@ -670,7 +675,7 @@ export const Landing = () => {
               Exam preparation, organized
             </div>
             <div className="max-w-3xl space-y-6">
-              <h1 className="text-5xl font-black leading-[0.95] tracking-normal text-[#14213D] drop-shadow-[0_1px_0_rgba(255,255,255,0.72)] md:text-[5rem] xl:text-[5.5rem]">
+              <h1 id="auth-dialog-title" className="text-5xl font-black leading-[0.95] tracking-normal text-[#14213D] drop-shadow-[0_1px_0_rgba(255,255,255,0.72)] md:text-[5rem] xl:text-[5.5rem]">
                 AI Study Operating System for exam preparation and academic success.
               </h1>
               <div className="max-w-2xl space-y-4">
@@ -784,7 +789,7 @@ export const Landing = () => {
 
                   <button
                     type="button"
-                    onClick={() => openAuth("signup")}
+                    onClick={startExamPrep}
                     className="mt-8 w-full rounded-[2rem] bg-gradient-to-r from-amber-400 to-amber-600 px-6 py-4 text-sm font-black uppercase tracking-[0.2em] text-slate-950 shadow-xl shadow-amber-500/30 transition hover:-translate-y-0.5 active:scale-95"
                   >
                     Start Exam Prep

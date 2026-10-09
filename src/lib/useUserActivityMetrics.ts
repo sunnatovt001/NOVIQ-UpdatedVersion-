@@ -10,11 +10,17 @@ import {
   query,
   where,
   or,
+  limit,
   type Query,
+  type DocumentSnapshot,
+  type QuerySnapshot,
 } from "firebase/firestore";
+import { withDeadline } from "./asyncRequest";
 import { db } from "@/src/lib/firebase";
 import { calculateLevel, getCurrentStreak } from "@/src/lib/progress";
 import { summarizeCards, isMeaningfulSession } from "./activityEvidence";
+import { getCloudMetrics, serverMetricsEnabled } from "./cloudMetrics";
+import { reportClientError } from "./errorReporting";
 
 export type UserActivityMetrics = {
   retry: () => void;
@@ -265,7 +271,7 @@ export const useUserActivityMetrics = (
     [options.scopeDate],
   );
   const [metrics, setMetrics] =
-    React.useState<UserActivityMetrics>(EMPTY_METRICS);
+    React.useState<UserActivityMetrics>({ ...EMPTY_METRICS, loading: !!uid });
   React.useEffect(() => {
     setMetrics({ ...EMPTY_METRICS, loading: !!uid });
     if (!uid) return;
@@ -278,12 +284,29 @@ export const useUserActivityMetrics = (
     const update = (patch: Partial<UserActivityMetrics>) => {
       if (active) setMetrics((current) => ({ ...current, ...patch }));
     };
-    const failure = (error: unknown) =>
-      update({
-        error:
-          "Statistics could not be refreshed. Check your connection and try again.",
-        loading: false,
-      });
+    const pending = new Set(["profile", "trusted", "planner", "decks", "statistics"]);
+    const errors = new Map<string, unknown>();
+    const publishStatus = () => update({ loading: pending.size > 0 && errors.size === 0,
+      error: errors.size ? "Statistics temporarily unavailable. Check your connection and retry." : null });
+    const settled = (source: string) => { pending.delete(source); errors.delete(source); publishStatus(); };
+    const failure = (error: unknown, source = "statistics") => {
+      if (!active) return;
+      console.error("Activity metrics read failed", { source, scope: dayScope?.key || "all", error });
+      reportClientError("metrics",error);
+      pending.delete(source); errors.set(source, error); publishStatus();
+    };
+    const initialDeadline = window.setTimeout(() => {
+      for (const source of pending) failure(new Error("Statistics listener timed out"), source);
+    }, 15000);
+    let decksReady = false;
+    let lastRefreshAt = 0;
+    // Legacy dates/statuses require record-level validation. Never silently
+    // report totals from a truncated result or fan out unlimited deck reads.
+    const readRecords = async (target: Query) => {
+      const snapshot = await getDocsFromServer(query(target, limit(2001)));
+      if (snapshot.docs.length > 2000) throw new Error("Statistics record safety limit exceeded; aggregation migration required");
+      return snapshot;
+    };
     const scoped = (target: Query, field = "createdAt") =>
       dayScope
         ? query(
@@ -311,13 +334,14 @@ export const useUserActivityMetrics = (
       withIndexFallback(
         () => count(scoped(query(target(name), where("role", "==", "user")))),
         async () =>
-          (await getDocsFromServer(scoped(target(name)))).docs.filter(
+          (await readRecords(scoped(target(name)))).docs.filter(
             (entry) => entry.data().role === "user",
           ).length,
       );
-    const refresh = async () => {
-      if (!active || document.hidden) return;
+    const refresh = async (force = false) => {
+      if (!active || document.hidden || !decksReady) return;
       if (refreshing) { refreshAgain = true; return; }
+      if (!force && Date.now() - lastRefreshAt < 30000) return;
       if (!navigator.onLine) {
         update({
           loading: false,
@@ -326,12 +350,33 @@ export const useUserActivityMetrics = (
         return;
       }
       refreshing = true;
+      lastRefreshAt = Date.now();
+      const requestDeadline = lastRefreshAt + 15000;
       try {
+        if (serverMetricsEnabled) {
+          const summary=await withDeadline(getCloudMetrics(dayScope?.start.getTime(),dayScope?.end.getTime()),15000);
+          roadmapDone=summary.tasksDone;
+          update({...summary,tasksDone:roadmapDone+plannerDone});
+          settled("statistics");
+          return;
+        }
+        if (deckIds.length > 100) throw new Error("Statistics deck safety limit exceeded; aggregation migration required");
         if (dayScope?.isFuture) {
-          update({ ...EMPTY_METRICS, loading: false });
+          update({ ...EMPTY_METRICS });
+          settled("statistics");
           return;
         }
         const sessions = scoped(target("studySessions"), "timestamp");
+        const focusRecords = () => readRecords(sessions).then((snapshot) => snapshot.docs.reduce(
+          (total, entry) => total + (entry.data().category === "focus" && isMeaningfulSession(entry.data()) ? toNumber(entry.data().duration) : 0), 0,
+        ));
+        const focusTotal = () => withIndexFallback(async () => {
+          const verified = query(sessions, where("verified", "==", true));
+          const [total, trusted] = await Promise.all([count(sessions), count(verified)]);
+          if (total !== trusted) return focusRecords(); // Validate legacy status/date evidence.
+          if (!total) return 0;
+          return toNumber((await getAggregateFromServer(query(verified, where("category", "==", "focus")), {seconds: sum("duration")})).data().seconds);
+        }, focusRecords);
         const [
           focus,
           notes,
@@ -342,15 +387,8 @@ export const useUserActivityMetrics = (
           roadmap,
           cards,
           dailyXp,
-        ] = await Promise.all([
-          getDocsFromServer(sessions).then((snapshot) => snapshot.docs.reduce(
-                (total, entry) =>
-                  total +
-                    (entry.data().category === "focus" && isMeaningfulSession(entry.data())
-                    ? toNumber(entry.data().duration)
-                    : 0),
-                0,
-              )),
+        ] = await withDeadline(Promise.all([
+          focusTotal(),
           count(scoped(target("notebookNotes"))),
           count(scoped(target("notebookSources"))),
           countRole("notebookMessages"),
@@ -373,18 +411,24 @@ export const useUserActivityMetrics = (
               ),
             async () =>
               (
-                await getDocsFromServer(
+                await readRecords(
                   scoped(target("roadmapTasks"), "completedAt"),
                 )
               ).docs.filter((entry) => isCompleted(entry.data())).length,
           ),
-          Promise.all(
-            deckIds.map(async (id) => {
-              const snapshot = await getDocsFromServer(collection(db, "users", uid, "decks", id, "cards"));
+          (async () => {
+            const results: {total: number; due: number; reviewed: number; created: number}[] = [];
+            // At most five simultaneous card requests, even for large accounts.
+            for (let offset = 0; offset < deckIds.length; offset += 5) {
+              if (!active || Date.now() >= requestDeadline) throw new Error("Statistics request disposed or timed out");
+              results.push(...await Promise.all(deckIds.slice(offset, offset + 5).map(async (id) => {
+              const snapshot = await readRecords(collection(db, "users", uid, "decks", id, "cards"));
               const records = snapshot.docs.map((entry) => entry.data());
               return { ...summarizeCards(records), created: records.filter((record) => isWithinDayScope(pickRecordDate(record, ["createdAt"]), dayScope)).length };
-            }),
-          ),
+              })));
+            }
+            return results;
+          })(),
           dayScope
             ? withIndexFallback(
                 async () =>
@@ -396,13 +440,13 @@ export const useUserActivityMetrics = (
                     ).data().xp,
                   ),
                 async () =>
-                  (await getDocsFromServer(sessions)).docs.reduce(
+                  (await readRecords(sessions)).docs.reduce(
                     (total, entry) => total + toNumber(entry.data().xpEarned),
                     0,
                   ),
               )
             : Promise.resolve(null),
-        ]);
+        ]), 15000);
         roadmapDone = roadmap;
         update({
           focusMinutes: Math.round(focus / 60),
@@ -416,14 +460,14 @@ export const useUserActivityMetrics = (
           reviewedCards: cards.reduce((total, value) => total + value.reviewed, 0),
           tasksDone: roadmapDone + plannerDone,
           ...(dailyXp !== null ? { xp: dailyXp } : {}),
-          loading: false,
-          error: null,
+
         });
+        settled("statistics");
       } catch (error) {
         failure(error);
       } finally {
         refreshing = false;
-        if (refreshAgain && active) { refreshAgain = false; void refresh(); }
+        if (refreshAgain && active) { refreshAgain = false; void refresh(true); }
       }
     };
     const profile = (snapshot: {
@@ -443,25 +487,44 @@ export const useUserActivityMetrics = (
       });
     };
     let trustedLoaded = false;
+    const readinessNext = (snap: DocumentSnapshot | QuerySnapshot) => {
+      if (snap.metadata.fromCache) return;
+      if (serverMetricsEnabled && (!("exists" in snap) || !snap.exists() || snap.data()?.ready!==true)) {
+        decksReady=false;
+        failure(new Error("Statistics projection is being prepared"),"decks");
+        return;
+      }
+      decksReady=true; settled("decks");
+      deckIds="docs" in snap ? snap.docs.map(document=>document.id) : [];
+      void refresh(true);
+    };
     const stop = [
       onSnapshot(
         doc(db, "users", uid),
+        { includeMetadataChanges: true },
         (snap) => {
+          if (snap.metadata.fromCache) return;
           if (!trustedLoaded) profile(snap);
+          settled("profile");
         },
-        failure,
+        (error) => failure(error, "profile"),
       ),
       onSnapshot(
         doc(db, "users", uid, "trusted", "progress"),
+        { includeMetadataChanges: true },
         (snap) => {
+          if (snap.metadata.fromCache) return;
           trustedLoaded = snap.exists();
           profile(snap);
+          settled("trusted");
         },
-        failure,
+        (error) => failure(error, "trusted"),
       ),
       onSnapshot(
         doc(db, "users", uid, "planner", "state"),
+        { includeMetadataChanges: true },
         (snap) => {
+          if (snap.metadata.fromCache) return;
           plannerDone = snap.exists()
             ? countPlannerTasksDone(snap.data(), dayScope)
             : 0;
@@ -470,17 +533,13 @@ export const useUserActivityMetrics = (
             missionTotal: Array.isArray(state.tasks) ? state.tasks.length : 0,
             missionCompleted: countPlannerTasksDone(snap.exists() ? snap.data() : null, null),
           });
+          settled("planner");
         },
-        failure,
+        (error) => failure(error, "planner"),
       ),
-      onSnapshot(
-        target("decks"),
-        (snap) => {
-          deckIds = snap.docs.map((doc) => doc.id);
-          void refresh();
-        },
-        failure,
-      ),
+      serverMetricsEnabled
+        ? onSnapshot(doc(db,"users",uid,"trusted","metrics"),{includeMetadataChanges:true},readinessNext,error=>failure(error,"decks"))
+        : onSnapshot(target("decks"),{includeMetadataChanges:true},readinessNext,error=>failure(error,"decks")),
     ];
     const timer = window.setInterval(() => void refresh(), 60000);
     const resume = () => void refresh();
@@ -491,6 +550,7 @@ export const useUserActivityMetrics = (
       active = false;
       stop.forEach((fn) => fn());
       window.clearInterval(timer);
+      window.clearTimeout(initialDeadline);
       document.removeEventListener("visibilitychange", resume);
       window.removeEventListener("online", resume);
       window.removeEventListener("focus", resume);

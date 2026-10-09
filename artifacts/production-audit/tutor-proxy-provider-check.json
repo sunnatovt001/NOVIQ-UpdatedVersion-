@@ -1,0 +1,9 @@
+{
+  "status": 200,
+  "model": "gemini-3.1-flash-lite",
+  "answerCharacters": 1530,
+  "correctAnswerPresent": true,
+  "realProvider": true,
+  "authenticationFixture": true,
+  "productionWrites": 0
+}
