@@ -350,8 +350,7 @@ export const Tutor = ({ setActiveTab }: { setActiveTab: (tab: string) => void })
       </div>
       <UpgradeModal
         open={upgradeOpen}
-        title="You have used today's free AI tutor messages."
-        message="Upgrade to Pro for a higher daily AI allowance and advanced exam assistance."
+        variant="tutor"
         onClose={() => setUpgradeOpen(false)}
         onUpgrade={() => {
           setUpgradeOpen(false);
