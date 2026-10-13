@@ -10,5 +10,5 @@
     "check:atlas": "node --env-file=.env scripts/check-atlas.mjs",
     "migration:status": "node --env-file=.env scripts/migration-status.mjs"
   },
-  "dependencies": { "mongodb": "7.7.0", "firebase-scrypt": "2.2.0" }
+  "dependencies": { "mongodb": "7.7.0", "firebase-scrypt": "2.2.0", "firebase-admin": "14.5.0" }
 }

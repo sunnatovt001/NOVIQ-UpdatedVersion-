@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { verifyLegacyPassword } from './legacyPassword.mjs';
 import { requireTrustedOrigin, sessionCookie } from './sessions.mjs';
 import { verifyTelegramIdentity } from './telegramIdentity.mjs';
+import { verifyGoogleBridge } from './googleBridge.mjs';
 
 export function readSessionToken(header) {
   if (typeof header !== 'string') return null;
@@ -17,7 +18,7 @@ async function readJson(request) {
   }
   try { return JSON.parse(Buffer.concat(chunks).toString('utf8')); } catch { throw Object.assign(new Error(), { status: 400 }); }
 }
-export function createAuthApi(db, sessions, { origin, verify = verifyLegacyPassword, now = () => new Date(), telegramToken = '', telegramBotUsername = '' }) {
+export function createAuthApi(db, sessions, { origin, verify = verifyLegacyPassword, googleVerify = verifyGoogleBridge, now = () => new Date(), telegramToken = '', telegramBotUsername = '' }) {
   return async (request, response) => {
     response.setHeader('Content-Type', 'application/json'); response.setHeader('Cache-Control', 'no-store');
     const send = (status, body) => { response.statusCode = status; response.end(JSON.stringify(body)); };
@@ -35,6 +36,20 @@ export function createAuthApi(db, sessions, { origin, verify = verifyLegacyPassw
       }
       if (request.method !== 'POST') return send(405, { error: 'Method not allowed.' });
       try { requireTrustedOrigin(request.headers.origin, origin); } catch { return send(403, { error: 'Untrusted request origin.' }); }
+      if (path === '/api/auth/google') {
+        const body = await readJson(request);
+        const identity = await googleVerify(body?.idToken);
+        if (!identity) return send(401, { error: 'Google identity could not be verified.' });
+        const account = await db.collection('auth_accounts').findOne({ _id: identity.uid });
+        if (!account || account.sourceProject !== identity.project || account.disabled || account.mfaRequired ||
+            !Array.isArray(account.providers) || !account.providers.some(provider => provider?.providerId === 'google.com')) {
+          return send(401, { error: 'Existing Google account unavailable.' });
+        }
+        const session = await sessions.create(account._id, false);
+        await sessions.revoke(readSessionToken(request.headers.cookie));
+        response.setHeader('Set-Cookie', sessionCookie(session.token));
+        return send(200, { user: await sessions.resolve(session.token) });
+      }
       if (path === '/api/auth/telegram') {
         const payload = await readJson(request);
         const identity = verifyTelegramIdentity(payload, telegramToken, Math.floor(now().getTime() / 1000));

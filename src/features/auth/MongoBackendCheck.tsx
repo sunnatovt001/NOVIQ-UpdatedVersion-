@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useLocale } from '@/src/contexts/LocaleContext';
-import { getMongoSession, loginMongoAccount, loginMongoTelegram, logoutMongoAccount, type MongoAccount } from '@/src/lib/mongoAuthApi';
+import { getMongoSession, loginMongoAccount, loginMongoGoogle, loginMongoTelegram, logoutMongoAccount, type MongoAccount } from '@/src/lib/mongoAuthApi';
 import { TelegramLoginWidget } from './TelegramLoginWidget';
 
 const copy = {
@@ -33,7 +33,7 @@ export function MongoBackendCheck() {
     refresh(revision).catch(error => { if (generation.current === revision && error?.status !== 401) setFailed(true); }).finally(() => { if (generation.current === revision) setBusy(false); });
     return () => { generation.current++; };
   }, []);
-  async function run(operation: 'login' | 'logout' | 'refresh' | 'telegram', proof?: Record<string, unknown>) {
+  async function run(operation: 'login' | 'logout' | 'refresh' | 'telegram' | 'google', proof?: Record<string, unknown>) {
     if (lock.current) return; lock.current = true;
     const revision = ++generation.current; setBusy(true); setFailed(false); setUsers([]);
     try {
@@ -41,6 +41,7 @@ export function MongoBackendCheck() {
       else {
         if (operation === 'login') { await loginMongoAccount(email, password); setPassword(''); }
         if (operation === 'telegram') { if (!proof) throw new Error('Missing proof'); await loginMongoTelegram(proof); }
+        if (operation === 'google') await loginMongoGoogle();
         await refresh(revision);
       }
     } catch { if (generation.current === revision) { setFailed(true); setUser(null); setAdmin(false); } }
@@ -60,6 +61,7 @@ export function MongoBackendCheck() {
         <label className="block">{text.password}<input className="mt-2 min-h-11 w-full rounded-lg border bg-transparent px-3" name="password" type="password" autoComplete="current-password" required maxLength={1024} value={password} onChange={event => setPassword(event.target.value)} /></label>
         <button className="btn-primary min-h-11" disabled={busy || !email.trim() || !password} type="submit">{busy ? text.busy : text.login}</button>
       </form>}
+      {!user ? <button className="btn-secondary min-h-11" disabled={busy} onClick={() => void run('google')}>{({en:'Continue with Google',uz:'Google orqali kirish',ru:'Войти через Google'})[locale]}</button> : null}
       {!user && !busy ? <TelegramLoginWidget onProof={proof => void run('telegram', proof)} errorText={text.error} /> : null}
       {busy ? <p role="status">{text.busy}</p> : null}
     </section>

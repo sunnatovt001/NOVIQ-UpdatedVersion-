@@ -27,3 +27,9 @@ export async function getMongoSession() {
 }
 export async function logoutMongoAccount() { await request('logout', {}); }
 export async function loginMongoTelegram(proof: Record<string, unknown>) { return account((await request('telegram', proof)).user); }
+export async function loginMongoGoogle() {
+  const { loginWithGoogle } = await import('./firebase');
+  const googleUser = await loginWithGoogle(false);
+  const idToken = await googleUser.getIdToken(true);
+  return account((await request('google', { idToken })).user);
+}
