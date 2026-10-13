@@ -17,6 +17,19 @@ export function createAdminApi(db, sessions) {
       await requireAdmin(cookieToken(request.headers.cookie));
       if (request.method !== 'GET') return send(405, { error: 'Method not allowed.' });
       const pathname = new URL(request.url, 'http://localhost').pathname;
+      if (pathname === '/api/admin/users') {
+        const url = new URL(request.url, 'http://localhost');
+        const cursor = url.searchParams.get('after');
+        if (cursor !== null && (!cursor || cursor.length > 128 || !/^[a-zA-Z0-9_-]+$/.test(cursor))) return send(400, { error: 'Invalid cursor.' });
+        const rows = await db.collection('auth_accounts').find(cursor ? { _id: { $gt: cursor } } : {}, {
+          projection: { _id: 1, email: 1, displayName: 1, emailVerified: 1, disabled: 1 },
+        }).sort({ _id: 1 }).limit(51).maxTimeMS(5000).toArray();
+        const users = rows.slice(0, 50).map(row => ({ uid: String(row._id),
+          email: typeof row.email === 'string' ? row.email : null,
+          displayName: typeof row.displayName === 'string' ? row.displayName : '',
+          emailVerified: row.emailVerified === true, disabled: row.disabled === true }));
+        return send(200, { users, nextCursor: rows.length > 50 ? users.at(-1).uid : null });
+      }
       if (pathname !== '/api/admin/migration-status') return send(404, { error: 'Not found.' });
       const manifests = await db.collection('migration_manifests').find({}, {
         projection: { _id: 1, count: 1, verified: 1, readTime: 1 },
