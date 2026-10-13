@@ -11,6 +11,7 @@ import { Landing } from "@/src/pages/Landing";
 import { trackSiteVisit } from "@/src/lib/analytics";
 import { Onboarding } from "@/src/components/Onboarding";
 import { AlertCircle } from "lucide-react";
+const loadMongoBackendCheck = () => import('@/src/features/auth/MongoBackendCheck');
 import { motion, AnimatePresence } from "motion/react";
 
 const LOGO_SRC = "/noviq-logo.jpeg";
@@ -187,6 +188,7 @@ const AppContent = () => {
 };
 
 export default function App() {
+  if (window.location.pathname === '/backend-check') return <RoutePage loader={loadMongoBackendCheck} name="MongoBackendCheck" />;
   return (
     <AuthProvider>
       <AppContent />
