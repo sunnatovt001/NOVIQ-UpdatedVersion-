@@ -3,13 +3,16 @@ import { createDatabaseConnection, readDatabaseConfig } from './database.mjs';
 import { createSessionService } from './sessions.mjs';
 import { createAuthApi } from './authApi.mjs';
 import { createAdminApi } from './adminApi.mjs';
-const origin = process.env.APP_ORIGIN;
+import { createStaticFrontend } from './staticFrontend.mjs';
+import { fileURLToPath } from 'node:url';
+const origin = process.env.APP_ORIGIN || process.env.RENDER_EXTERNAL_URL;
 if (!origin || new URL(origin).origin !== origin) throw new Error('Explicit APP_ORIGIN required.');
 const connection = createDatabaseConnection(readDatabaseConfig());
 const db = await connection.getDatabase(), sessions = createSessionService(db);
 await sessions.ensureIndexes();
 await db.collection('auth_login_limits').createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 const auth = createAuthApi(db, sessions, { origin }), admin = createAdminApi(db, sessions);
+const frontend = createStaticFrontend(fileURLToPath(new URL('../../dist/', import.meta.url)));
 const server = http.createServer((request, response) => {
   const path = new URL(request.url, 'http://localhost').pathname;
   if (path === '/health' && request.method === 'GET') {
@@ -22,7 +25,8 @@ const server = http.createServer((request, response) => {
   }
   if (path.startsWith('/api/auth/')) return void auth(request, response);
   if (path.startsWith('/api/admin/')) return void admin(request, response);
-  response.statusCode = 404; response.end('Not found');
+  if (path.startsWith('/api/')) { response.statusCode = 404; response.end('Not found'); return; }
+  return void frontend(request, response);
 });
 server.requestTimeout = 15000; server.headersTimeout = 10000;
 const host = process.env.RENDER === 'true' ? '0.0.0.0' : '127.0.0.1';
