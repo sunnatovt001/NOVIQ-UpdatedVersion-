@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { verifyLegacyPassword } from './legacyPassword.mjs';
 import { requireTrustedOrigin, sessionCookie } from './sessions.mjs';
+import { verifyTelegramIdentity } from './telegramIdentity.mjs';
 
 export function readSessionToken(header) {
   if (typeof header !== 'string') return null;
@@ -16,12 +17,16 @@ async function readJson(request) {
   }
   try { return JSON.parse(Buffer.concat(chunks).toString('utf8')); } catch { throw Object.assign(new Error(), { status: 400 }); }
 }
-export function createAuthApi(db, sessions, { origin, verify = verifyLegacyPassword, now = () => new Date() }) {
+export function createAuthApi(db, sessions, { origin, verify = verifyLegacyPassword, now = () => new Date(), telegramToken = '', telegramBotUsername = '' }) {
   return async (request, response) => {
     response.setHeader('Content-Type', 'application/json'); response.setHeader('Cache-Control', 'no-store');
     const send = (status, body) => { response.statusCode = status; response.end(JSON.stringify(body)); };
     try {
       const path = new URL(request.url, 'http://localhost').pathname;
+      if (path === '/api/auth/telegram-config' && request.method === 'GET') {
+        const enabled = /^\d+:[A-Za-z0-9_-]{20,}$/.test(telegramToken) && /^[A-Za-z0-9_]{5,32}$/.test(telegramBotUsername);
+        return send(200, { enabled, botUsername: enabled ? telegramBotUsername : null });
+      }
       if (path === '/api/auth/session' && request.method === 'GET') {
         const user = await sessions.resolve(readSessionToken(request.headers.cookie));
         if (!user) return send(401, { error: 'Authentication required.' });
@@ -30,6 +35,30 @@ export function createAuthApi(db, sessions, { origin, verify = verifyLegacyPassw
       }
       if (request.method !== 'POST') return send(405, { error: 'Method not allowed.' });
       try { requireTrustedOrigin(request.headers.origin, origin); } catch { return send(403, { error: 'Untrusted request origin.' }); }
+      if (path === '/api/auth/telegram') {
+        const payload = await readJson(request);
+        const identity = verifyTelegramIdentity(payload, telegramToken, Math.floor(now().getTime() / 1000));
+        if (!identity) return send(401, { error: 'Telegram identity could not be verified.' });
+        try {
+          await db.collection('auth_telegram_proofs').insertOne({ _id: payload.hash, expiresAt: new Date(now().getTime() + 600000) });
+        } catch (error) {
+          if (error.code === 11000) return send(401, { error: 'Telegram authorization already used. Sign in again.' });
+          throw error;
+        }
+        // Never link by mutable username/email or grant an admin role.
+        const uid = `tg_${identity.telegramId}`;
+        const accounts = db.collection('auth_accounts');
+        try {
+          await accounts.insertOne({ _id: uid, telegramId: identity.telegramId, telegramUsername: identity.username,
+            displayName: identity.displayName, disabled: false, emailVerified: false, providers: ['telegram'], createdAt: now() });
+        } catch (error) { if (error.code !== 11000) throw error; }
+        const account = await accounts.findOne({ _id: uid });
+        if (!account || account.telegramId !== identity.telegramId || account.disabled || account.mfaRequired) return send(401, { error: 'Telegram sign-in unavailable.' });
+        const session = await sessions.create(uid, false);
+        await sessions.revoke(readSessionToken(request.headers.cookie));
+        response.setHeader('Set-Cookie', sessionCookie(session.token));
+        return send(200, { user: await sessions.resolve(session.token) });
+      }
       if (path === '/api/auth/logout') {
         await sessions.revoke(readSessionToken(request.headers.cookie));
         response.setHeader('Set-Cookie', sessionCookie('0'.repeat(64), { maxAge: 0 }));

@@ -11,7 +11,8 @@ const connection = createDatabaseConnection(readDatabaseConfig());
 const db = await connection.getDatabase(), sessions = createSessionService(db);
 await sessions.ensureIndexes();
 await db.collection('auth_login_limits').createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 });
-const auth = createAuthApi(db, sessions, { origin }), admin = createAdminApi(db, sessions);
+await db.collection('auth_telegram_proofs').createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 });
+const auth = createAuthApi(db, sessions, { origin, telegramToken: process.env.TELEGRAM_BOT_TOKEN || '', telegramBotUsername: process.env.TELEGRAM_BOT_USERNAME || '' }), admin = createAdminApi(db, sessions);
 const frontend = createStaticFrontend(fileURLToPath(new URL('../../dist/', import.meta.url)));
 const server = http.createServer((request, response) => {
   const path = new URL(request.url, 'http://localhost').pathname;
