@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useLocale } from '@/src/contexts/LocaleContext';
-import { getMongoSession, loginMongoAccount, logoutMongoAccount, type MongoAccount } from '@/src/lib/mongoAuthApi';
+import { getMongoSession, loginMongoAccount, loginMongoTelegram, logoutMongoAccount, type MongoAccount } from '@/src/lib/mongoAuthApi';
+import { TelegramLoginWidget } from './TelegramLoginWidget';
 
 const copy = {
   en: { title: 'Backend verification', warning: 'Staging verification only. The main app has not switched to MongoDB.', email: 'Email', password: 'Password', login: 'Sign in', logout: 'Sign out', busy: 'Please wait…', error: 'Verification failed. Check your sign-in details or try again later.', admin: 'Admin access verified', ordinary: 'Signed in without admin access', users: 'Accounts', refresh: 'Check again', back: 'Back to app' },
@@ -32,13 +33,14 @@ export function MongoBackendCheck() {
     refresh(revision).catch(error => { if (generation.current === revision && error?.status !== 401) setFailed(true); }).finally(() => { if (generation.current === revision) setBusy(false); });
     return () => { generation.current++; };
   }, []);
-  async function run(operation: 'login' | 'logout' | 'refresh') {
+  async function run(operation: 'login' | 'logout' | 'refresh' | 'telegram', proof?: Record<string, unknown>) {
     if (lock.current) return; lock.current = true;
     const revision = ++generation.current; setBusy(true); setFailed(false); setUsers([]);
     try {
       if (operation === 'logout') { await logoutMongoAccount(); if (generation.current === revision) { setUser(null); setAdmin(false); } }
       else {
         if (operation === 'login') { await loginMongoAccount(email, password); setPassword(''); }
+        if (operation === 'telegram') { if (!proof) throw new Error('Missing proof'); await loginMongoTelegram(proof); }
         await refresh(revision);
       }
     } catch { if (generation.current === revision) { setFailed(true); setUser(null); setAdmin(false); } }
@@ -58,6 +60,7 @@ export function MongoBackendCheck() {
         <label className="block">{text.password}<input className="mt-2 min-h-11 w-full rounded-lg border bg-transparent px-3" name="password" type="password" autoComplete="current-password" required maxLength={1024} value={password} onChange={event => setPassword(event.target.value)} /></label>
         <button className="btn-primary min-h-11" disabled={busy || !email.trim() || !password} type="submit">{busy ? text.busy : text.login}</button>
       </form>}
+      {!user && !busy ? <TelegramLoginWidget onProof={proof => void run('telegram', proof)} errorText={text.error} /> : null}
       {busy ? <p role="status">{text.busy}</p> : null}
     </section>
   </main>;

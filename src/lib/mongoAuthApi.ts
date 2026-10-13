@@ -26,3 +26,4 @@ export async function getMongoSession() {
   return { user: account(result.user), isAdmin: result.isAdmin };
 }
 export async function logoutMongoAccount() { await request('logout', {}); }
+export async function loginMongoTelegram(proof: Record<string, unknown>) { return account((await request('telegram', proof)).user); }

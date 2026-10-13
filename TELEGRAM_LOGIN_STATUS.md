@@ -20,8 +20,12 @@ Owner setup required before activation:
   from the owner's existing bot configuration; never send token in chat.
 - Manually deploy the reviewed staging commit (auto-deploy remains off).
 
-The Telegram widget/button and main-app Mongo auth integration are NOT complete.
-Do not describe Telegram sign-in/sign-up as usable yet. GET
+The Telegram widget/button is now attached to /backend-check only. A local
+browser fixture verifies widget callback → Telegram API → session refresh and
+ordinary-account isolation; actual Telegram authorization has not been performed.
+Live GET /api/auth/telegram-config returned enabled=true, botUsername=noviqq_bot.
+Main-app Mongo auth integration is NOT complete. Do not describe the main site's
+Telegram sign-in/sign-up as usable yet. GET
 /api/auth/telegram-config exposes only enablement and public bot name, never token.
 POST /api/auth/telegram requires the signed widget payload and exact site Origin;
 username-only requests fail closed. Linking Telegram to an existing email/admin
