@@ -1,9 +1,44 @@
 @import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&display=swap");
 @import "tailwindcss";
 
+/* Sidebar-only compact language controls; existing theme tokens stay authoritative. */
+.noviq-app .sidebar-language-picker { margin: 0; padding: 10px; min-width: 0; border: 1px solid var(--noviq-border); border-radius: 12px; background: var(--noviq-card); }
+.noviq-app .sidebar-language-heading { display: flex; align-items: center; gap: 7px; margin-bottom: 8px; color: var(--noviq-muted); font-size: 11px; font-weight: 500; }
+.noviq-app .sidebar-language-options { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 6px; }
+.noviq-app .sidebar-language-option { position: relative; cursor: pointer; min-width: 0; }
+.noviq-app .sidebar-language-option input { position: absolute; opacity: 0; inset: 0; width: 100%; height: 100%; margin: 0; cursor: pointer; }
+.noviq-app .sidebar-language-option span { display: flex; align-items: center; justify-content: center; min-height: 44px; padding: 0 2px; border: 1px solid transparent; border-radius: 8px; font-size: 11px; font-weight: 600; color: var(--noviq-muted); transition: background-color 150ms, color 150ms; }
+.noviq-app .sidebar-language-option:hover span { background: var(--noviq-soft); color: var(--noviq-text); }
+.noviq-app .sidebar-language-option input:checked + span { color: var(--noviq-text); background: var(--noviq-soft); border-color: var(--noviq-accent); }
+.noviq-app .sidebar-language-option input:focus-visible + span { outline: 2px solid var(--noviq-accent); outline-offset: 2px; }
+.noviq-app .app-language-control { position: relative; }
+.noviq-app .app-language-trigger { display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; padding: 0 12px; border: 1px solid var(--noviq-border); border-radius: 12px; color: var(--noviq-text); background: var(--noviq-card); font-size: 12px; font-weight: 600; cursor: pointer; }
+.noviq-app .app-language-trigger:hover { background: var(--noviq-soft); }
+.noviq-app .app-language-trigger:focus-visible { outline: 2px solid var(--noviq-accent); outline-offset: 3px; }
+.noviq-app .app-language-popover { position: absolute; top: calc(100% + 8px); right: 0; width: 260px; z-index: 410; border-radius: 12px; box-shadow: 0 14px 36px rgba(20,33,61,.15); }
+@media (max-width:1023px) {
+  .noviq-app .app-mobile-header .app-language-popover { position: fixed; top: calc(5rem + env(safe-area-inset-top) + 8px); right: 12px; width: min(280px,calc(100vw - 24px)); }
+}
+@media (max-width:400px) {
+  .noviq-app .app-mobile-header { padding-left: 12px; padding-right: 12px; }
+  .noviq-app .app-mobile-header .app-language-trigger { width: 44px; padding: 0; }
+  .noviq-app .app-mobile-header .app-language-trigger :is(span,svg:last-child) { display:none; }
+}
+
 /* The app theme is controlled by Layout's .noviq-app.dark class, not by the
    operating system's colour preference. */
 @custom-variant dark (&:where(.noviq-app.dark, .noviq-app.dark *));
+
+.noviq-app .upgrade-modal-panel { background: #fff !important; }
+.noviq-app.dark .upgrade-modal-panel { background: #0f172a !important; }
+.noviq-app .community-members-panel { background: #fff !important; }
+.noviq-app.dark .community-members-panel { background: #0f172a !important; }
+.noviq-app button[class*="bg-[var(--noviq-accent)]"],
+.noviq-app button[class*="bg-[var(--noviq-accent)]"] :is(span, svg),
+.noviq-app :is(.btn-primary, .premium-action),
+.noviq-app :is(.btn-primary, .premium-action) :is(span, svg) {
+  color: var(--noviq-on-accent) !important;
+}
 
 /*
   Noviq visual identity v2.
@@ -48,8 +83,15 @@
   --noviq-muted: #52627a;
   --noviq-border: #d8dee7;
   --noviq-accent: #2e5eaa;
+  --noviq-on-accent: #ffffff;
   --noviq-accent-hover: #1f2f52;
   --noviq-soft: #eef4ff;
+  --noviq-danger: #a3243a;
+  --noviq-danger-bg: #fff1f3;
+  --noviq-danger-border: #e8aab5;
+  --noviq-warning: #795016;
+  --noviq-warning-bg: #fff7e8;
+  --noviq-warning-border: #dfbd82;
   --noviq-body-bg: linear-gradient(180deg, #f7f8f6 0%, #eef3f1 100%);
   --noviq-shadow: 0 18px 50px rgba(20, 33, 61, 0.08);
   --dashboard-heading: #14213d;
@@ -78,8 +120,15 @@
   --noviq-muted: #a7b0c0;
   --noviq-border: #27344b;
   --noviq-accent: #91a7ff;
+  --noviq-on-accent: #14213d;
   --noviq-accent-hover: #bdc9ff;
   --noviq-soft: rgba(145, 167, 255, 0.13);
+  --noviq-danger: #ffb4c0;
+  --noviq-danger-bg: #321e2b;
+  --noviq-danger-border: #875162;
+  --noviq-warning: #f2cd90;
+  --noviq-warning-bg: #2d251b;
+  --noviq-warning-border: #806744;
   --noviq-body-bg: linear-gradient(180deg, #0b1220 0%, #0f1929 100%);
   --noviq-shadow: 0 22px 70px rgba(2, 6, 23, 0.28);
   --dashboard-heading: #f8fafc;
@@ -363,7 +412,7 @@
   .premium-action,
   .btn-primary {
     background: var(--noviq-accent);
-    color: white;
+    color: var(--noviq-on-accent);
     box-shadow: none;
     @apply inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl px-5 py-3 text-sm font-bold transition duration-200 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-45 disabled:active:scale-100;
   }
@@ -407,7 +456,14 @@
   }
 
   .btn-danger {
-    @apply inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl border border-red-200 bg-red-50 px-4 py-2.5 text-sm font-bold text-red-700 transition duration-200 hover:bg-red-100 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-45 disabled:active:scale-100;
+    border-color: var(--noviq-danger-border);
+    background: var(--noviq-danger-bg);
+    color: var(--noviq-danger);
+    @apply inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl border px-4 py-2.5 text-sm font-bold transition duration-200 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-45 disabled:active:scale-100;
+  }
+
+  .btn-danger:hover {
+    background: color-mix(in srgb, var(--noviq-danger-bg) 85%, var(--noviq-danger) 15%);
   }
 
   .dashboard-shell {

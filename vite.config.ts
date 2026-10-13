@@ -30,7 +30,13 @@ export default defineConfig(({mode}) => ({
     hmr: process.env.DISABLE_HMR !== 'true',
     // Reports and private backups are not application source. Writing them must
     // not reload a student's page during an AI request.
-    watch: { ignored: ['**/artifacts/**', '**/backups/**', '**/PRODUCTION_AUDIT.md'] },
+    watch: { ignored: [
+      '**/artifacts/**',
+      '**/backups/**',
+      '**/design-system/**',
+      '**/PRODUCTION_AUDIT.md',
+      '**/FOUNDATION_REDESIGN_STATUS.md',
+    ] },
   },
   build: {
     rollupOptions: {

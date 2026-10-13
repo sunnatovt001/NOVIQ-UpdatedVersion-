@@ -4,6 +4,7 @@ let activeLocks = 0;
 let previousBodyOverflow = "";
 let previousHtmlOverflow = "";
 let previousBodyPaddingRight = "";
+let pageScrollStyles: Array<{ element: HTMLElement; overflow: string }> = [];
 
 export const useBodyScrollLock = (locked: boolean) => {
   useEffect(() => {
@@ -19,6 +20,8 @@ export const useBodyScrollLock = (locked: boolean) => {
       const scrollbarWidth = window.innerWidth - documentElement.clientWidth;
       body.style.overflow = "hidden";
       documentElement.style.overflow = "hidden";
+      pageScrollStyles = Array.from(document.querySelectorAll<HTMLElement>("[data-page-scroll]")).map(element => ({ element, overflow: element.style.overflow }));
+      pageScrollStyles.forEach(({ element }) => { element.style.overflow = "hidden"; });
 
       if (scrollbarWidth > 0) {
         body.style.paddingRight = `${scrollbarWidth}px`;
@@ -34,6 +37,8 @@ export const useBodyScrollLock = (locked: boolean) => {
         body.style.overflow = previousBodyOverflow;
         documentElement.style.overflow = previousHtmlOverflow;
         body.style.paddingRight = previousBodyPaddingRight;
+        pageScrollStyles.forEach(({ element, overflow }) => { element.style.overflow = overflow; });
+        pageScrollStyles = [];
       }
     };
   }, [locked]);

@@ -123,4 +123,4 @@ export const DEFAULT_EXAM_DATE = new Date(new Date().getFullYear(), 11, 15)
   .slice(0, 10);
 
 export const PLANNER_INPUT_CLASS =
-  "w-full rounded-2xl border border-[#E2E8F0] bg-white px-4 py-3 text-sm font-semibold text-[#0F172A] outline-none transition focus:border-[#3F7D58] focus:ring-4 focus:ring-[#ECFDF3]";
+  "w-full rounded-2xl border border-[#E2E8F0] bg-white px-4 py-3 text-sm font-semibold text-[#0F172A] outline-none transition focus:border-[var(--noviq-accent)] focus:ring-4 focus:ring-[var(--noviq-soft)]";

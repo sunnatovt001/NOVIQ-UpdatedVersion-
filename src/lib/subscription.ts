@@ -1,4 +1,4 @@
-import { getLocalDayKey } from "@/src/lib/progress";
+import { getLocalDayKey } from "@/src/lib/progressMath";
 import { loadLocalData, makeSyncId, saveLocalData } from "@/src/lib/localStore";
 import { writeDocWithQueue } from "@/src/lib/offlineSync";
 import type {
@@ -7,8 +7,6 @@ import type {
   SubscriptionState,
   UserProfile,
 } from "@/src/types";
-import { httpsCallable } from "firebase/functions";
-import { functions } from "@/src/lib/firebase";
 
 export const PRO_PRICING = {
   monthly: {
@@ -152,6 +150,10 @@ export const recordCheckout = async ({
 }) => {
   void userId;
   void amount; // Price is selected on the server.
+  const [{ httpsCallable }, { functions }] = await Promise.all([
+    import("firebase/functions"),
+    import("@/src/lib/firebase"),
+  ]);
   const createCheckout = httpsCallable<
     { billingCycle: BillingCycle; provider: PaymentProvider },
     { checkoutId: string; checkoutUrl: string }

@@ -1,7 +1,5 @@
-import { deleteDoc, doc, setDoc, updateDoc } from "firebase/firestore";
 import { useEffect } from "react";
 import { isReadOnlyAudit } from "./auditMode";
-import { db } from "@/src/lib/firebase";
 import { loadLocalDataStrict, saveLocalData } from "@/src/lib/localStore";
 
 export type SyncStatus = "pending" | "synced" | "failed";
@@ -150,6 +148,10 @@ const applyOperation = async (operation: OfflineSyncOperation) => {
       "Cannot sync a Firestore operation without a document path.",
     );
   }
+  const [{ deleteDoc, doc, setDoc, updateDoc }, { db }] = await Promise.all([
+    import("firebase/firestore"),
+    import("@/src/lib/firebase"),
+  ]);
   const targetRef = doc(db, rootPath, ...pathSegments);
   const syncMetadata =
     rootPath === "users" && pathSegments.length === 1

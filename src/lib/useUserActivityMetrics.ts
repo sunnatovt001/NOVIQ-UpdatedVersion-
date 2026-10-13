@@ -17,7 +17,7 @@ import {
 } from "firebase/firestore";
 import { withDeadline } from "./asyncRequest";
 import { db } from "@/src/lib/firebase";
-import { calculateLevel, getCurrentStreak } from "@/src/lib/progress";
+import { calculateLevel, getCurrentStreak } from "@/src/lib/progressMath";
 import { summarizeCards, isMeaningfulSession } from "./activityEvidence";
 import { getCloudMetrics, serverMetricsEnabled } from "./cloudMetrics";
 import { reportClientError } from "./errorReporting";

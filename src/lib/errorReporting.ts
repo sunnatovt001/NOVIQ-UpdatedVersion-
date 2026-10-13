@@ -1,4 +1,4 @@
-import { auth } from "./firebase";
+import { auth } from "./firebaseAuth";
 import { trackUserEvent } from "./analytics";
 import { isReadOnlyAudit } from "./auditMode";
 import { loadLocalData, trySaveLocalData } from "./localStore";

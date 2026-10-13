@@ -1,4 +1,5 @@
 import React from "react";
+import { getRecoveryCopy } from "@/src/lib/recoveryCopy";
 
 export class ErrorBoundary extends React.Component<
   React.PropsWithChildren,
@@ -12,22 +13,23 @@ export class ErrorBoundary extends React.Component<
     console.error("Page rendering failed", error, info);
   }
   render() {
+    const copy = getRecoveryCopy();
     if (this.state.failed)
       return (
         <div
           role="alert"
           className="flex min-h-screen flex-col items-center justify-center gap-4 bg-[#FAFAF8] px-6 text-center text-[#111827]"
         >
-          <h1 className="text-xl font-bold">This page could not be loaded</h1>
+          <h1 className="text-xl font-bold">{copy.title}</h1>
           <p className="text-sm text-[#6B7280]">
-            Please reload to return to your workspace.
+            {copy.reloadHelp}
           </p>
           <button
             type="button"
             onClick={() => window.location.reload()}
-            className="rounded-xl bg-[#3F7D58] px-5 py-3 font-bold text-white"
+            className="min-h-11 rounded-xl bg-blue-600 px-5 py-3 font-bold text-white hover:bg-blue-700"
           >
-            Reload page
+            {copy.reloadPage}
           </button>
         </div>
       );

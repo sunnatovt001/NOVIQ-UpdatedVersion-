@@ -21,7 +21,7 @@ import {
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { cn } from "@/src/lib/utils";
-import { getAppErrorMessage } from "@/src/lib/errors";
+import { classifyAiFailure, getAiFailureMessage, type AiFailureKind } from "@/src/lib/aiFailure";
 import { UpgradeModal } from "@/src/components/UpgradeModal";
 import { FREE_LIMITS, getLocalDailyUsage, isPro, saveLocalDailyUsage } from "@/src/lib/subscription";
 import { getLocalDayKey } from "@/src/lib/progress";
@@ -41,6 +41,7 @@ import {
   type TutorLanguage,
 } from "@/src/features/tutor/tutorCopy";
 import { useLocale } from "@/src/contexts/LocaleContext";
+import { buildTutorRequestContext } from "@/src/features/tutor/tutorRequest";
 
 interface Message {
   id: string;
@@ -106,13 +107,23 @@ export const Tutor = ({ setActiveTab }: { setActiveTab: (tab: string) => void })
   const [input, setInput] = useState("");
   const [isTyping, setIsTyping] = useState(false);
   const aiRequestRef = useRef(false);
+  const aiGenerationRef = useRef(0);
+  useEffect(() => {
+    aiGenerationRef.current += 1;
+    aiRequestRef.current = false;
+    setIsTyping(false);
+    setAiError("");
+    setLastRequest(null);
+    return () => { aiGenerationRef.current += 1; };
+  }, [user?.uid]);
   const [isListening, setIsListening] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [autoSpeak, setAutoSpeak] = useState(false);
   const [attachedFiles, setAttachedFiles] = useState<TutorAttachment[]>([]);
   const [uploadError, setUploadError] = useState("");
   const historyError = chat.error;
-  const [aiError, setAiError] = useState("");
+  const [aiFailure, setAiError] = useState<"" | { kind: AiFailureKind } | { speech: true }>("");
+  const aiError = aiFailure === "" ? "" : "kind" in aiFailure ? getAiFailureMessage(aiFailure.kind, locale) : t("tutor.speechUnsupported");
   const [lastRequest, setLastRequest] = useState<{ prompt: string; attachments: TutorAttachment[] } | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [upgradeOpen, setUpgradeOpen] = useState(false);
@@ -194,7 +205,7 @@ export const Tutor = ({ setActiveTab }: { setActiveTab: (tab: string) => void })
 
   const handleToggleListening = () => {
     if (!recognitionRef.current) {
-      setAiError("Speech recognition is not supported in this browser.");
+      setAiError({ speech: true });
       return;
     }
 
@@ -225,7 +236,7 @@ export const Tutor = ({ setActiveTab }: { setActiveTab: (tab: string) => void })
       );
       setAttachedFiles((current) => [...current, ...processed]);
     } catch (error) {
-      setUploadError(error instanceof Error ? error.message : "File upload failed.");
+      setUploadError(error instanceof Error ? error.message : t("tutor.uploadFailed"));
     }
   };
 
@@ -241,7 +252,7 @@ export const Tutor = ({ setActiveTab }: { setActiveTab: (tab: string) => void })
       return;
     }
 
-    const cleanPrompt = prompt.trim() || "Analyze the uploaded file and explain the most important points.";
+    const cleanPrompt = prompt.trim() || t("tutor.analyzeFile");
     aiRequestRef.current = true;
     const attachmentMeta = files.map(({ id, name, mimeType, size, text }) => ({
       id,
@@ -260,6 +271,8 @@ export const Tutor = ({ setActiveTab }: { setActiveTab: (tab: string) => void })
     setLastRequest({ prompt: cleanPrompt, attachments: files });
 
     const requestOwner = user.uid;
+    const generation = aiGenerationRef.current;
+    const isCurrent = () => ownerRef.current === requestOwner && aiGenerationRef.current === generation;
     const conversationId = chat.activeId;
     if (!retry) chat.add({role:"user",content:cleanPrompt,attachments:attachmentMeta},conversationId);
 
@@ -272,17 +285,8 @@ export const Tutor = ({ setActiveTab }: { setActiveTab: (tab: string) => void })
 
     try {
       trackUserEvent(user.uid, "tutor_message_sent", 0, { tutorMessagesSent: 1 }).catch(() => undefined);
-      const languageInstruction =
-        voiceLanguage === "en-US"
-          ? "Answer naturally in English."
-          : voiceLanguage === "ru-RU"
-            ? "Answer naturally in Russian."
-            : "Answer naturally in Uzbek.";
       const studentContext = buildStudentTutorContext(profile, user?.uid);
-      const materialInstruction = files.length
-        ? `Uploaded materials in this request: ${files.map((file) => file.name).join(", ")}. Use these materials first and reference them by name.`
-        : "";
-      const tutorContext = [languageInstruction, studentContext, materialInstruction].filter(Boolean).join("\n\n");
+      const tutorContext = buildTutorRequestContext(voiceLanguage, studentContext, files);
 
       const response = await askTutor(cleanPrompt, tutorContext, voiceLanguage, {
         history: persistedMessages.map((message) => ({
@@ -293,16 +297,17 @@ export const Tutor = ({ setActiveTab }: { setActiveTab: (tab: string) => void })
         retries: 2,
       });
 
-      if(ownerRef.current!==requestOwner)return;
+      if (!isCurrent()) return;
       chat.add({role:"assistant",content:response},conversationId);
       speak(response);
     } catch (error) {
-      if(ownerRef.current!==requestOwner)return;
-      const message = getAppErrorMessage(error);
-      setAiError(message);
+      if (!isCurrent()) return;
+      setAiError({ kind: classifyAiFailure(error) });
     } finally {
-      aiRequestRef.current = false;
-      setIsTyping(false);
+      if (isCurrent()) {
+        aiRequestRef.current = false;
+        setIsTyping(false);
+      }
     }
   };
 
@@ -350,8 +355,7 @@ export const Tutor = ({ setActiveTab }: { setActiveTab: (tab: string) => void })
       </div>
       <UpgradeModal
         open={upgradeOpen}
-        title="You have used today's free AI tutor messages."
-        message="Upgrade to Pro for a higher daily AI allowance and advanced exam assistance."
+        variant="tutor"
         onClose={() => setUpgradeOpen(false)}
         onUpgrade={() => {
           setUpgradeOpen(false);
@@ -377,13 +381,13 @@ export const Tutor = ({ setActiveTab }: { setActiveTab: (tab: string) => void })
           <div>
             <h2 className="font-display text-base font-bold text-white sm:text-xl">Saidamin - Noviq Tutor</h2>
             <p className="hidden text-[10px] font-black uppercase tracking-widest text-cyan-300 sm:block">
-              Goal-aware exam coaching
+              {t("tutor.coaching")}
             </p>
           </div>
         </div>
         <div className="flex max-w-full items-center gap-2 overflow-x-auto">
           <div className="shrink-0 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-black uppercase tracking-widest text-slate-300">
-            {localProvider ? "Saidamin AI" : activePro ? "Pro AI" : `${remainingTutorMessages} free left`}
+            {localProvider ? "Saidamin AI" : activePro ? "Pro AI" : t("tutor.freeRemaining").replace("{count}", String(remainingTutorMessages))}
           </div>
           <select
             value={voiceLanguage}
@@ -393,7 +397,7 @@ export const Tutor = ({ setActiveTab }: { setActiveTab: (tab: string) => void })
                 language === "uz-UZ" ? "uz" : language === "ru-RU" ? "ru" : "en",
               );
             }}
-            aria-label="Tutor language"
+            aria-label={t("tutor.languageLabel")}
             className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-white outline-none transition hover:border-blue-400 focus:border-blue-400"
           >
             {TUTOR_LANGUAGE_OPTIONS.map((option) => (
@@ -409,7 +413,7 @@ export const Tutor = ({ setActiveTab }: { setActiveTab: (tab: string) => void })
               "rounded-xl border p-2.5 transition-all",
               autoSpeak ? "border-blue-500/20 bg-blue-600/20 text-blue-300" : "border-white/10 bg-white/5 text-slate-500"
             )}
-            aria-label="Toggle voice output"
+            aria-label={t("tutor.voiceToggle")}
           >
             {autoSpeak ? <Volume2 size={20} /> : <VolumeX size={20} />}
           </button>
@@ -425,7 +429,7 @@ export const Tutor = ({ setActiveTab }: { setActiveTab: (tab: string) => void })
       </div>
 
       <div ref={scrollRef} className="CustomScrollbar tutor-messages min-h-0 flex-1 space-y-5 overflow-y-auto p-3 sm:p-5">
-      {historyError && <div role="alert" className="z-10 shrink-0 bg-amber-50 p-3 text-sm text-amber-900 xl:hidden">{historyError} <button onClick={chat.retry} className="underline">Retry history</button></div>}
+      {historyError && <div role="alert" className="z-10 shrink-0 bg-amber-50 p-3 text-sm text-amber-900 xl:hidden">{historyError} <button onClick={chat.retry} className="underline">{t("tutor.retryHistory")}</button></div>}
       <TutorSaveStatus message={chat.saveError} retry={chat.retrySaving} />
         {messages.map((message) => (
           <div key={message.id} className={cn("flex gap-2.5 sm:gap-3", message.role === "user" && "flex-row-reverse")}>
@@ -511,7 +515,7 @@ export const Tutor = ({ setActiveTab }: { setActiveTab: (tab: string) => void })
                         type="button"
                         onClick={() => removeAttachment(file.id)}
                         className="rounded-lg p-1 text-slate-500 transition hover:bg-white/10 hover:text-red-300"
-                        aria-label={`Remove ${file.name}`}
+                        aria-label={t("tutor.removeAttachment", { name: file.name })}
                       >
                         <X size={14} />
                       </button>
@@ -528,16 +532,16 @@ export const Tutor = ({ setActiveTab }: { setActiveTab: (tab: string) => void })
               )}
 
               {aiError && lastRequest && (
-                <div className="flex flex-col gap-3 rounded-2xl border border-red-400/20 bg-red-400/10 px-4 py-3 text-sm text-red-800 sm:flex-row sm:items-center sm:justify-between">
+                <div role="alert" className="flex flex-col gap-3 rounded-2xl border border-[var(--noviq-danger-border)] bg-[var(--noviq-danger-bg)] px-4 py-3 text-sm text-[var(--noviq-danger)] sm:flex-row sm:items-center sm:justify-between">
                   <span className="font-semibold">{aiError}</span>
                   <button
                     type="button"
                     onClick={() => submitPrompt(lastRequest.prompt, lastRequest.attachments, true)}
                     disabled={isTyping}
-                    className="inline-flex items-center justify-center gap-2 rounded-xl bg-white px-3 py-2 text-xs font-black text-slate-950 transition hover:bg-red-50 disabled:opacity-50"
+                    className="btn-secondary text-xs"
                   >
                     <RefreshCcw size={14} />
-                    Retry
+                    {t("tutor.retryAnswer")}
                   </button>
                 </div>
               )}
@@ -551,7 +555,7 @@ export const Tutor = ({ setActiveTab }: { setActiveTab: (tab: string) => void })
 
         <div className="tutor-composer rounded-2xl border border-white/10 bg-white/5 p-2 transition-colors focus-within:border-slate-400">
           <textarea
-            aria-label="Message Noviq Tutor"
+            aria-label={t("tutor.messageLabel")}
             value={input}
             onChange={(event) => setInput(event.target.value)}
             onKeyDown={(event) => {
@@ -607,7 +611,7 @@ export const Tutor = ({ setActiveTab }: { setActiveTab: (tab: string) => void })
           </div>
         </div>
         <p className="mt-2 hidden text-center text-[11px] font-medium text-slate-500 sm:block">
-          Drag and drop academic files anywhere in this chat. Supported: images, PDF, DOCX, TXT and exam prep files.
+          {t("tutor.fileHelp")}
         </p>
       </div>
     </div>

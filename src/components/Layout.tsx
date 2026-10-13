@@ -24,7 +24,6 @@ import {
   Sun,
   ChevronsLeft,
   ChevronsRight,
-  Languages,
 } from "lucide-react";
 import { cn } from "@/src/lib/utils";
 import { motion, AnimatePresence } from "motion/react";
@@ -53,7 +52,8 @@ import {
   shouldShowPreferenceNotification,
   type NotificationPreferenceKey,
 } from "@/src/lib/preferences";
-import { useLocale, type AppLocale } from "@/src/contexts/LocaleContext";
+import { HeaderLanguagePicker } from "@/src/components/SidebarLanguagePicker";
+import { useLocale } from "@/src/contexts/LocaleContext";
 
 interface SidebarItemProps {
   id: string;
@@ -74,19 +74,18 @@ const SidebarItem = ({ id, icon, label, active, collapsed, onClick }: SidebarIte
       "group relative flex w-full items-center gap-4 rounded-2xl border px-5 py-3.5 transition-[background-color,border-color,color] duration-150",
       collapsed && "lg:mx-auto lg:h-[3.25rem] lg:w-[3.25rem] lg:justify-center lg:gap-0 lg:px-0 lg:py-0",
       active 
-        ? "border-[#3F7D58]/25 bg-[#F0FDF4] text-[#2F6145]" 
+        ? "border-[var(--noviq-accent)]/25 bg-[var(--noviq-soft)] text-[var(--noviq-accent)]" 
         : "border-transparent text-[#6B7280] hover:border-[#E5E7EB] hover:bg-white hover:text-[#111827]"
     )}
   >
     <div className={cn(
-      "transition-transform duration-150", 
-      active ? "scale-110 text-[#3F7D58]" : "group-hover:scale-110 group-hover:text-[#3F7D58]"
+      "transition-colors duration-150",
+      active ? "text-[var(--noviq-accent)]" : "group-hover:text-[var(--noviq-accent)]"
     )}>
       {icon}
     </div>
     <span className={cn(
-      "text-sm font-bold tracking-tight transition-transform duration-150",
-      active ? "translate-x-1" : "group-hover:translate-x-1",
+      "text-sm font-bold tracking-tight",
       collapsed && "lg:hidden"
     )}>
       {label}
@@ -95,12 +94,12 @@ const SidebarItem = ({ id, icon, label, active, collapsed, onClick }: SidebarIte
     {active && !collapsed ? (
       <motion.div 
         layoutId="active-pill"
-        className="ml-auto h-1.5 w-1.5 rounded-full bg-[#3F7D58]"
+        className="ml-auto h-1.5 w-1.5 rounded-full bg-[var(--noviq-accent)]"
       />
     ) : !collapsed ? (
-      <ChevronRight size={14} className="ml-auto -translate-x-2 text-[#9CA3AF] opacity-0 transition-all group-hover:translate-x-0 group-hover:opacity-100" />
+      <ChevronRight size={14} className="ml-auto text-[#9CA3AF] opacity-0 transition-opacity group-hover:opacity-100" />
     ) : (
-      <span className={cn("absolute right-1.5 hidden h-1.5 w-1.5 rounded-full lg:block", active ? "bg-[#3F7D58]" : "bg-transparent")} />
+      <span className={cn("absolute right-1.5 hidden h-1.5 w-1.5 rounded-full lg:block", active ? "bg-[var(--noviq-accent)]" : "bg-transparent")} />
     )}
   </button>
 );
@@ -120,9 +119,9 @@ interface AppNotification {
 
 const notificationIconClass: Record<AppNotification["type"], string> = {
   streak: "bg-amber-50 text-amber-600",
-  reminder: "bg-[#F0FDF4] text-[#3F7D58]",
-  review: "bg-[#F0FDF4] text-[#3F7D58]",
-  ai: "bg-[#F0FDF4] text-[#3F7D58]",
+  reminder: "bg-[var(--noviq-soft)] text-[var(--noviq-accent)]",
+  review: "bg-[var(--noviq-soft)] text-[var(--noviq-accent)]",
+  ai: "bg-[var(--noviq-soft)] text-[var(--noviq-accent)]",
   system: "bg-slate-100 text-slate-600",
 };
 
@@ -219,12 +218,20 @@ export const Layout: React.FC<{
   setActiveTab: (tab: string) => void;
 }> = ({ children, activeTab, setActiveTab }) => {
   const { profile, signOut, user } = useAuth();
-  const { locale, setLocale, t } = useLocale();
+  const { t } = useLocale();
+  const mainContent = useRef<HTMLElement>(null);
+  const previousTab = useRef(activeTab);
+  useEffect(() => {
+    if (previousTab.current === activeTab) return;
+    previousTab.current = activeTab;
+    mainContent.current?.focus({ preventScroll: true });
+  }, [activeTab]);
   const presenceError = useCommunityPresence(user?.uid);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => {
     if (typeof window === "undefined") return false;
-    return window.localStorage.getItem("noviq-sidebar") === "collapsed";
+    try { return window.localStorage.getItem("noviq-sidebar") === "collapsed"; }
+    catch { return false; }
   });
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
@@ -235,7 +242,8 @@ export const Layout: React.FC<{
   );
   const [theme, setTheme] = useState<AppTheme>(() => {
     if (typeof window === "undefined") return "light";
-    return window.localStorage.getItem("noviq-theme") === "dark" ? "dark" : "light";
+    try { return window.localStorage.getItem("noviq-theme") === "dark" ? "dark" : "light"; }
+    catch { return "light"; }
   });
   const [pushPermission, setPushPermission] = useState<NotificationPermission>(
     typeof Notification !== "undefined" ? Notification.permission : "default"
@@ -270,11 +278,13 @@ export const Layout: React.FC<{
 
   useEffect(() => {
     document.documentElement.classList.toggle("dark", isDarkTheme);
-    window.localStorage.setItem("noviq-theme", theme);
+    try { window.localStorage.setItem("noviq-theme", theme); }
+    catch { /* Theme still applies to this session. */ }
   }, [isDarkTheme, theme]);
 
   useEffect(() => {
-    window.localStorage.setItem("noviq-sidebar", isSidebarCollapsed ? "collapsed" : "expanded");
+    try { window.localStorage.setItem("noviq-sidebar", isSidebarCollapsed ? "collapsed" : "expanded"); }
+    catch { /* Sidebar remains usable without persistence. */ }
   }, [isSidebarCollapsed]);
 
   useEffect(() => {
@@ -465,11 +475,11 @@ export const Layout: React.FC<{
     <button
       type="button"
       onClick={toggleTheme}
-      className="theme-toggle flex h-12 w-12 items-center justify-center rounded-[1.1rem] border border-[#E5E7EB] bg-white text-[#6B7280] transition-all hover:border-[#3F7D58] hover:bg-[#F0FDF4] hover:text-[#111827]"
+      className="theme-toggle flex h-12 w-12 items-center justify-center rounded-[1.1rem] border border-[#E5E7EB] bg-white text-[#6B7280] transition-colors hover:border-[var(--noviq-accent)] hover:bg-[var(--noviq-soft)] hover:text-[#111827]"
       aria-label={
         isDarkTheme ? t("shell.switchLight") : t("shell.switchDark")
       }
-      title={isDarkTheme ? "Light theme" : "Dark theme"}
+      title={isDarkTheme ? t("shell.switchLight") : t("shell.switchDark")}
     >
       {isDarkTheme ? <Sun size={18} /> : <Moon size={18} />}
     </button>
@@ -492,7 +502,7 @@ export const Layout: React.FC<{
             <button
               type="button"
               onClick={markAllRead}
-              className="rounded-xl border border-[#E5E7EB] bg-white px-3 py-2 text-xs font-bold text-[#6B7280] transition hover:border-[#3F7D58] hover:bg-[#F0FDF4] hover:text-[#111827]"
+              className="rounded-xl border border-[#E5E7EB] bg-white px-3 py-2 text-xs font-bold text-[#6B7280] transition hover:border-[var(--noviq-accent)] hover:bg-[var(--noviq-soft)] hover:text-[#111827]"
             >
               Mark all read
             </button>
@@ -508,7 +518,7 @@ export const Layout: React.FC<{
                   "mb-2 flex w-full gap-3 rounded-2xl border p-3 text-left transition",
                   notification.read
                     ? "border-transparent bg-[#FAFAF8] opacity-70 hover:opacity-100"
-                    : "border-[#3F7D58]/20 bg-[#F0FDF4]"
+                    : "border-[var(--noviq-accent)]/20 bg-[var(--noviq-soft)]"
                 )}
               >
                 <span className={cn("mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl", notificationIconClass[notification.type])}>
@@ -521,7 +531,7 @@ export const Layout: React.FC<{
                     {formatNotificationTime(notification)}
                   </span>
                 </span>
-                {!notification.read && <span className="mt-2 h-2 w-2 rounded-full bg-[#3F7D58]" />}
+                {!notification.read && <span className="mt-2 h-2 w-2 rounded-full bg-[var(--noviq-accent)]" />}
               </button>
             ))}
 
@@ -537,7 +547,7 @@ export const Layout: React.FC<{
             <button
               type="button"
               onClick={requestPushPermission}
-              className="w-full rounded-2xl border border-[#E5E7EB] bg-white px-4 py-3 text-sm font-bold text-[#111827] transition hover:border-[#3F7D58] hover:bg-[#F0FDF4]"
+              className="w-full rounded-2xl border border-[#E5E7EB] bg-white px-4 py-3 text-sm font-bold text-[#111827] transition hover:border-[var(--noviq-accent)] hover:bg-[var(--noviq-soft)]"
             >
               {pushPermission === "granted" ? t("shell.pushEnabled") : t("shell.enablePush")}
             </button>
@@ -562,6 +572,7 @@ export const Layout: React.FC<{
           <h1 className="font-display text-2xl font-black tracking-tighter text-[#111827]">Noviq</h1>
         </div>
         <div className="flex items-center gap-2">
+          <HeaderLanguagePicker/>
           {renderThemeToggleButton()}
           <button 
             onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
@@ -607,7 +618,7 @@ export const Layout: React.FC<{
           <button
             type="button"
             onClick={() => setIsSidebarCollapsed((current) => !current)}
-            className="app-sidebar-collapse hidden h-10 w-10 items-center justify-center rounded-2xl border border-[#E5E7EB] bg-white text-[#6B7280] transition hover:border-[#3F7D58] hover:bg-[#F0FDF4] hover:text-[#111827] lg:flex"
+            className="app-sidebar-collapse hidden h-10 w-10 items-center justify-center rounded-2xl border border-[#E5E7EB] bg-white text-[#6B7280] transition hover:border-[var(--noviq-accent)] hover:bg-[var(--noviq-soft)] hover:text-[#111827] lg:flex"
             aria-label={
               isSidebarCollapsed
                 ? t("shell.expandSidebar")
@@ -662,51 +673,32 @@ export const Layout: React.FC<{
           ))}
         </nav>
 
-        <div className={cn("space-y-3 p-8", isSidebarCollapsed && "lg:px-4 lg:pb-6")}>
+        <div className={cn("sidebar-footer space-y-2.5 px-6 pb-5 pt-3", isSidebarCollapsed && "lg:px-4 lg:pb-6")}>
           <div
             className={cn(
-              "app-sidebar-card group hidden rounded-2xl border border-[#E5E7EB] bg-white p-5 transition-[border-color] duration-150 hover:border-[#3F7D58]/30 lg:block",
+              "app-sidebar-card sidebar-momentum hidden rounded-xl border border-[#E5E7EB] bg-white px-3.5 py-3 lg:block",
               isSidebarCollapsed && "lg:flex lg:h-[3.25rem] lg:w-[3.25rem] lg:items-center lg:justify-center lg:p-0"
             )}
-            title={isSidebarCollapsed ? momentum.message : undefined}
+            title={momentum.message}
           >
-            <div className={cn("flex items-center gap-2 mb-3", isSidebarCollapsed && "lg:mb-0 lg:gap-0")}>
-               <Sparkles className="text-[#3F7D58]" size={14} />
-               <p className={cn("text-[10px] font-black uppercase tracking-[0.3em] text-[#3F7D58]", isSidebarCollapsed && "lg:hidden")}>{t("shell.momentum")}</p>
+            <div className={cn("flex items-center justify-between gap-2", isSidebarCollapsed && "lg:justify-center")}>
+              <div className="flex min-w-0 items-center gap-2">
+                <Sparkles className="shrink-0 text-[var(--noviq-accent)]" size={14} aria-hidden="true"/>
+                <p className={cn("text-xs font-semibold text-[var(--noviq-text)]", isSidebarCollapsed && "lg:hidden")}>{t("shell.momentum")}</p>
+              </div>
+              <p className={cn("shrink-0 text-[10px] font-medium text-[var(--noviq-muted)]", isSidebarCollapsed && "lg:hidden")}>{momentum.caption}</p>
             </div>
-            <p className={cn("text-xs font-medium leading-relaxed text-[#6B7280] transition-colors group-hover:text-[#111827]", isSidebarCollapsed && "lg:hidden")}>{momentum.message}</p>
-            <p className={cn("mt-3 text-[10px] font-black uppercase tracking-[0.22em] text-[#94A3B8]", isSidebarCollapsed && "lg:hidden")}>{momentum.caption}</p>
-            <div className={cn("mt-4 h-1.5 w-full overflow-hidden rounded-full bg-[#E5E7EB]", isSidebarCollapsed && "lg:hidden")}>
-              <div className="h-full rounded-full bg-[#3F7D58] transition-all duration-500" style={{ width: `${momentum.progress}%` }} />
+            <p className={cn("mt-2 text-[11px] leading-4 text-[var(--noviq-muted)]", isSidebarCollapsed && "lg:hidden")}>{momentum.message}</p>
+            <div className={cn("mt-2 h-1 w-full overflow-hidden rounded-full bg-[var(--noviq-border)]", isSidebarCollapsed && "lg:hidden")} role="progressbar" aria-label={t("shell.momentum")} aria-valuemin={0} aria-valuemax={100} aria-valuenow={momentum.progress} aria-valuetext={momentum.caption}>
+              <div className="h-full rounded-full bg-[var(--noviq-accent)]" style={{ width: `${momentum.progress}%` }}/>
             </div>
           </div>
           
-          <label
-            className={cn(
-              "flex min-h-12 items-center gap-3 rounded-2xl border border-[#E5E7EB] bg-white px-4 text-[#6B7280]",
-              isSidebarCollapsed && "lg:hidden",
-            )}
-          >
-            <Languages size={17} aria-hidden="true" />
-            <span className="sr-only">{t("shell.language")}</span>
-            <select
-              aria-label={t("shell.language")}
-              value={locale}
-              onChange={(event) =>
-                setLocale(event.target.value as AppLocale)
-              }
-              className="min-h-11 min-w-0 flex-1 bg-transparent text-sm font-bold outline-none"
-            >
-              <option value="en">English</option>
-              <option value="uz">O‘zbekcha</option>
-              <option value="ru">Русский</option>
-            </select>
-          </label>
 
           <button 
             onClick={signOut}
             className={cn(
-              "flex w-full items-center gap-4 rounded-2xl border border-[#E5E7EB] bg-white px-5 py-4 text-[10px] font-black uppercase tracking-[0.22em] text-[#6B7280] transition-all hover:border-red-200 hover:bg-red-50 hover:text-red-600",
+              "flex w-full items-center gap-4 rounded-2xl border border-[#E5E7EB] bg-white px-5 py-4 text-[10px] font-black uppercase tracking-[0.22em] text-[#6B7280] transition-colors hover:border-red-200 hover:bg-red-50 hover:text-red-600",
               isSidebarCollapsed && "lg:mx-auto lg:h-[3.25rem] lg:w-[3.25rem] lg:justify-center lg:gap-0 lg:px-0 lg:py-0"
             )}
             aria-label={t("shell.signOut")}
@@ -719,20 +711,21 @@ export const Layout: React.FC<{
       </aside>
 
       {/* Main Content */}
-      <main className="relative flex flex-1 flex-col overflow-hidden pb-[calc(4.75rem+env(safe-area-inset-bottom))] pt-[calc(5rem+env(safe-area-inset-top))] lg:pb-0 lg:pt-0">
+      <main ref={mainContent} tabIndex={-1} aria-label={[...primaryMenuItems, ...secondaryMenuItems].find(item => item.id === activeTab)?.label} className="relative flex flex-1 flex-col overflow-hidden pb-[calc(4.75rem+env(safe-area-inset-bottom))] pt-[calc(5rem+env(safe-area-inset-top))] lg:pb-0 lg:pt-0">
         <div className="app-main-surface pointer-events-none absolute inset-0 rounded-[2rem] border border-[#E5E7EB] bg-white/45" />
+        {activeTab === "dashboard" && <div className="relative z-[300] hidden h-14 shrink-0 items-center justify-end px-10 lg:flex xl:px-14"><HeaderLanguagePicker/></div>}
         {activeTab !== "dashboard" && <header className={cn("relative z-[300] hidden shrink-0 items-center justify-between lg:flex", activeTab === "tutor" ? "h-20 px-5" : "h-28 px-10 xl:px-14")}>
           <div className="space-y-1">
             <h2 className="group flex items-center gap-3 text-3xl font-bold leading-none tracking-tight text-[#111827]">
                 {t("shell.greeting")}, {firstName}
             </h2>
             <p className="text-sm font-medium tracking-wide text-[#6B7280]">
-               {t("shell.readyPrefix")} <span className="font-bold text-[#3F7D58]">{t("shell.ready")}</span>
+               {t("shell.readyPrefix")} <span className="font-bold text-[var(--noviq-accent)]">{t("shell.ready")}</span>
             </p>
           </div>
           
           <div className="flex items-center gap-8">
-            <div className="flex gap-8">
+            <div className="hidden gap-8 xl:flex">
                <div className="text-right">
                   <p className="mb-1 text-[9px] font-black uppercase tracking-widest text-[#9CA3AF]">{levelName}</p>
                   <p className="text-xl font-bold leading-none text-[#111827]">{(profile?.xp || 0).toLocaleString()}</p>
@@ -749,16 +742,17 @@ export const Layout: React.FC<{
             <div className="mx-2 h-10 w-px bg-[#E5E7EB]" />
 
             <div className="flex items-center gap-5 translate-y-1">
+               <HeaderLanguagePicker/>
                {renderThemeToggleButton()}
                <div className="relative z-[400]">
                  <button
                    onClick={() => setNotificationsOpen((current) => !current)}
-                   className="relative flex h-12 w-12 items-center justify-center rounded-[1.1rem] border border-[#E5E7EB] bg-white text-[#6B7280] transition-all hover:border-[#3F7D58] hover:bg-[#F0FDF4] hover:text-[#111827]"
+                   className="relative flex h-12 w-12 items-center justify-center rounded-[1.1rem] border border-[#E5E7EB] bg-white text-[#6B7280] transition-colors hover:border-[var(--noviq-accent)] hover:bg-[var(--noviq-soft)] hover:text-[#111827]"
                     aria-label={t("shell.notifications")}
                  >
                    <Bell size={18} />
                    {unreadCount > 0 && (
-                     <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-[#3F7D58] px-1 text-[10px] font-black text-white">
+                     <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-[var(--noviq-accent)] px-1 text-[10px] font-black text-white">
                        {Math.min(9, unreadCount)}
                      </span>
                    )}
@@ -768,10 +762,10 @@ export const Layout: React.FC<{
                <button 
                  aria-label="Open profile"
                  onClick={() => setActiveTab('profile')}
-                 className="group relative h-14 w-14 overflow-hidden rounded-[1.25rem] border border-[#E5E7EB] bg-white transition-all duration-300 hover:scale-105 hover:border-[#3F7D58]"
+                 className="group relative h-14 w-14 overflow-hidden rounded-[1.25rem] border border-[#E5E7EB] bg-white transition-colors hover:border-[var(--noviq-accent)]"
                >
-                 <img src={profile?.photoURL || "https://api.dicebear.com/7.x/avataaars/svg?seed=Felix&hairColor=2c1b18&skinColor=f8d25c"} alt="Avatar" className="w-full h-full object-cover group-hover:scale-110 transition-transform" />
-                 <div className="absolute inset-0 bg-[#3F7D58]/0 transition-colors group-hover:bg-[#3F7D58]/10" />
+                 <img src={profile?.photoURL || "https://api.dicebear.com/7.x/avataaars/svg?seed=Felix&hairColor=2c1b18&skinColor=f8d25c"} alt="" className="w-full h-full object-cover" />
+                 <div className="absolute inset-0 bg-[var(--noviq-accent)]/0 transition-colors group-hover:bg-[var(--noviq-accent)]/10" />
                </button>
             </div>
           </div>
@@ -779,19 +773,13 @@ export const Layout: React.FC<{
 
         <div data-page-scroll className={cn("CustomScrollbar relative min-h-0 min-w-0 flex-1", activeTab === "tutor" || activeTab === "notes" ? "flex flex-col overflow-hidden p-2 sm:p-3 lg:p-4" : "overflow-y-auto p-5 md:p-8 lg:px-10 xl:px-14")}>
           <div className="app-content-surface pointer-events-none absolute inset-0 rounded-[2rem] border border-[#E5E7EB] bg-white/35" />
-          <AnimatePresence mode="wait" initial={false}>
-            <motion.div
+            <div data-route-content
               key={activeTab}
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.14, ease: "easeOut" }}
               className={cn("mx-auto relative z-10 w-full", activeTab === "tutor" || activeTab === "notes" ? "flex min-h-0 flex-1 flex-col" : "max-w-[1600px]")}
             >
               <SyncRecovery />
               {children}
-            </motion.div>
-          </AnimatePresence>
+            </div>
         </div>
         
         {/* Mobile Floating Nav Overlay */}
@@ -820,7 +808,7 @@ export const Layout: React.FC<{
               aria-current={active ? "page" : undefined}
               className={cn(
                 "flex min-h-14 min-w-0 flex-col items-center justify-center gap-1 rounded-xl px-1 text-[11px] font-semibold transition-[background-color,color,transform] duration-150 active:scale-[0.97]",
-                active ? "bg-[#F0FDF4] text-[#2F6145]" : "text-[#6B7280]",
+                active ? "bg-[var(--noviq-soft)] text-[var(--noviq-accent)]" : "text-[#6B7280]",
               )}
             >
               <span aria-hidden="true">{item.icon}</span>

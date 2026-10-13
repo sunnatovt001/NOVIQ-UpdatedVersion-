@@ -8,6 +8,8 @@ const crypto = require("node:crypto");
 function harness(online = true, audit = false) {
   let queue = [];
   const writes = [];
+  const backendLoads = [];
+  let backendError = null;
   let block = null;
   const timers = new Map(); let timerId = 0;
   const store = {
@@ -36,14 +38,19 @@ function harness(online = true, audit = false) {
     console,
     setTimeout: fn => { timers.set(++timerId, fn); return timerId; },
     clearTimeout: id => timers.delete(id),
-    require: (name) =>
-      name === "firebase/firestore"
+    require: (name) => {
+      if (name === "firebase/firestore" || name.endsWith("/firebase")) {
+        backendLoads.push(name);
+        if (backendError) throw backendError;
+      }
+      return name === "firebase/firestore"
         ? firebase
         : name === "react"
           ? { useEffect() {} }
           : name.endsWith("/firebase")
             ? { db: {} }
-            : name === "./auditMode" ? { isReadOnlyAudit: audit } : store,
+            : name === "./auditMode" ? { isReadOnlyAudit: audit } : store;
+    },
   };
   const code = ts.transpileModule(
     fs.readFileSync(`${__dirname}/../src/lib/offlineSync.ts`, "utf8"),
@@ -58,6 +65,9 @@ function harness(online = true, audit = false) {
   return {
     api: module.exports,
     writes,
+    backendLoads,
+    failBackend: () => { backendError = new Error("Backend unavailable"); },
+    recoverBackend: () => { backendError = null; },
     navigator,
     queue: () => queue,
     corrupt: value => { queue = value; },
@@ -79,6 +89,34 @@ const operation = (data) => ({
   userId: "u1",
   path: ["users", "u1", "notes", "n1"],
   data,
+});
+test("local queue access does not load backend modules until syncing", async () => {
+  const h = harness(false);
+  h.api.getOfflineSyncQueue();
+  await h.api.writeDocWithQueue(operation({ title: "local draft" }));
+  h.api.getQueuedOperation("set", operation({}).path);
+  h.api.getQueuedRecordStatus(operation({}).path);
+  h.api.exportPendingChanges("u1");
+  assert.equal(h.backendLoads.length, 0);
+  h.navigator.onLine = true;
+  await h.api.flushOfflineSyncQueue("u1");
+  assert.ok(h.backendLoads.includes("firebase/firestore"));
+  assert.ok(h.backendLoads.includes("@/src/lib/firebase"));
+  assert.equal(h.queue()[0].status, "synced");
+});
+test("backend loading failure preserves changes for a later retry", async () => {
+  const h = harness(false);
+  await h.api.writeDocWithQueue(operation({ title: "keep this draft" }));
+  h.failBackend();
+  h.navigator.onLine = true;
+  await h.api.flushOfflineSyncQueue("u1");
+  assert.equal(h.queue()[0].status, "failed");
+  assert.equal(h.queue()[0].data.title, "keep this draft");
+  assert.equal(h.writes.length, 0);
+  h.recoverBackend();
+  await h.api.flushOfflineSyncQueue("u1");
+  assert.equal(h.queue()[0].status, "synced");
+  assert.equal(h.writes.length, 1);
 });
 test("corrupt local queue is preserved and never replaced or sent to Firebase", async () => {
   const h = harness();

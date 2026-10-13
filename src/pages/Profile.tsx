@@ -707,7 +707,7 @@ export const Profile = () => {
           </motion.div>
         )}
         </AnimatePresence>,
-        document.body,
+        document.querySelector(".noviq-app") || document.body,
       )}
     </div>
   );

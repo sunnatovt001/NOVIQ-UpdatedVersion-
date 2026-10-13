@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body><div data-page-scroll style="overflow:auto;height:30px"><div style="height:1000px">Background content</div></div><div id="root" class="noviq-app dark"></div><script type="module">
+import React, {useState} from 'react';
+import {createRoot} from 'react-dom/client';
+import {CommunityMembersDialog} from '/src/features/community/CommunityMembersDialog.tsx';
+import {getCommunityCopy} from '/src/features/community/communityCopy.ts';
+import '/src/index.css';
+function Fixture() {
+  const [open, setOpen] = useState(true);
+  const [search, setSearch] = useState('');
+  return open ? React.createElement(CommunityMembersDialog, {
+    copy: getCommunityCopy('en'), locale:'en', loading:false, error:'', roomName:'Study group', userId:'one',
+    directory:{count:2,onlineCount:1,nextCursor:null,measuredAt:'2026-10-10T12:00:00Z',members:[
+      {uid:'one',displayName:'Alex',username:'alex',role:'member',online:true,lastSeenAt:null},
+      {uid:'two',displayName:'Sam',username:null,role:'member',online:false,lastSeenAt:null},
+    ]}, search, onSearchChange:setSearch, onClose:()=>setOpen(false), onRefresh:()=>{}, onLoadMore:()=>{},
+  }) : React.createElement('p', null, 'Dialog closed');
+}
+createRoot(document.getElementById('root')).render(React.createElement(Fixture));
+</script></body></html>

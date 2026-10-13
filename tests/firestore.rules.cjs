@@ -1,4 +1,7 @@
 const { before, after, test } = require("node:test");
+if (process.env.FIRESTORE_EMULATOR_HOST !== "127.0.0.1:8089") {
+  throw new Error("Rules tests require FIRESTORE_EMULATOR_HOST=127.0.0.1:8089. Run npm run test:rules; production access is prohibited.");
+}
 const fs = require("node:fs");
 const {
   initializeTestEnvironment,

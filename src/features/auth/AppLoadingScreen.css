@@ -1,0 +1,43 @@
+/* Scoped to the account-loading screen; no timing or authentication changes. */
+[data-app-loading] .noviq-loading-mark {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 104px;
+  height: 104px;
+  isolation: isolate;
+}
+[data-app-loading] .noviq-loading-mark::before {
+  content: "";
+  position: absolute;
+  inset: 13px;
+  z-index: -1;
+  border-radius: 28px;
+  background: var(--noviq-soft);
+  animation: noviq-loading-halo 2.8s ease-in-out infinite;
+}
+[data-app-loading] .noviq-loading-mark img {
+  animation: noviq-loading-breathe 2.8s ease-in-out infinite;
+}
+[data-app-loading] .noviq-loading-ring {
+  position: absolute;
+  inset: 0;
+  border: 1px solid var(--noviq-border);
+  border-top: 2px solid var(--noviq-accent);
+  border-radius: 50%;
+  animation: noviq-loading-orbit 2.4s linear infinite;
+}
+@keyframes noviq-loading-breathe {
+  0%, 100% { transform: translateY(0) scale(1); }
+  50% { transform: translateY(-3px) scale(1.025); }
+}
+@keyframes noviq-loading-halo {
+  0%, 100% { transform: scale(1); opacity: .45; }
+  50% { transform: scale(1.12); opacity: .8; }
+}
+@keyframes noviq-loading-orbit { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  [data-app-loading] .noviq-loading-mark img,
+  [data-app-loading] .noviq-loading-mark::before,
+  [data-app-loading] .noviq-loading-ring { animation: none; }
+}

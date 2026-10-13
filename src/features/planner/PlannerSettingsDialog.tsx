@@ -69,7 +69,7 @@ export const PlannerSettingsDialog = ({
             >
               <div className="mb-5 flex items-start justify-between gap-4 sm:mb-6">
                 <div>
-                  <p className="text-xs font-black uppercase tracking-[0.2em] text-[#3F7D58]">
+                  <p className="text-xs font-black uppercase tracking-[0.2em] text-[var(--noviq-accent)]">
                     {t("planner.settings")}
                   </p>
                   <h3
@@ -101,7 +101,7 @@ export const PlannerSettingsDialog = ({
                     className={cn(
                       "min-h-11 shrink-0 snap-start rounded-2xl border px-4 text-xs font-black transition",
                       form.mode === mode
-                        ? "border-[#3F7D58] bg-[#ECFDF3] text-[#3F7D58]"
+                        ? "border-[var(--noviq-accent)] bg-[var(--noviq-soft)] text-[var(--noviq-accent)]"
                         : "border-[#E2E8F0] bg-white text-[#64748B]",
                     )}
                   >
@@ -242,7 +242,7 @@ export const PlannerSettingsDialog = ({
 
               <label className="mt-5 block">
                 <span className="mb-2 block text-xs font-black text-[#64748B]">
-                  {t("planner.weakAreas")} <span className="text-rose-600">*</span>
+                  {t("planner.weakAreas")} <span className="text-[var(--noviq-danger)]">*</span>
                 </span>
                 <input
                   ref={weakAreasInputRef}
@@ -259,13 +259,13 @@ export const PlannerSettingsDialog = ({
                   className={cn(
                     PLANNER_INPUT_CLASS,
                     weakAreasInvalid &&
-                      "border-rose-400 focus:border-rose-500 focus:ring-rose-100",
+                      "border-[var(--noviq-danger-border)] focus:border-[var(--noviq-danger)] focus:ring-[var(--noviq-danger-bg)]",
                   )}
                 />
                 {weakAreasInvalid && (
                   <p
                     id="planner-weak-areas-error"
-                    className="mt-2 text-xs font-bold text-rose-600"
+                    className="mt-2 text-xs font-bold text-[var(--noviq-danger)]"
                   >
                     {validationMessage}
                   </p>
@@ -305,7 +305,7 @@ export const PlannerSettingsDialog = ({
                 <button
                   type="button"
                   onClick={onSubmit}
-                  className="inline-flex min-h-12 w-full items-center justify-center rounded-2xl bg-[#3F7D58] px-6 text-sm font-black text-white hover:bg-[#356B4B] sm:ml-auto sm:w-auto"
+                  className="inline-flex min-h-12 w-full items-center justify-center rounded-2xl bg-[var(--noviq-accent)] px-6 text-sm font-black text-white hover:bg-[var(--noviq-accent-hover)] sm:ml-auto sm:w-auto"
                 >
                   {hasMission ? t("planner.savePlan") : t("planner.createStudyPlan")}
                 </button>

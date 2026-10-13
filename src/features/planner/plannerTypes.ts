@@ -142,6 +142,7 @@ export type RecoveryMode = {
   active: boolean;
   missedDays: number;
   message: string;
+  messageLocale?: "en" | "uz" | "ru";
   adjustedAt: string;
 };
 

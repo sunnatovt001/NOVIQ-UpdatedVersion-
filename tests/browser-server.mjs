@@ -51,18 +51,42 @@ const server = await createServer({
    resolveId(id) { if(id === 'firebase/firestore') return '\0fixture-firestore'; },
    load(id) { if(id === '\0fixture-firestore') return mockFirestore; },
    transform(code,id) {
-     if(id.replaceAll('\\','/').endsWith('/src/lib/gemini.ts'))return code.replace(/export async function askTutor\(/,'export async function actualAskTutor(')+`\nexport async function askTutor(...args){
+     if(id.replaceAll('\\','/').endsWith('/src/lib/progress.ts')) return code.replace('export const startStudySession = async (', 'const actualStartStudySession = async (').replace('export const persistStudySession = async (', 'const actualPersistStudySession = async (') + `
+       export const startStudySession = async (...args) => {
+         if(!new URLSearchParams(location.search).has('testTimer')) return actualStartStudySession(...args);
+         window.__timerStarts=(window.__timerStarts||0)+1;
+         if(window.__timerFail) throw new Error('Injected private provider diagnostic');
+         return 'fixture-receipt';
+       };
+       export const persistStudySession = async (...args) => {
+         if(!new URLSearchParams(location.search).has('testTimer')) return actualPersistStudySession(...args);
+         window.__completionCalls=(window.__completionCalls||0)+1;
+         window.__completionPayload=args;
+         if(window.__completionFail) throw new Error('Injected completion failure');
+         return args[3];
+       };
+     `;
+     if(id.replaceAll('\\','/').endsWith('/src/lib/gemini.ts'))return code.replace(/export async function askTutor\(/,'export async function actualAskTutor(').replace(/export async function askNotebook\(/,'export async function actualAskNotebook(')+`\nexport async function askTutor(...args){
        const mode=new URLSearchParams(location.search).get('testAI');
        if(!mode)return actualAskTutor(...args);
        window.__tutorRequests=(window.__tutorRequests||0)+1;
        await new Promise(resolve=>setTimeout(resolve,80));
        if(mode==='unavailable')throw new Error('Injected AI unavailable');
+       if(mode==='planner-valid') return JSON.stringify({
+         title:'Generated fixture flashcards', instructions:'Review these fixture cards.',
+         successCriteria:['Review every card'],
+         flashcards:[{id:'generated-card',front:'Generated fixture front',back:'Generated fixture back',weaknessTag:'reading'}]
+       });
        return 'Verified fixture answer: '+args[0];
+     }
+     export async function askNotebook(...args){
+       if(!new URLSearchParams(location.search).get('testAI'))return actualAskNotebook(...args);
+       return askTutor(...args);
      }`;
      if(id.replaceAll('\\','/').endsWith('/src/contexts/AuthContext.tsx')) return `
        import React from 'react';
        const signedIn = new URLSearchParams(location.search).has('testUser');
-       const value = {user:signedIn?{uid:new URLSearchParams(location.search).get('testUid')||'isolated-browser-user'}:null,profile:signedIn?{displayName:'Browser Test',onboarded:true,onboardingAnswers:{mainGoal:'IELTS',userType:'student',struggle:'focus'},goals:[],xp:0,settings:{}}:null,loading:false,authError:'',isAdmin:signedIn&&new URLSearchParams(location.search).has('testAdmin'),signOut:async()=>{},completeOnboarding:async()=>{},updateLocalProfile:()=>{}};
+       const value = {user:signedIn?{uid:new URLSearchParams(location.search).get('testUid')||'isolated-browser-user'}:null,profile:signedIn&&!new URLSearchParams(location.search).has('testMissingProfile')?{displayName:'Browser Test',onboarded:true,onboardingAnswers:{mainGoal:'IELTS',userType:'student',struggle:'focus'},goals:[],xp:0,settings:{}}:null,loading:new URLSearchParams(location.search).has('testAuthLoading'),authError:new URLSearchParams(location.search).get('testAccountError')||'',isAdmin:signedIn&&new URLSearchParams(location.search).has('testAdmin'),signOut:async()=>{},completeOnboarding:async()=>{},updateLocalProfile:()=>{}};
        export const useAuth = () => value;
        export const AuthProvider = ({children}) => children;
      `;

@@ -4,6 +4,7 @@ import { X } from "lucide-react";
 import type { AppLocale } from "@/src/contexts/LocaleContext";
 import { recordDate } from "@/src/lib/recordDate";
 import { useDialogFocus } from "@/src/lib/useDialogFocus";
+import { useBodyScrollLock } from "@/src/lib/useBodyScrollLock";
 import { formatCommunityCopy, type CommunityCopy } from "./communityCopy";
 
 export type CommunityMember = {
@@ -56,6 +57,7 @@ export const CommunityMembersDialog = ({
 }: Props) => {
   const panel = useRef<HTMLDivElement>(null);
   useDialogFocus(true, panel, onClose);
+  useBodyScrollLock(true);
   const visibleMembers = directory?.members.filter((member) =>
     `${member.displayName} ${member.username || ""}`.toLocaleLowerCase().includes(search.trim().toLocaleLowerCase()),
   ) || [];
@@ -68,7 +70,7 @@ export const CommunityMembersDialog = ({
 
   return createPortal(
     <div className="noviq-modal-backdrop fixed inset-0 z-[150] flex items-center justify-center bg-slate-950/60 p-4" onClick={onClose}>
-      <div ref={panel} role="dialog" aria-modal="true" aria-labelledby="group-members-heading" className="flex max-h-[85dvh] w-full max-w-lg min-w-0 flex-col rounded-2xl bg-white p-5 text-slate-900 shadow-xl dark:bg-slate-900 dark:text-white" onClick={(event) => event.stopPropagation()}>
+      <div ref={panel} role="dialog" aria-modal="true" aria-labelledby="group-members-heading" className="community-members-panel flex max-h-[85dvh] w-full max-w-lg min-w-0 flex-col rounded-2xl bg-white p-5 text-slate-900 shadow-xl dark:bg-slate-900 dark:text-white" onClick={(event) => event.stopPropagation()}>
         <div className="flex items-center justify-between gap-2">
           <h2 id="group-members-heading" className="text-xl font-bold">{roomName} · {copy.members}</h2>
           <button type="button" aria-label={copy.closeMembers} className="grid h-11 w-11 shrink-0 place-items-center rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800" onClick={onClose}>
@@ -99,6 +101,6 @@ export const CommunityMembersDialog = ({
         <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">{copy.onlineHelp}</p>
       </div>
     </div>,
-    document.body,
+    document.querySelector(".noviq-app") || document.body,
   );
 };

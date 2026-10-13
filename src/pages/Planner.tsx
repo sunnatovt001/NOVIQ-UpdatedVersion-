@@ -1,6 +1,15 @@
+import { PlannerFlashcardActivity } from "@/src/features/planner/PlannerFlashcardActivity";
+import { PlannerRoadmapCards } from "@/src/features/planner/PlannerRoadmapCards";
+import { PlannerWritingActivity, PlannerSpeakingActivity } from "@/src/features/planner/PlannerTextActivities";
+import { classifyPlannerActivityError, getPlannerActivityErrorMessage, type PlannerActivityErrorKind } from "@/src/features/planner/plannerActivityErrors";
+import { PlannerQuizActivity } from "@/src/features/planner/PlannerQuizActivity";
 import { loadLocalData, trySaveLocalData as saveLocalData } from "@/src/lib/localStore";
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { AnimatePresence, motion } from "motion/react";
+import { getRecoveryGuidance } from "@/src/features/planner/recoveryGuidance";
+import { localizePlannerValidation } from "@/src/features/planner/plannerValidationCopy";
+import { formatTimer } from "@/src/features/planner/plannerTimer";
+import { PlannerCompletionDialog } from "@/src/features/planner/PlannerCompletionDialog";
+import { PlannerRecommendationsDialog } from "@/src/features/planner/PlannerRecommendationsDialog";
 import { doc, onSnapshot } from "firebase/firestore";
 import {
   AlertTriangle, ArrowLeft, Award, BookOpen, Brain, Calendar, Check,
@@ -68,7 +77,7 @@ import {
   extractJson,
   getExamTaskScope,
   normalizeActivity,
-  getValidation,
+  getValidation as validatePlannerActivity,
   buildReflection,
   calculateNewAchievements,
 } from "@/src/features/planner/plannerEngine";
@@ -93,44 +102,13 @@ const missionIcon = (task: MissionTask) => {
   return BookOpen;
 };
 
-const ConfettiBurst = ({ large = false }: { large?: boolean }) => (
-  <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-[inherit]">
-    {Array.from({ length: large ? 34 : 18 }, (_, index) => (
-      <motion.span
-        key={index}
-        initial={{ opacity: 0, x: "50%", y: "50%", scale: 0.3, rotate: 0 }}
-        animate={{
-          opacity: [0, 1, 0],
-          x: `${50 + Math.cos(index) * (large ? 46 : 34)}%`,
-          y: `${50 + Math.sin(index * 1.7) * (large ? 42 : 30)}%`,
-          scale: [0.3, 1, 0.7],
-          rotate: 220 + index * 16,
-        }}
-        transition={{ duration: 1.2, delay: index * 0.015 }}
-        className={cn(
-          "absolute h-2 w-2 rounded-sm",
-          index % 4 === 0
-            ? "bg-[#3F7D58]"
-            : index % 4 === 1
-              ? "bg-amber-400"
-              : index % 4 === 2
-                ? "bg-sky-400"
-                : "bg-rose-400",
-        )}
-      />
-    ))}
-  </div>
-);
-
-const formatTimer = (seconds: number) => {
-  const safe = Math.max(0, seconds);
-  const minutes = Math.floor(safe / 60);
-  const remaining = safe % 60;
-  return `${String(minutes).padStart(2, "0")}:${String(remaining).padStart(2, "0")}`;
-};
 
 export const Planner = () => {
   const { locale, t } = useLocale();
+  const getValidation = (...args: Parameters<typeof validatePlannerActivity>) => {
+    const result = validatePlannerActivity(...args);
+    return result;
+  };
   const plannerLanguage: TutorLanguage =
     locale === "uz" ? "uz-UZ" : locale === "ru" ? "ru-RU" : "en-US";
   const pc = getPlannerCopy(locale);
@@ -148,19 +126,26 @@ export const Planner = () => {
   const [recommendationsOpen, setRecommendationsOpen] = useState(false);
   const [recommendation, setRecommendation] = useState("");
   const [recommendationLoading, setRecommendationLoading] = useState(false);
+  const [recommendationFailed, setRecommendationFailed] = useState(false);
   const [activeTaskId, setActiveTaskId] = useState<string | null>(null);
   const [generatingTaskId, setGeneratingTaskId] = useState<string | null>(null);
-  const [activityError, setActivityError] = useState("");
+  const [activityErrorKind, setActivityError] = useState<PlannerActivityErrorKind | "">("");
+  const activityError = activityErrorKind ? getPlannerActivityErrorMessage(activityErrorKind, locale) : "";
   const [startingTimer, setStartingTimer] = useState(false);
   const startingTimerRef = useRef(false);
   const activityViewRef = useRef({ taskId: activeTaskId, view });
   activityViewRef.current = { taskId: activeTaskId, view };
   const [timerRunning, setTimerRunning] = useState(false);
-  const [validationMessage, setValidationMessage] = useState("");
-  const [planValidationMessage, setPlanValidationMessage] = useState("");
+  const [validationFeedback, setValidationMessage] = useState<"" | { copy: keyof ReturnType<typeof getPlannerCopy>; values?: Record<string, string | number> } | { requirements: string[] } | { loadError: true }>("");
+  const validationMessage = validationFeedback === "" ? ""
+    : "requirements" in validationFeedback ? validationFeedback.requirements.map(reason => localizePlannerValidation(reason, locale)).join(" ")
+    : "loadError" in validationFeedback ? t("planner.loadErrorBody")
+    : formatCopy(pc[validationFeedback.copy], validationFeedback.values || {});
+  const [planValidationKey, setPlanValidationMessage] = useState<"" | "weakAreasRequired">("");
+  const planValidationMessage = planValidationKey ? pc[planValidationKey] : "";
   const [celebration, setCelebration] = useState<Celebration | null>(null);
   useBodyScrollLock(
-    settingsOpen || recommendationsOpen || Boolean(celebration),
+    settingsOpen,
   );
   const cloudSaveRef = useRef<number | undefined>(undefined);
   const lastCloudPlannerStateRef = useRef("");
@@ -168,9 +153,32 @@ export const Planner = () => {
   plannerLatestRef.current = plannerState;
   const plannerDirtyRef = useRef(false);
   const openingTaskRef = useRef(false);
+  const recoveryRequestRef = useRef(false);
+  const recoveryGenerationRef = useRef(0);
+  useEffect(() => {
+    recoveryGenerationRef.current += 1;
+    recoveryRequestRef.current = false;
+    return () => { recoveryGenerationRef.current += 1; };
+  }, [user?.uid]);
   const weakAreasInputRef = useRef<HTMLInputElement>(null);
   const studyReceiptsRef = useRef<Record<string, string>>({});
   const completingTaskRef = useRef(false);
+  const completionScope = JSON.stringify([user?.uid, plannerState.missionDate, plannerState.lastPlanKey, plannerState.form]);
+  const completionScopeRef = useRef(completionScope);
+  completionScopeRef.current = completionScope;
+  const completionGenerationRef = useRef(0);
+  useEffect(() => {
+    completionGenerationRef.current += 1;
+    completingTaskRef.current = false;
+    setCompletingTask(false);
+    startingTimerRef.current = false;
+    setStartingTimer(false);
+    setTimerRunning(false);
+    openingTaskRef.current = false;
+    setGeneratingTaskId(null);
+    setActivityError("");
+    return () => { completionGenerationRef.current += 1; };
+  }, [completionScope]);
   const [completingTask, setCompletingTask] = useState(false);
 
   const modeConfig = EXAM_OPTIONS[plannerState.form.mode];
@@ -191,6 +199,19 @@ export const Planner = () => {
   const sharedMetrics = useUserActivityMetrics(user?.uid);
   const missionPercent = missionCompletion(sharedMetrics.missionTotal, sharedMetrics.missionCompleted);
   const missionEvidence = { percent: missionPercent, total: sharedMetrics.missionTotal, completed: sharedMetrics.missionCompleted };
+  const recommendationScope = JSON.stringify([user?.uid, locale, plannerState.missionDate, plannerState.lastPlanKey, plannerState.form, weaknessDashboard, missionEvidence]);
+  const recommendationScopeRef = useRef(recommendationScope);
+  recommendationScopeRef.current = recommendationScope;
+  const recommendationRequestRef = useRef<string | null>(null);
+  const recommendationCacheRef = useRef("");
+  const recommendationGenerationRef = useRef(0);
+  useEffect(() => {
+    recommendationGenerationRef.current += 1;
+    recommendationRequestRef.current = null;
+    recommendationCacheRef.current = "";
+    setRecommendation(""); setRecommendationLoading(false); setRecommendationFailed(false);
+    return () => { recommendationGenerationRef.current += 1; };
+  }, [recommendationScope]);
   const journeyProgress = missionPercent ?? 0;
   const completedTasks = plannerState.tasks.filter(
     (task) => plannerState.taskProgress[task.id]?.status === "completed",
@@ -245,7 +266,7 @@ export const Planner = () => {
     const loadTimer = window.setTimeout(() => {
       if (!active) return;
       setLoadBlocked(!cached);
-      setValidationMessage("Saved plan temporarily unavailable. Retry to load your cloud plan.");
+      setValidationMessage({ loadError: true });
       setHydrated(true);
       console.error("Planner state listener timed out");
     }, 15000);
@@ -294,7 +315,7 @@ export const Planner = () => {
             );
           }
           setValidationMessage(
-            "Cloud connection unavailable. Your saved plan is kept on this device.",
+            { copy: "cloudSavedOffline" },
           );
           setHydrated(true);
         }
@@ -313,15 +334,15 @@ export const Planner = () => {
     if (!user) return;
     const plannerStateJson = JSON.stringify(plannerState);
     if (plannerStateJson === lastCloudPlannerStateRef.current) return;
+    let active = true;
     plannerDirtyRef.current = true;
-    if (
-      !saveLocalData(`noviq-planner-${user.uid}`, {
+    const savedOnDevice = saveLocalData(`noviq-planner-${user.uid}`, {
         state: plannerState,
         dirty: true,
-      })
-    )
+      });
+    if (!savedOnDevice)
       setValidationMessage(
-        "Device storage is full or unavailable. Keep this page open until cloud sync finishes.",
+        { copy: "storageUnavailable" },
       );
 
     if (cloudSaveRef.current) window.clearTimeout(cloudSaveRef.current);
@@ -332,12 +353,17 @@ export const Planner = () => {
         data: { state: plannerState, updatedAt: new Date().toISOString() },
         merge: true,
       }).catch((error) => {
+        if (!active) return;
         console.warn("Planner cloud sync failed", error);
         setValidationMessage(
-          "Plan saved on this device. Cloud sync will retry when connected.",
+          { copy: savedOnDevice ? "cloudRetrySaved" : "cloudRetryUnsaved" },
         );
       });
     }, 1200);
+    return () => {
+      active = false;
+      if (cloudSaveRef.current) window.clearTimeout(cloudSaveRef.current);
+    };
   }, [plannerState, hydrated, loadBlocked, user]);
 
   useEffect(
@@ -444,7 +470,7 @@ export const Planner = () => {
     }
 
     setPlanValidationMessage(
-      "Weak areas are required before creating a study plan.",
+      "weakAreasRequired",
     );
     setSettingsOpen(true);
     focusWeakAreasInput();
@@ -603,14 +629,20 @@ export const Planner = () => {
     if (plannerState.activities[task.id]) { openingTaskRef.current = false; return; }
     setActivityError("");
     setGeneratingTaskId(task.id);
+    const generation = completionGenerationRef.current;
+    const isCurrent = () => generation === completionGenerationRef.current && completionScope === completionScopeRef.current;
     try {
       const activity = await generateActivity(task);
+      if (!isCurrent()) return;
       setPlannerState((current) => ({ ...current, activities: { ...current.activities, [task.id]: activity } }));
     } catch (error) {
-      setActivityError(error instanceof Error ? error.message : "Could not generate this activity. Please retry.");
+      if (!isCurrent()) return;
+      setActivityError(classifyPlannerActivityError(error));
     } finally {
-      openingTaskRef.current = false;
-      setGeneratingTaskId(null);
+      if (isCurrent()) {
+        openingTaskRef.current = false;
+        setGeneratingTaskId(null);
+      }
     }
   };
 
@@ -618,6 +650,8 @@ export const Planner = () => {
     if (timerRunning) { setTimerRunning(false); return; }
     if (!activeTask || !activeActivity || startingTimerRef.current) return;
     const task = activeTask;
+    const generation = completionGenerationRef.current;
+    const isCurrent = () => generation === completionGenerationRef.current && completionScope === completionScopeRef.current;
     startingTimerRef.current = true;
     setStartingTimer(true);
     setValidationMessage("");
@@ -631,25 +665,26 @@ export const Planner = () => {
         `planner-${task.id}`,
         false,
         () => {
+          if (!isCurrent() || activityViewRef.current.taskId !== task.id || activityViewRef.current.view !== "activity") return;
           if (plannerState.taskProgress[task.id]?.elapsedSeconds > 0) {
             updateProgress(task.id, { elapsedSeconds: 0 });
             setValidationMessage(
-              "Your previous timer expired. Your answers are kept; start the timer again to complete this task.",
+              { copy: "timerExpired" },
             );
           }
         },
       ), 15000);
+      if (!isCurrent()) return;
       studyReceiptsRef.current[task.id] = sessionId;
       if (activityViewRef.current.taskId !== task.id || activityViewRef.current.view !== "activity") return;
       updateProgress(task.id, { status: "inProgress" });
       setTimerRunning(true);
     } catch (error) {
-      setValidationMessage(
-        error instanceof Error
-          ? error.message
-          : "Connect to the internet to start this task.",
-      );
-    } finally { startingTimerRef.current = false; setStartingTimer(false); }
+      if (!isCurrent() || activityViewRef.current.taskId !== task.id || activityViewRef.current.view !== "activity") return;
+      setValidationMessage({ copy: "timerStartFailed" });
+    } finally {
+      if (isCurrent()) { startingTimerRef.current = false; setStartingTimer(false); }
+    }
   };
 
   const updateProgress = (taskId: string, patch: Partial<TaskProgress>) => {
@@ -667,6 +702,14 @@ export const Planner = () => {
 
   const submitQuiz = () => {
     if (!activeTask || !activeActivity || !activeProgress) return;
+    if ((activeActivity.questions || []).some(question =>
+      !Number.isInteger(activeProgress.quizAnswers[question.id]) ||
+      activeProgress.quizAnswers[question.id] < 0 ||
+      activeProgress.quizAnswers[question.id] >= question.options.length
+    )) {
+      setValidationMessage({ requirements: ["Answer every quiz question."] });
+      return;
+    }
     const validation = getValidation(activeTask, activeActivity, {
       ...activeProgress,
       submitted: true,
@@ -678,8 +721,8 @@ export const Planner = () => {
     });
     setValidationMessage(
       validation.score !== undefined
-        ? `Quiz submitted. Score: ${validation.score}%. Finish the timer before completion.`
-        : "Quiz submitted.",
+        ? { copy: "quizSubmittedScore", values: { score: validation.score } }
+        : { copy: "quizSubmitted" },
     );
   };
 
@@ -692,12 +735,14 @@ export const Planner = () => {
       activeProgress,
     );
     if (!validation.ok) {
-      setValidationMessage(validation.reasons.join(" "));
+      setValidationMessage({ requirements: validation.reasons });
       return;
     }
 
     const alreadyComplete = activeProgress.status === "completed";
     if (alreadyComplete) return;
+    const generation = completionGenerationRef.current;
+    const isCurrent = () => generation === completionGenerationRef.current && completionScope === completionScopeRef.current;
 
     if (user) {
       completingTaskRef.current = true;
@@ -721,16 +766,16 @@ export const Planner = () => {
           [],
           studyReceiptsRef.current[activeTask.id],
         );
+        if (!isCurrent()) return;
       } catch (error) {
-        setValidationMessage(
-          error instanceof Error
-            ? error.message
-            : "Could not save this task. Please retry.",
-        );
+        if (!isCurrent()) return;
+        setValidationMessage({ copy: "taskSaveFailed" });
         return;
       } finally {
-        completingTaskRef.current = false;
-        setCompletingTask(false);
+        if (isCurrent()) {
+          completingTaskRef.current = false;
+          setCompletingTask(false);
+        }
       }
     }
 
@@ -852,11 +897,7 @@ export const Planner = () => {
         durationSeconds: activeProgress.elapsedSeconds,
       }).catch((error) => {
         console.warn("Planner study session sync failed", error);
-        setValidationMessage(
-          error instanceof Error
-            ? error.message
-            : "Could not save the study session.",
-        );
+        if (isCurrent()) setValidationMessage({ copy: "eventSyncFailed" });
       });
     }
 
@@ -866,22 +907,28 @@ export const Planner = () => {
   };
 
   const activateRecoveryMode = async () => {
+    if (recoveryRequestRef.current) return;
     if (!plannerState.tasks.length) {
       setSettingsOpen(true);
       return;
     }
+    recoveryRequestRef.current = true;
+    const generation = recoveryGenerationRef.current;
+    const adjustedAt = new Date().toISOString();
+    let recoveryPlanKey = "";
     setTimerRunning(false);
     setValidationMessage("");
     setPlannerState((current) => {
       const recoveryMode: RecoveryMode = {
         active: true,
         missedDays: Math.max(1, current.daily.missedDays + 1),
-        message:
-          "We noticed a difficult day. Do not worry. Your roadmap has been intelligently adjusted and your target is still achievable.",
-        adjustedAt: new Date().toISOString(),
+        message: pc.recoveryGuidance,
+        messageLocale: locale,
+        adjustedAt,
       };
       const nextSections = buildSections(current.form, current.weaknesses);
       const tasks = buildTodayMission(current.form, nextSections, recoveryMode);
+      recoveryPlanKey = buildPlanKey(current.form, current.weaknesses, recoveryMode);
       return {
         ...current,
         recoveryMode,
@@ -890,11 +937,7 @@ export const Planner = () => {
           tasks.map((task) => [task.id, createProgress()]),
         ),
         activities: {},
-        lastPlanKey: buildPlanKey(
-          current.form,
-          current.weaknesses,
-          recoveryMode,
-        ),
+        lastPlanKey: recoveryPlanKey,
       };
     });
 
@@ -905,25 +948,30 @@ export const Planner = () => {
         plannerLanguage,
         { retries: 1, feature: "planner" },
       );
-      setPlannerState((current) => ({
-        ...current,
-        recoveryMode: current.recoveryMode
-          ? { ...current.recoveryMode, message: message.trim() }
-          : current.recoveryMode,
-      }));
+      if (recoveryGenerationRef.current !== generation || !message.trim()) return;
+      setPlannerState((current) => {
+        if (!current.recoveryMode?.active || current.recoveryMode.adjustedAt !== adjustedAt || current.lastPlanKey !== recoveryPlanKey) return current;
+        return {...current, recoveryMode:{...current.recoveryMode, message:message.trim(), messageLocale:locale}};
+      });
     } catch (error) {
       console.warn("Planner recovery message failed", error);
+    } finally {
+      if (recoveryGenerationRef.current === generation) recoveryRequestRef.current = false;
     }
   };
 
   const openRecommendations = async () => {
     setRecommendationsOpen(true);
-    if (recommendation) return;
+    if (recommendationRequestRef.current === recommendationScope || (recommendation && recommendationCacheRef.current === recommendationScope)) return;
     if (!hasPlannerActivity) {
       setRecommendation(t("planner.noMission"));
       return;
     }
     setRecommendationLoading(true);
+    setRecommendationFailed(false);
+    recommendationRequestRef.current = recommendationScope;
+    const generation = recommendationGenerationRef.current;
+    const isCurrent = () => recommendationGenerationRef.current === generation && recommendationScopeRef.current === recommendationScope;
     try {
       const response = await askTutor(
         `Give 3 short exam-prep recommendations for this planner state:\n${JSON.stringify(
@@ -942,12 +990,15 @@ export const Planner = () => {
         plannerLanguage,
         { retries: 1, feature: "planner" },
       );
+      if (!isCurrent()) return;
+      if (!response.trim()) throw new Error("Empty Planner recommendation");
+      recommendationCacheRef.current = recommendationScope;
       setRecommendation(response.trim());
     } catch (error) {
       console.warn("Planner recommendations failed", error);
-      setRecommendation(t("planner.recommendationUnavailable"));
+      if (isCurrent()) { setRecommendation(t("planner.recommendationUnavailable")); setRecommendationFailed(true); }
     } finally {
-      setRecommendationLoading(false);
+      if (isCurrent()) { recommendationRequestRef.current = null; setRecommendationLoading(false); }
     }
   };
 
@@ -955,7 +1006,7 @@ export const Planner = () => {
     return (
       <div
         role="alert"
-        className="mx-auto max-w-xl rounded-2xl border border-amber-200 bg-amber-50 p-6 text-amber-900"
+        className="mx-auto max-w-xl rounded-2xl border border-[var(--noviq-warning-border)] bg-[var(--noviq-warning-bg)] p-6 text-[var(--noviq-warning)]"
       >
         <h2 className="font-bold">{t("planner.loadErrorTitle")}</h2>
         <p className="my-3">
@@ -964,7 +1015,7 @@ export const Planner = () => {
         <button
           type="button"
           onClick={() => setLoadRevision(value => value + 1)}
-          className="rounded-xl bg-amber-800 px-4 py-2 font-semibold text-white"
+          className="btn-secondary"
         >
           {t("planner.tryAgain")}
         </button>
@@ -973,9 +1024,9 @@ export const Planner = () => {
 
   if (!hydrated) {
     return (
-      <div className="mx-auto flex min-h-[70vh] max-w-5xl items-center justify-center rounded-[2rem] bg-[#F8FAFC] text-[#0F172A]">
-        <div className="flex items-center gap-3 rounded-2xl border border-[#E2E8F0] bg-white px-5 py-4 text-sm font-black text-[#64748B]">
-          <Loader2 className="animate-spin text-[#3F7D58]" size={18} />
+      <div className="mx-auto flex min-h-[70vh] max-w-5xl items-center justify-center rounded-[2rem] bg-[var(--noviq-bg)] text-[var(--noviq-text)]">
+        <div className="flex items-center gap-3 rounded-2xl border border-[var(--noviq-border)] bg-[var(--noviq-card)] px-5 py-4 text-sm font-black text-[var(--noviq-muted)]">
+          <Loader2 className="animate-spin text-[var(--noviq-accent)]" size={18} />
           {t("planner.loadingSaved")}
         </div>
       </div>
@@ -985,26 +1036,26 @@ export const Planner = () => {
   if (view === "roadmap") {
     if (!hasPlannerActivity) {
       return (
-        <div className="mx-auto max-w-6xl rounded-[2rem] bg-[#F8FAFC] p-4 text-[#0F172A] sm:p-8">
+        <div className="mx-auto max-w-6xl rounded-[2rem] bg-[var(--noviq-bg)] p-4 text-[var(--noviq-text)] sm:p-8">
           <button
             type="button"
             onClick={() => setView("today")}
-            className="mb-8 inline-flex items-center gap-2 rounded-full border border-[#E2E8F0] bg-white px-4 py-2 text-sm font-bold text-[#334155] transition hover:border-[#3F7D58] hover:text-[#3F7D58]"
+            className="mb-8 inline-flex items-center gap-2 rounded-full border border-[var(--noviq-border)] bg-[var(--noviq-card)] px-4 py-2 text-sm font-bold text-[var(--noviq-text)] transition hover:border-[var(--noviq-accent)] hover:text-[var(--noviq-accent)]"
           >
             <ArrowLeft size={16} />
             {pc.backToday}
           </button>
-          <section className="rounded-[1.75rem] border border-[#E2E8F0] bg-white p-8 text-center">
-            <p className="text-2xl font-black text-[#0F172A]">
+          <section className="rounded-[1.75rem] border border-[var(--noviq-border)] bg-[var(--noviq-card)] p-8 text-center">
+            <p className="text-2xl font-black text-[var(--noviq-text)]">
               {t("planner.noMission")}
             </p>
-            <p className="mx-auto mt-2 max-w-md text-sm font-semibold leading-6 text-[#64748B]">
+            <p className="mx-auto mt-2 max-w-md text-sm font-semibold leading-6 text-[var(--noviq-muted)]">
               {pc.roadmapEmptyHint}
             </p>
             <button
               type="button"
               onClick={createMission}
-              className="mt-5 inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-[#3F7D58] px-6 text-sm font-black text-white transition hover:bg-[#356B4B]"
+              className="mt-5 inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-[var(--noviq-accent)] px-6 text-sm font-black text-white transition hover:bg-[var(--noviq-accent-hover)]"
             >
               <Sparkles size={17} />
               {t("planner.createStudyPlan")}
@@ -1020,88 +1071,30 @@ export const Planner = () => {
       locale,
     );
     return (
-      <div className="mx-auto max-w-6xl rounded-[2rem] bg-[#F8FAFC] p-4 text-[#0F172A] sm:p-8">
+      <div className="mx-auto max-w-6xl rounded-[2rem] bg-[var(--noviq-bg)] p-4 text-[var(--noviq-text)] sm:p-8">
         <button
           type="button"
           onClick={() => setView("today")}
-          className="mb-8 inline-flex items-center gap-2 rounded-full border border-[#E2E8F0] bg-white px-4 py-2 text-sm font-bold text-[#334155] transition hover:border-[#3F7D58] hover:text-[#3F7D58]"
+          className="mb-8 inline-flex items-center gap-2 rounded-full border border-[var(--noviq-border)] bg-[var(--noviq-card)] px-4 py-2 text-sm font-bold text-[var(--noviq-text)] transition hover:border-[var(--noviq-accent)] hover:text-[var(--noviq-accent)]"
         >
           <ArrowLeft size={16} />
           {pc.backToday}
         </button>
 
         <header className="mb-10 max-w-2xl">
-          <p className="text-xs font-black uppercase tracking-[0.2em] text-[#3F7D58]">
+          <p className="text-xs font-black uppercase tracking-[0.2em] text-[var(--noviq-accent)]">
             {pc.adaptiveRoadmap}
           </p>
-          <h2 className="mt-3 text-4xl font-black tracking-tight text-[#0F172A]">
+          <h2 className="mt-3 text-4xl font-black tracking-tight text-[var(--noviq-text)]">
             {modeConfig.label} {plannerState.form.currentScore} -&gt;{" "}
             {plannerState.form.targetScore}
           </h2>
-          <p className="mt-4 text-base leading-7 text-[#64748B]">
+          <p className="mt-4 text-base leading-7 text-[var(--noviq-muted)]">
             {pc.roadmapBody}
           </p>
         </header>
 
-        <div className="grid gap-5 lg:grid-cols-3">
-          {phases.map((phase) => {
-            const isCurrent = phase.state === "current";
-            const isDone = phase.state === "done";
-            return (
-              <motion.article
-                key={phase.phase}
-                initial={{ opacity: 0, y: 16 }}
-                animate={{ opacity: 1, y: 0 }}
-                className={cn(
-                  "rounded-[1.5rem] border bg-white p-6",
-                  isCurrent ? "border-[#3F7D58]" : "border-[#E2E8F0]",
-                )}
-              >
-                <div className="mb-8 flex items-start justify-between">
-                  <div>
-                    <p className="text-xs font-black uppercase tracking-[0.18em] text-[#64748B]">
-                      {phase.phase}
-                    </p>
-                    <h3 className="mt-2 text-2xl font-black text-[#0F172A]">
-                      {phase.title}
-                    </h3>
-                  </div>
-                  <div
-                    className={cn(
-                      "flex h-11 w-11 items-center justify-center rounded-full",
-                      isDone
-                        ? "bg-[#ECFDF3] text-[#3F7D58]"
-                        : isCurrent
-                          ? "bg-[#3F7D58] text-white"
-                          : "bg-[#F1F5F9] text-[#94A3B8]",
-                    )}
-                  >
-                    {isDone ? (
-                      <Check size={20} />
-                    ) : isCurrent ? (
-                      <Play size={18} fill="currentColor" />
-                    ) : (
-                      <Lock size={18} />
-                    )}
-                  </div>
-                </div>
-                <p className="mb-5 text-sm font-black text-[#3F7D58]">
-                  {phase.status}
-                </p>
-                <div className="space-y-3">
-                  {phase.weeks.map((week) => (
-                    <div
-                      key={week}
-                      className="rounded-2xl border border-[#E2E8F0] bg-[#F8FAFC] px-4 py-3 text-sm font-semibold text-[#334155]"
-                    >
-                      {week}
-                    </div>
-                  ))}
-                </div>
-              </motion.article>
-            );
-          })}
-        </div>
+        <PlannerRoadmapCards phases={phases} />
       </div>
     );
   }
@@ -1118,46 +1111,46 @@ export const Planner = () => {
     );
 
     return (
-      <div className="mx-auto max-w-5xl rounded-[2rem] bg-[#F8FAFC] p-4 text-[#0F172A] sm:p-8 lg:p-10">
+      <div className="mx-auto max-w-5xl rounded-[2rem] bg-[var(--noviq-bg)] p-4 text-[var(--noviq-text)] sm:p-8 lg:p-10">
         <button
           type="button"
           onClick={() => {
             setTimerRunning(false);
             setView("today");
           }}
-          className="mb-6 inline-flex items-center gap-2 rounded-full border border-[#E2E8F0] bg-white px-4 py-2 text-sm font-bold text-[#334155] transition hover:border-[#3F7D58] hover:text-[#3F7D58]"
+          className="mb-6 inline-flex items-center gap-2 rounded-full border border-[var(--noviq-border)] bg-[var(--noviq-card)] px-4 py-2 text-sm font-bold text-[var(--noviq-text)] transition hover:border-[var(--noviq-accent)] hover:text-[var(--noviq-accent)]"
         >
           <ArrowLeft size={16} />
           {pc.backToday}
         </button>
 
-        <section className="rounded-[1.75rem] border border-[#E2E8F0] bg-white p-6 sm:p-8">
+        <section className="rounded-[1.75rem] border border-[var(--noviq-border)] bg-[var(--noviq-card)] p-6 sm:p-8">
           <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
             <div className="flex gap-4">
-              <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-[#ECFDF3] text-[#3F7D58]">
+              <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-[var(--noviq-soft)] text-[var(--noviq-accent)]">
                 <Icon size={24} />
               </div>
               <div>
-                <p className="text-xs font-black uppercase tracking-[0.18em] text-[#3F7D58]">
+                <p className="text-xs font-black uppercase tracking-[0.18em] text-[var(--noviq-accent)]">
                   {localizePlannerSection(activeTask.section, locale)}
                 </p>
                 <h1 className="mt-2 text-3xl font-black tracking-tight">
                   {localizePlannerTaskLabel(activeTask, plannerState.form, locale)}
                 </h1>
-                <p className="mt-2 text-sm font-semibold text-[#64748B]">
+                <p className="mt-2 text-sm font-semibold text-[var(--noviq-muted)]">
                   {localizePlannerFocusReason(activeTask, locale)}
                 </p>
               </div>
             </div>
-            <div className="rounded-2xl border border-[#E2E8F0] bg-[#F8FAFC] px-4 py-3 text-sm font-black text-[#0F172A]">
+            <div className="rounded-2xl border border-[var(--noviq-border)] bg-[var(--noviq-bg)] px-4 py-3 text-sm font-black text-[var(--noviq-text)]">
               {activeTask.scheduledWindow}
             </div>
           </div>
 
-          <div className="mt-7 rounded-[1.5rem] border border-[#E2E8F0] bg-[#F8FAFC] p-5">
+          <div className="mt-7 rounded-[1.5rem] border border-[var(--noviq-border)] bg-[var(--noviq-bg)] p-5">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <p className="text-xs font-black uppercase tracking-[0.18em] text-[#64748B]">
+                <p className="text-xs font-black uppercase tracking-[0.18em] text-[var(--noviq-muted)]">
                   {pc.requiredTime}
                 </p>
                 <p className="mt-1 text-2xl font-black">
@@ -1168,7 +1161,7 @@ export const Planner = () => {
                 type="button"
                 onClick={() => void toggleTaskTimer()}
                 disabled={elapsed >= requiredSeconds || startingTimer || !activeActivity}
-                className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-[#3F7D58] px-5 text-sm font-black text-white transition hover:bg-[#356B4B] disabled:cursor-not-allowed disabled:bg-[#94A3B8]"
+                className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-[var(--noviq-accent)] px-5 text-sm font-black text-white transition hover:bg-[var(--noviq-accent-hover)] disabled:cursor-not-allowed disabled:bg-[var(--noviq-muted)]"
               >
                 {timerRunning ? (
                   <Clock size={17} />
@@ -1182,29 +1175,29 @@ export const Planner = () => {
                     : startingTimer ? pc.starting : pc.startTimer}
               </button>
             </div>
-            <div className="mt-4 h-2 overflow-hidden rounded-full bg-[#E2E8F0]">
-              <motion.div
-                animate={{ width: `${timerPercent}%` }}
-                className="h-full rounded-full bg-[#3F7D58]"
+            <div className="mt-4 h-2 overflow-hidden rounded-full bg-[var(--noviq-border)]">
+              <div
+                style={{ width: `${timerPercent}%` }}
+                className="h-full rounded-full bg-[var(--noviq-accent)]"
               />
             </div>
           </div>
         </section>
 
-        <section className="mt-6 rounded-[1.75rem] border border-[#E2E8F0] bg-white p-6 sm:p-8">
+        <section className="mt-6 rounded-[1.75rem] border border-[var(--noviq-border)] bg-[var(--noviq-card)] p-6 sm:p-8">
           {activityError && (
-            <div role="alert" className="mb-4 rounded-2xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
+            <div role="alert" className="mb-4 rounded-2xl border border-[var(--noviq-warning-border)] bg-[var(--noviq-warning-bg)] p-4 text-sm text-[var(--noviq-warning)]">
               <p>{activityError}</p>
-              <button type="button" className="mt-3 rounded-xl bg-blue-700 px-4 py-2 font-bold text-white" disabled={generatingTaskId !== null} onClick={() => void openActivity(activeTask)}>{pc.retryActivity}</button>
+              <button type="button" className="btn-secondary mt-3" disabled={generatingTaskId !== null} onClick={() => void openActivity(activeTask)}>{pc.retryActivity}</button>
             </div>
           )}
           {validationMessage && !activeActivity && (
-            <p role="status" className="mb-4 text-sm text-amber-700">{validationMessage}</p>
+            <p role="status" className="mb-4 text-sm text-[var(--noviq-warning)]">{validationMessage}</p>
           )}
           {generatingTaskId === activeTask.id && (
             <div className="flex min-h-64 items-center justify-center">
-              <div className="flex items-center gap-3 rounded-2xl border border-[#E2E8F0] bg-[#F8FAFC] px-5 py-4 text-sm font-black text-[#64748B]">
-                <Loader2 className="animate-spin text-[#3F7D58]" size={18} />
+              <div className="flex items-center gap-3 rounded-2xl border border-[var(--noviq-border)] bg-[var(--noviq-bg)] px-5 py-4 text-sm font-black text-[var(--noviq-muted)]">
+                <Loader2 className="animate-spin text-[var(--noviq-accent)]" size={18} />
                 {pc.generatingActivity}
               </div>
             </div>
@@ -1212,203 +1205,65 @@ export const Planner = () => {
 
           {activeActivity && activeProgress && (
             <div>
-              <p className="mb-3 text-xs text-[#64748B]">{activeActivity.origin === "ai" ? pc.aiGenerated : pc.savedActivity}</p>
+              <p className="mb-3 text-xs text-[var(--noviq-muted)]">{activeActivity.origin === "ai" ? pc.aiGenerated : pc.savedActivity}</p>
               <div className="mb-6">
                 <h2 className="text-2xl font-black">{activeActivity.title}</h2>
-                <p className="mt-2 max-w-3xl text-sm leading-6 text-[#64748B]">
+                <p className="mt-2 max-w-3xl text-sm leading-6 text-[var(--noviq-muted)]">
                   {activeActivity.instructions}
                 </p>
               </div>
 
               {activeActivity.type === "quiz" && (
-                <div className="space-y-5">
-                  {(activeActivity.questions || []).map((question, index) => (
-                    <div
-                      key={question.id}
-                      className="rounded-[1.25rem] border border-[#E2E8F0] bg-[#F8FAFC] p-5"
-                    >
-                      <p className="text-sm font-black text-[#0F172A]">
-                        {index + 1}. {question.prompt}
-                      </p>
-                      <div className="mt-4 grid gap-2">
-                        {question.options.map((option, optionIndex) => {
-                          const selected =
-                            activeProgress.quizAnswers[question.id] ===
-                            optionIndex;
-                          const submitted = activeProgress.submitted;
-                          const correct =
-                            submitted && question.answerIndex === optionIndex;
-                          const wrong =
-                            submitted &&
-                            selected &&
-                            question.answerIndex !== optionIndex;
-                          return (
-                            <button
-                              key={option}
-                              type="button"
-                              disabled={submitted}
-                              onClick={() =>
-                                updateProgress(activeTask.id, {
-                                  quizAnswers: {
-                                    ...activeProgress.quizAnswers,
-                                    [question.id]: optionIndex,
-                                  },
-                                })
-                              }
-                              className={cn(
-                                "rounded-2xl border px-4 py-3 text-left text-sm font-semibold transition",
-                                correct
-                                  ? "border-[#3F7D58] bg-[#ECFDF3] text-[#3F7D58]"
-                                  : wrong
-                                    ? "border-rose-200 bg-rose-50 text-rose-700"
-                                    : selected
-                                      ? "border-[#3F7D58] bg-white text-[#0F172A]"
-                                      : "border-[#E2E8F0] bg-white text-[#334155] hover:border-[#3F7D58]",
-                              )}
-                            >
-                              {option}
-                            </button>
-                          );
-                        })}
-                      </div>
-                      {activeProgress.submitted && (
-                        <p className="mt-3 text-sm font-semibold text-[#64748B]">
-                          {question.explanation}
-                        </p>
-                      )}
-                    </div>
-                  ))}
-                  <button
-                    type="button"
-                    onClick={submitQuiz}
-                    disabled={activeProgress.submitted}
-                    className="inline-flex min-h-12 items-center justify-center rounded-2xl border border-[#3F7D58] bg-[#ECFDF3] px-5 text-sm font-black text-[#3F7D58] disabled:cursor-not-allowed disabled:border-[#E2E8F0] disabled:bg-[#F8FAFC] disabled:text-[#94A3B8]"
-                  >
-                    {pc.submitQuiz}
-                  </button>
-                </div>
+                <PlannerQuizActivity
+                  activity={activeActivity}
+                  progress={activeProgress}
+                  submitLabel={pc.submitQuiz}
+                  onSubmit={submitQuiz}
+                  onAnswer={(questionId, optionIndex) => updateProgress(activeTask.id, {
+                    quizAnswers: { ...activeProgress.quizAnswers, [questionId]: optionIndex },
+                  })}
+                />
               )}
 
               {activeActivity.type === "writing" && (
-                <div className="space-y-4">
-                  <div className="rounded-[1.25rem] border border-[#E2E8F0] bg-[#F8FAFC] p-5">
-                    <p className="text-sm font-black text-[#0F172A]">{pc.prompt}</p>
-                    <p className="mt-2 text-base leading-7 text-[#334155]">
-                      {activeActivity.writingPrompt}
-                    </p>
-                  </div>
-                  <textarea
-                    value={activeProgress.writingText}
-                    onChange={(event) =>
-                      updateProgress(activeTask.id, {
-                        writingText: event.target.value,
-                        submitted: false,
-                      })
-                    }
-                    className="min-h-64 w-full rounded-[1.25rem] border border-[#E2E8F0] bg-white p-4 text-sm leading-6 text-[#0F172A] outline-none focus:border-[#3F7D58] focus:ring-4 focus:ring-[#ECFDF3]"
-                    placeholder={pc.writingPlaceholder}
-                  />
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                    <p className="text-sm font-semibold text-[#64748B]">
-                      {words(activeProgress.writingText).length} /{" "}
-                      {activeActivity.minWords || 90} {pc.words}
-                    </p>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        updateProgress(activeTask.id, { submitted: true })
-                      }
-                      className="inline-flex min-h-12 items-center justify-center rounded-2xl border border-[#3F7D58] bg-[#ECFDF3] px-5 text-sm font-black text-[#3F7D58]"
-                    >
-                      {pc.submitWriting}
-                    </button>
-                  </div>
-                </div>
+                <PlannerWritingActivity activity={activeActivity} value={activeProgress.writingText} copy={pc}
+                  wordCount={words(activeProgress.writingText).length}
+                  onChange={value => updateProgress(activeTask.id, { writingText: value, submitted: false })}
+                  onSubmit={() => updateProgress(activeTask.id, { submitted: true })}
+                />
               )}
 
               {activeActivity.type === "speaking" && (
-                <div className="space-y-4">
-                  <div className="rounded-[1.25rem] border border-[#E2E8F0] bg-[#F8FAFC] p-5">
-                    <p className="text-sm font-black text-[#0F172A]">
-                      {pc.speakingPrompt}
-                    </p>
-                    <p className="mt-2 text-base leading-7 text-[#334155]">
-                      {activeActivity.speakingPrompt}
-                    </p>
-                  </div>
-                  <textarea
-                    value={activeProgress.speakingNotes}
-                    onChange={(event) =>
-                      updateProgress(activeTask.id, {
-                        speakingNotes: event.target.value,
-                        submitted: false,
-                      })
-                    }
-                    className="min-h-40 w-full rounded-[1.25rem] border border-[#E2E8F0] bg-white p-4 text-sm leading-6 text-[#0F172A] outline-none focus:border-[#3F7D58] focus:ring-4 focus:ring-[#ECFDF3]"
-                    placeholder={pc.speakingPlaceholder}
-                  />
-                  <button
-                    type="button"
-                    onClick={() =>
-                      updateProgress(activeTask.id, { submitted: true })
-                    }
-                    className="inline-flex min-h-12 items-center justify-center rounded-2xl border border-[#3F7D58] bg-[#ECFDF3] px-5 text-sm font-black text-[#3F7D58]"
-                  >
-                    {pc.finishSpeaking}
-                  </button>
-                </div>
+                <PlannerSpeakingActivity activity={activeActivity} value={activeProgress.speakingNotes} copy={pc}
+                  onChange={value => updateProgress(activeTask.id, { speakingNotes: value, submitted: false })}
+                  onSubmit={() => updateProgress(activeTask.id, { submitted: true })}
+                />
               )}
 
               {activeActivity.type === "flashcards" && (
-                <div className="grid gap-4 sm:grid-cols-2">
-                  {(activeActivity.flashcards || []).map((card) => {
-                    const reviewed = activeProgress.reviewedCards.includes(
-                      card.id,
-                    );
-                    return (
-                      <button
-                        key={card.id}
-                        type="button"
-                        onClick={() =>
-                          updateProgress(activeTask.id, {
-                            reviewedCards: reviewed
-                              ? activeProgress.reviewedCards
-                              : [...activeProgress.reviewedCards, card.id],
-                          })
-                        }
-                        className={cn(
-                          "min-h-36 rounded-[1.25rem] border p-5 text-left transition",
-                          reviewed
-                            ? "border-[#3F7D58] bg-[#ECFDF3]"
-                            : "border-[#E2E8F0] bg-[#F8FAFC] hover:border-[#3F7D58]",
-                        )}
-                      >
-                        <p className="text-xs font-black uppercase tracking-[0.16em] text-[#64748B]">
-                          {reviewed ? pc.answer : pc.question}
-                        </p>
-                        <p className="mt-3 text-base font-black text-[#0F172A]">
-                          {reviewed ? card.back : card.front}
-                        </p>
-                      </button>
-                    );
+                <PlannerFlashcardActivity cards={activeActivity.flashcards || []} reviewedCards={activeProgress.reviewedCards}
+                  answerLabel={pc.answer} questionLabel={pc.question}
+                  onReview={cardId => updateProgress(activeTask.id, {
+                    reviewedCards: activeProgress.reviewedCards.includes(cardId)
+                      ? activeProgress.reviewedCards : [...activeProgress.reviewedCards, cardId],
                   })}
-                </div>
+                />
               )}
 
-              <div className="mt-8 rounded-[1.25rem] border border-[#E2E8F0] bg-[#F8FAFC] p-5">
-                <p className="text-xs font-black uppercase tracking-[0.18em] text-[#64748B]">
+              <div className="mt-8 rounded-[1.25rem] border border-[var(--noviq-border)] bg-[var(--noviq-bg)] p-5">
+                <p className="text-xs font-black uppercase tracking-[0.18em] text-[var(--noviq-muted)]">
                   {pc.completionChecks}
                 </p>
                 <div className="mt-4 grid gap-2">
                   {activeActivity.successCriteria.map((item) => (
                     <div
                       key={item}
-                      className="flex items-center gap-2 text-sm font-semibold text-[#334155]"
+                      className="flex items-center gap-2 text-sm font-semibold text-[var(--noviq-text)]"
                     >
                       <CheckCircle2
                         size={16}
                         className={
-                          validation.ok ? "text-[#3F7D58]" : "text-[#94A3B8]"
+                          validation.ok ? "text-[var(--noviq-accent)]" : "text-[var(--noviq-muted)]"
                         }
                       />
                       {item}
@@ -1416,7 +1271,7 @@ export const Planner = () => {
                   ))}
                 </div>
                 {validationMessage && (
-                  <p className="mt-4 text-sm font-bold text-rose-600">
+                  <p role="status" className="mt-4 text-sm font-bold text-[var(--noviq-danger)]">
                     {validationMessage}
                   </p>
                 )}
@@ -1426,7 +1281,7 @@ export const Planner = () => {
                   disabled={
                     completingTask || activeProgress?.status === "completed"
                   }
-                  className="mt-5 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl bg-[#3F7D58] px-5 text-sm font-black text-white transition hover:bg-[#356B4B] sm:w-auto"
+                  className="mt-5 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl bg-[var(--noviq-accent)] px-5 text-sm font-black text-white transition hover:bg-[var(--noviq-accent-hover)] sm:w-auto"
                 >
                   <CheckCircle2 size={17} />
                   {completingTask
@@ -1444,11 +1299,11 @@ export const Planner = () => {
   }
 
   return (
-    <div className="mx-auto max-w-6xl rounded-[2rem] bg-[#F8FAFC] p-3 text-[#0F172A] sm:p-8 lg:p-10">
+    <div className="mx-auto max-w-6xl rounded-[2rem] bg-[var(--noviq-bg)] p-3 text-[var(--noviq-text)] sm:p-8 lg:p-10">
       {validationMessage && (
         <p
           role="alert"
-          className="mb-4 rounded-xl bg-amber-50 p-3 text-sm text-amber-900"
+          className="mb-4 rounded-xl bg-[var(--noviq-warning-bg)] p-3 text-sm text-[var(--noviq-warning)]"
         >
           {validationMessage}{" "}
           <button
@@ -1461,17 +1316,17 @@ export const Planner = () => {
       )}
       <div className="mb-5 flex items-center justify-between gap-3 sm:mb-8">
         <div>
-          <p className="text-xs font-black uppercase tracking-[0.2em] text-[#3F7D58]">
+          <p className="text-xs font-black uppercase tracking-[0.2em] text-[var(--noviq-accent)]">
             Noviq AI Planner
           </p>
-          <h2 className="mt-1 text-xl font-black tracking-tight text-[#0F172A] sm:mt-2 sm:text-3xl">
+          <h2 className="mt-1 text-xl font-black tracking-tight text-[var(--noviq-text)] sm:mt-2 sm:text-3xl">
             {t("planner.mentorToday")}
           </h2>
         </div>
         <button
           type="button"
           onClick={() => setSettingsOpen(true)}
-          className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-full border border-[#E2E8F0] bg-white px-3 text-sm font-bold text-[#334155] transition hover:border-[#3F7D58] hover:text-[#3F7D58] sm:px-4"
+          className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-full border border-[var(--noviq-border)] bg-[var(--noviq-card)] px-3 text-sm font-bold text-[var(--noviq-text)] transition hover:border-[var(--noviq-accent)] hover:text-[var(--noviq-accent)] sm:px-4"
         >
           <Settings2 size={16} />
           {t("planner.adjustPlan")}
@@ -1479,14 +1334,14 @@ export const Planner = () => {
       </div>
 
       <div className="grid grid-cols-2 gap-3 sm:gap-5 lg:grid-cols-[1.4fr_0.9fr]">
-        <section className="rounded-[1.5rem] border border-[#E2E8F0] bg-white p-4 sm:rounded-[1.75rem] sm:p-8">
+        <section className="rounded-[1.5rem] border border-[var(--noviq-border)] bg-[var(--noviq-card)] p-4 sm:rounded-[1.75rem] sm:p-8">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between sm:gap-6">
             <div>
-              <h1 className="text-xl font-black tracking-tight text-[#0F172A] sm:text-3xl">
+              <h1 className="text-xl font-black tracking-tight text-[var(--noviq-text)] sm:text-3xl">
                 {modeConfig.label} {plannerState.form.currentScore} -&gt;{" "}
                 {plannerState.form.targetScore}
               </h1>
-              <p className="mt-2 text-xs font-semibold leading-5 text-[#64748B] sm:text-sm">
+              <p className="mt-2 text-xs font-semibold leading-5 text-[var(--noviq-muted)] sm:text-sm">
                 {formatCopy(pc.daysWeakest, {
                   days: daysUntil(plannerState.form.examDate),
                   weakest: localizePlannerSection(weakest.name, locale),
@@ -1494,55 +1349,53 @@ export const Planner = () => {
               </p>
             </div>
             <div className="text-left sm:text-right">
-              <p className="text-lg font-black text-[#0F172A] sm:text-2xl">
+              <p className="text-lg font-black text-[var(--noviq-text)] sm:text-2xl">
                 {formatCopy(pc.percentComplete, { percent: journeyProgress })}
               </p>
-              <p className="text-xs font-semibold text-[#64748B] sm:text-sm">
+              <p className="text-xs font-semibold text-[var(--noviq-muted)] sm:text-sm">
                 {pc.savedMissionCompletion}
               </p>
             </div>
           </div>
-          <div className="mt-4 h-2 overflow-hidden rounded-full bg-[#E2E8F0] sm:mt-6 sm:h-3">
-            <motion.div
-              initial={{ width: 0 }}
-              animate={{ width: `${journeyProgress}%` }}
-              transition={{ duration: 0.25, ease: "easeOut" }}
-              className="h-full rounded-full bg-[#3F7D58]"
+          <div className="mt-4 h-2 overflow-hidden rounded-full bg-[var(--noviq-border)] sm:mt-6 sm:h-3">
+            <div
+              style={{ width: `${journeyProgress}%` }}
+              className="h-full rounded-full bg-[var(--noviq-accent)]"
             />
           </div>
         </section>
 
-        <section className="rounded-[1.5rem] border border-[#E2E8F0] bg-white p-4 sm:rounded-[1.75rem] sm:p-6">
+        <section className="rounded-[1.5rem] border border-[var(--noviq-border)] bg-[var(--noviq-card)] p-4 sm:rounded-[1.75rem] sm:p-6">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <p className="text-xs font-black uppercase tracking-[0.18em] text-[#64748B]">
+              <p className="text-xs font-black uppercase tracking-[0.18em] text-[var(--noviq-muted)]">
                 {pc.missionCompletion}
               </p>
-              <p className="mt-2 text-2xl font-black leading-tight text-[#0F172A] sm:text-4xl">
+              <p className="mt-2 text-2xl font-black leading-tight text-[var(--noviq-text)] sm:text-4xl">
                 {sharedMetrics.loading ? pc.loading : sharedMetrics.error ? pc.unavailable : missionPercent === null ? pc.notEnoughData : `${missionPercent}%`}
               </p>
             </div>
-            <div className="hidden h-12 w-12 items-center justify-center rounded-2xl bg-[#ECFDF3] text-[#3F7D58] sm:flex">
+            <div className="hidden h-12 w-12 items-center justify-center rounded-2xl bg-[var(--noviq-soft)] text-[var(--noviq-accent)] sm:flex">
               <Target size={23} />
             </div>
           </div>
-          <p className="mt-3 text-xs leading-5 text-[#64748B] sm:mt-4 sm:text-sm sm:leading-6">
+          <p className="mt-3 text-xs leading-5 text-[var(--noviq-muted)] sm:mt-4 sm:text-sm sm:leading-6">
             {formatCopy(pc.missionEvidence, {
               completed: sharedMetrics.missionCompleted,
               total: sharedMetrics.missionTotal,
             })}
           </p>
           {sharedMetrics.error && <p role="alert" className="mt-3 text-sm">{sharedMetrics.error} <button type="button" className="underline" onClick={sharedMetrics.retry}>{pc.retryStatistics}</button></p>}
-          <div className="mt-4 hidden rounded-2xl bg-[#F8FAFC] px-4 py-3 text-sm font-bold text-[#334155] sm:block">
+          <div className="mt-4 hidden rounded-2xl bg-[var(--noviq-bg)] px-4 py-3 text-sm font-bold text-[var(--noviq-text)] sm:block">
             {pc.predictionNote}
           </div>
         </section>
       </div>
 
-      <section className="mt-3 rounded-[1.5rem] border border-[#E2E8F0] bg-white p-4 sm:mt-5 sm:rounded-[1.75rem] sm:p-8">
+      <section className="mt-3 rounded-[1.5rem] border border-[var(--noviq-border)] bg-[var(--noviq-card)] p-4 sm:mt-5 sm:rounded-[1.75rem] sm:p-8">
         <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
           <div className="flex gap-4">
-            <div className="h-11 w-11 shrink-0 overflow-hidden rounded-2xl border border-[#E2E8F0] bg-[#ECFDF3] sm:h-14 sm:w-14">
+            <div className="h-11 w-11 shrink-0 overflow-hidden rounded-2xl border border-[var(--noviq-border)] bg-[var(--noviq-soft)] sm:h-14 sm:w-14">
               <img
                 src="/saidamin-avatar.jpg"
                 alt="Saidamin AI"
@@ -1550,10 +1403,12 @@ export const Planner = () => {
               />
             </div>
             <div>
-              <p className="text-sm font-black text-[#0F172A]">Saidamin AI</p>
-              <p className="mt-1 max-w-2xl text-sm leading-6 text-[#475569] sm:mt-2 sm:text-base sm:leading-7">
+              <p className="text-sm font-black text-[var(--noviq-text)]">Saidamin AI</p>
+              <p className="mt-1 max-w-2xl text-sm leading-6 text-[var(--noviq-muted)] sm:mt-2 sm:text-base sm:leading-7">
                 {hasPlannerActivity
-                  ? locale === "en"
+                  ? plannerState.recoveryMode?.active
+                    ? getRecoveryGuidance(plannerState.recoveryMode, locale)
+                    : locale === "en"
                     ? getCoachMessage(plannerState, weakest)
                     : formatCopy(pc.recommendationFallback, {
                         weakest: localizePlannerSection(weakest.name, locale),
@@ -1565,7 +1420,7 @@ export const Planner = () => {
           <button
             type="button"
             onClick={openRecommendations}
-            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl border border-[#E2E8F0] bg-[#F8FAFC] px-4 text-sm font-black text-[#334155] transition hover:border-[#3F7D58] hover:text-[#3F7D58]"
+            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl border border-[var(--noviq-border)] bg-[var(--noviq-bg)] px-4 text-sm font-black text-[var(--noviq-text)] transition hover:border-[var(--noviq-accent)] hover:text-[var(--noviq-accent)]"
           >
             <Sparkles size={16} />
             {pc.recommendations}
@@ -1574,17 +1429,13 @@ export const Planner = () => {
       </section>
 
       {plannerState.recoveryMode?.active && (
-        <section className="mt-5 rounded-[1.5rem] border border-amber-200 bg-amber-50 p-5 text-amber-900">
+        <section className="mt-5 rounded-[1.5rem] border border-[var(--noviq-warning-border)] bg-[var(--noviq-warning-bg)] p-5 text-[var(--noviq-warning)]">
           <div className="flex gap-3">
             <AlertTriangle className="mt-0.5 shrink-0" size={20} />
             <div>
               <p className="font-black">{pc.recoveryActive}</p>
               <p className="mt-1 text-sm font-semibold leading-6">
-                {locale === "en"
-                  ? plannerState.recoveryMode.message
-                  : formatCopy(pc.recommendationFallback, {
-                      weakest: localizePlannerSection(weakest.name, locale),
-                    })}
+                {getRecoveryGuidance(plannerState.recoveryMode, locale)}
               </p>
             </div>
           </div>
@@ -1594,10 +1445,10 @@ export const Planner = () => {
       <main className="mt-5 grid gap-5 sm:mt-8 lg:grid-cols-[1.35fr_0.85fr]">
         <section>
           <div className="mb-5 flex items-center justify-between">
-            <h3 className="text-2xl font-black text-[#0F172A]">
+            <h3 className="text-2xl font-black text-[var(--noviq-text)]">
               {pc.todayMission}
             </h3>
-            <span className="rounded-full bg-[#ECFDF3] px-3 py-2 text-xs font-black text-[#3F7D58]">
+            <span className="rounded-full bg-[var(--noviq-soft)] px-3 py-2 text-xs font-black text-[var(--noviq-accent)]">
               {formatCopy(pc.verified, {
                 completed: completedTasks.length,
                 total: plannerState.tasks.length,
@@ -1605,19 +1456,19 @@ export const Planner = () => {
             </span>
           </div>
 
-          <div className="rounded-[1.75rem] border border-[#E2E8F0] bg-white">
+          <div className="rounded-[1.75rem] border border-[var(--noviq-border)] bg-[var(--noviq-card)]">
             {plannerState.tasks.length === 0 ? (
               <div className="px-5 py-10 text-center sm:px-6">
-                <p className="text-xl font-black text-[#0F172A]">
+                <p className="text-xl font-black text-[var(--noviq-text)]">
                   {t("planner.noMission")}
                 </p>
-                <p className="mx-auto mt-2 max-w-md text-sm font-semibold leading-6 text-[#64748B]">
+                <p className="mx-auto mt-2 max-w-md text-sm font-semibold leading-6 text-[var(--noviq-muted)]">
                   {pc.plannerTasksHint}
                 </p>
                 <button
                   type="button"
                   onClick={createMission}
-                  className="mt-5 inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-[#3F7D58] px-6 text-sm font-black text-white transition hover:bg-[#356B4B]"
+                  className="mt-5 inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-[var(--noviq-accent)] px-6 text-sm font-black text-white transition hover:bg-[var(--noviq-accent-hover)]"
                 >
                   <Sparkles size={17} />
                   {t("planner.createStudyPlan")}
@@ -1636,9 +1487,9 @@ export const Planner = () => {
                   <div
                     key={task.id}
                     className={cn(
-                      "border-[#E2E8F0] px-5 py-5 sm:px-6",
+                      "border-[var(--noviq-border)] px-5 py-5 sm:px-6",
                       index !== plannerState.tasks.length - 1 && "border-b",
-                      complete ? "bg-[#ECFDF3]" : "bg-white",
+                      complete ? "bg-[var(--noviq-soft)]" : "bg-[var(--noviq-card)]",
                     )}
                   >
                     <div className="flex items-center gap-4">
@@ -1646,64 +1497,46 @@ export const Planner = () => {
                         className={cn(
                           "flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl",
                           complete
-                            ? "bg-[#3F7D58] text-white"
-                            : "bg-[#F8FAFC] text-[#3F7D58]",
+                            ? "bg-[var(--noviq-accent)] text-white"
+                            : "bg-[var(--noviq-bg)] text-[var(--noviq-accent)]",
                         )}
                       >
-                        <AnimatePresence mode="wait">
-                          {complete ? (
-                            <motion.span
-                              key="check"
-                              initial={{ scale: 0.4, opacity: 0 }}
-                              animate={{ scale: 1, opacity: 1 }}
-                            >
-                              <CheckCircle2 size={22} />
-                            </motion.span>
-                          ) : (
-                            <motion.span
-                              key="icon"
-                              initial={{ scale: 0.8, opacity: 0 }}
-                              animate={{ scale: 1, opacity: 1 }}
-                            >
-                              <Icon size={22} />
-                            </motion.span>
-                          )}
-                        </AnimatePresence>
+                        {complete ? <CheckCircle2 size={22} /> : <Icon size={22} />}
                       </div>
                       <div className="min-w-0 flex-1">
                         <p
                           className={cn(
                             "text-base font-black",
-                            complete ? "text-[#3F7D58]" : "text-[#0F172A]",
+                            complete ? "text-[var(--noviq-accent)]" : "text-[var(--noviq-text)]",
                           )}
                         >
                           {localizePlannerTaskLabel(task, plannerState.form, locale)}
                         </p>
-                        <p className="mt-1 text-sm font-semibold text-[#64748B]">
+                        <p className="mt-1 text-sm font-semibold text-[var(--noviq-muted)]">
                           {localizePlannerSection(task.section, locale)} / {task.scheduledWindow}
                         </p>
                       </div>
                       <div className="shrink-0 text-right">
-                        <p className="text-sm font-black text-[#0F172A]">
+                        <p className="text-sm font-black text-[var(--noviq-text)]">
                           {formatCopy(pc.minutes, { count: task.minutes })}
                         </p>
-                        <p className="mt-1 text-sm font-black text-[#3F7D58]">
+                        <p className="mt-1 text-sm font-black text-[var(--noviq-accent)]">
                           {formatCopy(pc.practicePoints, { count: task.xp })}
                         </p>
                       </div>
                     </div>
                     <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                      <div className="h-2 flex-1 overflow-hidden rounded-full bg-[#E2E8F0]">
-                        <motion.div
-                          animate={{ width: `${elapsedPercent}%` }}
-                          className="h-full rounded-full bg-[#3F7D58]"
+                      <div className="h-2 flex-1 overflow-hidden rounded-full bg-[var(--noviq-border)]">
+                        <div
+                          style={{ width: `${elapsedPercent}%` }}
+                          className="h-full rounded-full bg-[var(--noviq-accent)]"
                         />
                       </div>
                       <button
                         type="button"
                         onClick={() => void openActivity(task)}
                         disabled={complete}
-                        className="inline-flex min-h-10 items-center justify-center gap-2 rounded-2xl border border-[#E2E8F0] bg-[#F8FAFC] px-4 text-xs font-black text-[#334155] transition hover:border-[#3F7D58] hover:text-[#3F7D58] disabled:cursor-not-allowed disabled:border-[#E2E8F0] disabled:text-[#94A3B8]"
+                        className="inline-flex min-h-10 items-center justify-center gap-2 rounded-2xl border border-[var(--noviq-border)] bg-[var(--noviq-bg)] px-4 text-xs font-black text-[var(--noviq-text)] transition hover:border-[var(--noviq-accent)] hover:text-[var(--noviq-accent)] disabled:cursor-not-allowed disabled:border-[var(--noviq-border)] disabled:text-[var(--noviq-muted)]"
                       >
                         {complete
                           ? pc.completed
@@ -1721,26 +1554,25 @@ export const Planner = () => {
         </section>
 
         <aside className="space-y-5">
-          <section className="rounded-[1.75rem] border border-[#E2E8F0] bg-white p-6">
-            <p className="text-xs font-black uppercase tracking-[0.18em] text-[#64748B]">
+          <section className="rounded-[1.75rem] border border-[var(--noviq-border)] bg-[var(--noviq-card)] p-6">
+            <p className="text-xs font-black uppercase tracking-[0.18em] text-[var(--noviq-muted)]">
               {pc.todayGoal}
             </p>
-            <p className="mt-2 text-3xl font-black text-[#0F172A]">
+            <p className="mt-2 text-3xl font-black text-[var(--noviq-text)]">
               {formatCopy(pc.minutes, { count: totalMinutes })}
             </p>
-            <p className="mt-2 text-sm font-semibold text-[#64748B]">
+            <p className="mt-2 text-sm font-semibold text-[var(--noviq-muted)]">
               {formatCopy(pc.progress, {
                 completed: completedMinutes,
                 total: totalMinutes,
               })}
             </p>
-            <div className="mt-5 h-2 overflow-hidden rounded-full bg-[#E2E8F0]">
-              <motion.div
-                animate={{
+            <div className="mt-5 h-2 overflow-hidden rounded-full bg-[var(--noviq-border)]">
+              <div
+                style={{
                   width: `${(completedMinutes / Math.max(totalMinutes, 1)) * 100}%`,
                 }}
-                transition={{ duration: 0.35 }}
-                className="h-full rounded-full bg-[#3F7D58]"
+                className="h-full rounded-full bg-[var(--noviq-accent)]"
               />
             </div>
             <button
@@ -1750,52 +1582,52 @@ export const Planner = () => {
                 plannerState.tasks.length > 0 &&
                 completedTasks.length === plannerState.tasks.length
               }
-              className="mt-5 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl bg-[#3F7D58] px-5 text-sm font-black text-white transition hover:bg-[#356B4B] disabled:cursor-not-allowed disabled:bg-[#94A3B8]"
+              className="mt-5 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl bg-[var(--noviq-accent)] px-5 text-sm font-black text-white transition hover:bg-[var(--noviq-accent-hover)] disabled:cursor-not-allowed disabled:bg-[var(--noviq-muted)]"
             >
               <Play size={17} fill="currentColor" />
               {plannerState.tasks.length ? pc.startMission : pc.createMission}
             </button>
           </section>
 
-          <section className="rounded-[1.75rem] border border-[#E2E8F0] bg-white p-6">
+          <section className="rounded-[1.75rem] border border-[var(--noviq-border)] bg-[var(--noviq-card)] p-6">
             <div className="mb-4 flex items-center justify-between gap-3">
               <div>
-                <p className="text-xs font-black uppercase tracking-[0.18em] text-[#64748B]">
+                <p className="text-xs font-black uppercase tracking-[0.18em] text-[var(--noviq-muted)]">
                   {pc.weaknessIntelligence}
                 </p>
                 <h3 className="mt-1 text-xl font-black">{pc.weakestAreas}</h3>
               </div>
-              <Brain className="text-[#3F7D58]" size={22} />
+              <Brain className="text-[var(--noviq-accent)]" size={22} />
             </div>
             <div className="space-y-3">
               {hasPlannerActivity ? (
                 weaknessDashboard.map((item, index) => (
                   <div
                     key={`${item.label}-${index}`}
-                    className="rounded-2xl border border-[#E2E8F0] bg-[#F8FAFC] px-4 py-3"
+                    className="rounded-2xl border border-[var(--noviq-border)] bg-[var(--noviq-bg)] px-4 py-3"
                   >
-                    <p className="text-sm font-black text-[#0F172A]">
+                    <p className="text-sm font-black text-[var(--noviq-text)]">
                       {index + 1}. {localizePlannerSection(item.label, locale)}
                     </p>
-                    <p className="mt-1 text-xs font-semibold text-[#64748B]">
+                    <p className="mt-1 text-xs font-semibold text-[var(--noviq-muted)]">
                       {localizePlannerSection(item.section, locale)}
                     </p>
                   </div>
                 ))
               ) : (
-                <p className="rounded-2xl border border-[#E2E8F0] bg-[#F8FAFC] px-4 py-3 text-sm font-semibold text-[#64748B]">
+                <p className="rounded-2xl border border-[var(--noviq-border)] bg-[var(--noviq-bg)] px-4 py-3 text-sm font-semibold text-[var(--noviq-muted)]">
                   {pc.notEnoughActivity}
                 </p>
               )}
             </div>
           </section>
 
-          <section className="rounded-[1.75rem] border border-[#E2E8F0] bg-white p-6">
+          <section className="rounded-[1.75rem] border border-[var(--noviq-border)] bg-[var(--noviq-card)] p-6">
             <div className="mb-4 flex items-center justify-between">
-              <p className="text-xs font-black uppercase tracking-[0.18em] text-[#64748B]">
+              <p className="text-xs font-black uppercase tracking-[0.18em] text-[var(--noviq-muted)]">
                 {pc.achievements}
               </p>
-              <Award className="text-[#3F7D58]" size={21} />
+              <Award className="text-[var(--noviq-accent)]" size={21} />
             </div>
             <div className="grid gap-2">
               {[
@@ -1815,19 +1647,19 @@ export const Planner = () => {
                     className={cn(
                       "flex items-center gap-3 rounded-2xl border px-4 py-3",
                       unlocked
-                        ? "border-[#3F7D58] bg-[#ECFDF3]"
-                        : "border-[#E2E8F0] bg-[#F8FAFC]",
+                        ? "border-[var(--noviq-accent)] bg-[var(--noviq-soft)]"
+                        : "border-[var(--noviq-border)] bg-[var(--noviq-bg)]",
                     )}
                   >
                     {unlocked ? (
-                      <Trophy size={17} className="text-[#3F7D58]" />
+                      <Trophy size={17} className="text-[var(--noviq-accent)]" />
                     ) : (
-                      <Lock size={17} className="text-[#94A3B8]" />
+                      <Lock size={17} className="text-[var(--noviq-muted)]" />
                     )}
                     <p
                       className={cn(
                         "text-sm font-black",
-                        unlocked ? "text-[#3F7D58]" : "text-[#64748B]",
+                        unlocked ? "text-[var(--noviq-accent)]" : "text-[var(--noviq-muted)]",
                       )}
                     >
                       {title}
@@ -1841,19 +1673,19 @@ export const Planner = () => {
       </main>
 
       {plannerState.daily.reflection && (
-        <section className="mt-6 rounded-[1.75rem] border border-[#E2E8F0] bg-white p-6">
+        <section className="mt-6 rounded-[1.75rem] border border-[var(--noviq-border)] bg-[var(--noviq-card)] p-6">
           <div className="flex items-start gap-4">
-            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-[#ECFDF3] text-[#3F7D58]">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-[var(--noviq-soft)] text-[var(--noviq-accent)]">
               <CheckCircle2 size={23} />
             </div>
             <div>
-              <p className="text-xs font-black uppercase tracking-[0.18em] text-[#64748B]">
+              <p className="text-xs font-black uppercase tracking-[0.18em] text-[var(--noviq-muted)]">
                 {pc.todaySummary}
               </p>
-              <h3 className="mt-1 text-xl font-black text-[#0F172A]">
+              <h3 className="mt-1 text-xl font-black text-[var(--noviq-text)]">
                 {pc.dailyReflection}
               </h3>
-              <p className="mt-3 text-sm leading-6 text-[#475569]">
+              <p className="mt-3 text-sm leading-6 text-[var(--noviq-muted)]">
                 {formatCopy(pc.reflection, {
                   tasks: plannerState.daily.reflection.tasksCompleted,
                   minutes: plannerState.daily.reflection.minutesStudied,
@@ -1881,7 +1713,7 @@ export const Planner = () => {
         <button
           type="button"
           onClick={activateRecoveryMode}
-          className="inline-flex min-h-12 flex-1 items-center justify-center gap-2 rounded-2xl border border-[#E2E8F0] bg-white px-5 text-sm font-black text-[#334155] transition hover:border-[#3F7D58] hover:text-[#3F7D58]"
+          className="inline-flex min-h-12 flex-1 items-center justify-center gap-2 rounded-2xl border border-[var(--noviq-border)] bg-[var(--noviq-card)] px-5 text-sm font-black text-[var(--noviq-text)] transition hover:border-[var(--noviq-accent)] hover:text-[var(--noviq-accent)]"
         >
           <RefreshCw size={17} />
           {pc.recoveryMode}
@@ -1889,7 +1721,7 @@ export const Planner = () => {
         <button
           type="button"
           onClick={() => setView("roadmap")}
-          className="inline-flex min-h-12 flex-1 items-center justify-center gap-2 rounded-2xl border border-[#E2E8F0] bg-white px-5 text-sm font-black text-[#334155] transition hover:border-[#3F7D58] hover:text-[#3F7D58]"
+          className="inline-flex min-h-12 flex-1 items-center justify-center gap-2 rounded-2xl border border-[var(--noviq-border)] bg-[var(--noviq-card)] px-5 text-sm font-black text-[var(--noviq-text)] transition hover:border-[var(--noviq-accent)] hover:text-[var(--noviq-accent)]"
         >
           {pc.viewRoadmap}
           <ChevronRight size={17} />
@@ -1912,134 +1744,11 @@ export const Planner = () => {
         }
       />
 
-      <AnimatePresence>
-        {recommendationsOpen && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.2 }}
-            className="noviq-modal-backdrop z-[195]"
-          >
-            <div className="noviq-modal-positioner noviq-modal-md">
-              <motion.div
-                initial={{ opacity: 0, scale: 0.96 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.96 }}
-                transition={{ duration: 0.2, ease: "easeOut" }}
-                className="noviq-modal-panel CustomScrollbar relative rounded-[1.75rem] border border-[#E2E8F0] bg-white p-6 text-[#0F172A]"
-              >
-                <button
-                  type="button"
-                  onClick={() => setRecommendationsOpen(false)}
-                  aria-label={pc.closeRecommendations}
-                  className="absolute right-5 top-5 rounded-full border border-[#E2E8F0] bg-white p-2 text-[#64748B] hover:text-[#0F172A]"
-                >
-                  <X size={18} />
-                </button>
-                <div className="flex items-center gap-4">
-                  <div className="h-14 w-14 overflow-hidden rounded-2xl border border-[#E2E8F0] bg-[#ECFDF3]">
-                    <img
-                      src="/saidamin-avatar.jpg"
-                      alt="Saidamin AI"
-                      className="h-full w-full object-cover object-top"
-                    />
-                  </div>
-                  <div>
-                    <p className="text-xs font-black uppercase tracking-[0.18em] text-[#3F7D58]">
-                      Saidamin AI
-                    </p>
-                    <h3 className="text-2xl font-black">
-                      {pc.examRecommendations}
-                    </h3>
-                  </div>
-                </div>
-                <div className="mt-6 rounded-[1.25rem] border border-[#E2E8F0] bg-[#F8FAFC] p-5">
-                  {recommendationLoading ? (
-                    <div className="flex items-center gap-3 text-sm font-black text-[#64748B]">
-                      <Loader2
-                        className="animate-spin text-[#3F7D58]"
-                        size={18}
-                      />
-                      {pc.generatingRecommendations}
-                    </div>
-                  ) : (
-                    <p className="whitespace-pre-wrap text-sm leading-7 text-[#334155]">
-                      {recommendation ||
-                        (hasPlannerActivity
-                          ? formatCopy(pc.recommendationFallback, {
-                              weakest: localizePlannerSection(
-                                weaknessDashboard[0]?.label || weakest.name,
-                                locale,
-                              ),
-                            })
-                          : t("planner.noMission"))}
-                    </p>
-                  )}
-                </div>
-              </motion.div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+{recommendationsOpen && <PlannerRecommendationsDialog locale={locale} loading={recommendationLoading} recommendation={recommendation} failed={recommendationFailed} onRetry={() => { void openRecommendations(); }}
+        fallback={hasPlannerActivity ? formatCopy(pc.recommendationFallback, {weakest: localizePlannerSection(weaknessDashboard[0]?.label || weakest.name, locale)}) : t("planner.noMission")}
+        onClose={() => setRecommendationsOpen(false)} />}
 
-      <AnimatePresence>
-        {celebration && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.2 }}
-            className="noviq-modal-backdrop z-[210]"
-          >
-            <div className="noviq-modal-positioner noviq-modal-sm">
-              <motion.div
-                initial={{ opacity: 0, scale: 0.96 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.96 }}
-                transition={{ duration: 0.2, ease: "easeOut" }}
-                className="noviq-modal-panel CustomScrollbar relative rounded-[1.75rem] border border-[#E2E8F0] bg-white p-6 text-center text-[#0F172A] sm:p-8"
-              >
-                <ConfettiBurst large={celebration.type === "mission"} />
-                <div className="relative z-10 mx-auto flex h-16 w-16 items-center justify-center rounded-3xl bg-[#ECFDF3] text-[#3F7D58]">
-                  {celebration.type === "mission" ? (
-                    <Trophy size={32} />
-                  ) : (
-                    <Zap size={30} />
-                  )}
-                </div>
-                <h3 className="relative z-10 mt-5 text-3xl font-black">
-                  {celebration.title}
-                </h3>
-                <p className="relative z-10 mt-2 text-sm font-semibold text-[#64748B]">
-                  {celebration.subtitle}
-                </p>
-                <div className="relative z-10 mt-5 rounded-2xl border border-[#E2E8F0] bg-[#F8FAFC] px-5 py-4">
-                  <p className="text-2xl font-black text-[#3F7D58]">
-                    {formatCopy(pc.practicePoints, { count: `+${celebration.xp}` })}
-                  </p>
-                  {celebration.bonusXp ? (
-                    <p className="mt-1 text-sm font-bold text-[#64748B]">
-                      {pc.streakUpdated}
-                    </p>
-                  ) : (
-                    <p className="mt-1 text-sm font-bold text-[#64748B]">
-                      {pc.progressUpdated}
-                    </p>
-                  )}
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setCelebration(null)}
-                  className="relative z-10 mt-6 inline-flex min-h-12 w-full items-center justify-center rounded-2xl bg-[#3F7D58] px-5 text-sm font-black text-white hover:bg-[#356B4B]"
-                >
-                  {pc.continue}
-                </button>
-              </motion.div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {celebration && <PlannerCompletionDialog celebration={celebration} locale={locale} onClose={() => setCelebration(null)} />}
     </div>
   );
 };

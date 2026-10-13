@@ -1,0 +1,12 @@
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body><div id="root"></div><script type="module">
+import React from 'react';
+import {createRoot} from 'react-dom/client';
+import {LocaleProvider} from '/src/contexts/LocaleContext.tsx';
+import {Onboarding} from '/src/components/Onboarding.tsx';
+import '/src/index.css';
+createRoot(document.getElementById('root')).render(React.createElement(LocaleProvider,null,
+  React.createElement(Onboarding,{onComplete:async answers=>{
+    window.fixtureAnswers=answers;
+    throw new Error('Fixture save failure');
+  }})));
+</script></body></html>

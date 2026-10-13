@@ -77,6 +77,12 @@ const ENGLISH_COPY = {
   "tutor.stop": "Stop",
   "tutor.askPlaceholder": "Ask Saidamin anything…",
   "tutor.send": "Send",
+  "tutor.coaching": "Goal-aware exam coaching",
+  "tutor.freeRemaining": "{count} free left",
+  "tutor.speechUnsupported": "Speech recognition is not supported in this browser.",
+  "tutor.uploadFailed": "File upload failed.",
+  "tutor.analyzeFile": "Analyze the uploaded file and explain the most important points.",
+  "tutor.fileHelp": "Drag and drop academic files anywhere in this chat. Supported: images, PDF, DOCX, TXT and exam prep files.",
   "tutor.uploadFile": "Upload file",
   "tutor.uploadImage": "Upload image",
   "tutor.voice": "Voice",
@@ -87,7 +93,10 @@ const ENGLISH_COPY = {
   "tutor.expand": "Expand tutor",
   "tutor.compact": "Compact tutor",
   "tutor.close": "Close Saidamin tutor",
-  "tutor.messageLabel": "Message Saidamin",
+  "tutor.messageLabel": "Message Noviq Tutor",
+  "tutor.languageLabel": "Tutor language",
+  "tutor.voiceToggle": "Toggle voice output",
+  "tutor.removeAttachment": "Remove {name}",
   "tutor.open": "Open Saidamin Noviq Tutor",
   "tutor.launcher": "Ask Noviq Tutor",
   "tutor.subtitle": "Exam mentor / next score move",
@@ -204,6 +213,10 @@ const ENGLISH_COPY = {
   "notebook.auditUploadDisabled": "Uploads are disabled in read-only audit mode.",
   "notebook.fileTooLarge": "{name} is larger than {size}.",
   "notebook.sourceFailed": "Source analysis failed.",
+  "notebook.digestUnavailable": "Automatic analysis is unavailable for this source.",
+  "notebook.sourceBatchFailed": "No sources were added. Check your files and try again.",
+  "notebook.sourceBatchPartial": "Added {added} of {total} sources to Notebook. Some files could not be processed.",
+  "notebook.sourceBatchAdded": "Added {added} of {total} sources to Notebook.",
   "notebook.sourceAdded": "Source added on this device.",
   "notebook.invalidUrl": "Enter a website address beginning with https:// or http://.",
   "notebook.fetchFailed": "Could not fetch website: {status}",
@@ -319,6 +332,12 @@ const TRANSLATIONS: Record<AppLocale, Record<TranslationKey, string>> = {
     "tutor.stop": "To‘xtatish",
     "tutor.askPlaceholder": "Saidamindan so‘rang…",
     "tutor.send": "Yuborish",
+    "tutor.coaching": "Maqsadingizga mos imtihon yordami",
+    "tutor.freeRemaining": "{count} ta bepul xabar qoldi",
+    "tutor.speechUnsupported": "Bu brauzer nutqni tanishni qo‘llab-quvvatlamaydi.",
+    "tutor.uploadFailed": "Faylni yuklab bo‘lmadi.",
+    "tutor.analyzeFile": "Yuklangan faylni tahlil qiling va eng muhim jihatlarini tushuntiring.",
+    "tutor.fileHelp": "O‘quv fayllarini chatga sudrab tashlang. Rasmlar, PDF, DOCX, TXT va imtihon materiallari qo‘llab-quvvatlanadi.",
     "tutor.uploadFile": "Fayl yuklash",
     "tutor.uploadImage": "Rasm yuklash",
     "tutor.voice": "Ovoz",
@@ -329,7 +348,10 @@ const TRANSLATIONS: Record<AppLocale, Record<TranslationKey, string>> = {
     "tutor.expand": "Tutor oynasini kengaytirish",
     "tutor.compact": "Tutor oynasini ixchamlash",
     "tutor.close": "Saidamin tutorini yopish",
-    "tutor.messageLabel": "Saidaminga xabar yozish",
+    "tutor.messageLabel": "Noviq Tutor’ga xabar yozish",
+    "tutor.languageLabel": "Tutor tili",
+    "tutor.voiceToggle": "Ovozli javobni almashtirish",
+    "tutor.removeAttachment": "{name} faylini olib tashlash",
     "tutor.open": "Saidamin Noviq Tutorini ochish",
     "tutor.launcher": "Noviq Tutordan so‘rang",
     "tutor.subtitle": "Imtihon mentori / keyingi natija qadami",
@@ -446,6 +468,10 @@ const TRANSLATIONS: Record<AppLocale, Record<TranslationKey, string>> = {
     "notebook.auditUploadDisabled": "Faqat ko‘rish rejimida yuklash o‘chirilgan.",
     "notebook.fileTooLarge": "{name} fayli {size} dan katta.",
     "notebook.sourceFailed": "Manbani tahlil qilib bo‘lmadi.",
+    "notebook.digestUnavailable": "Ushbu manbaning avtomatik tahlili mavjud emas.",
+    "notebook.sourceBatchFailed": "Hech bir manba qo‘shilmadi. Fayllaringizni tekshirib, qayta urinib ko‘ring.",
+    "notebook.sourceBatchPartial": "Notebook’ka {total} ta manbadan {added} tasi qo‘shildi. Ayrim fayllarni qayta ishlab bo‘lmadi.",
+    "notebook.sourceBatchAdded": "Notebook’ka {total} ta manbadan {added} tasi qo‘shildi.",
     "notebook.sourceAdded": "Manba ushbu qurilmaga qo‘shildi.",
     "notebook.invalidUrl": "https:// yoki http:// bilan boshlanadigan veb-manzil kiriting.",
     "notebook.fetchFailed": "Veb-saytni olib bo‘lmadi: {status}",
@@ -556,6 +582,12 @@ const TRANSLATIONS: Record<AppLocale, Record<TranslationKey, string>> = {
     "tutor.stop": "Остановить",
     "tutor.askPlaceholder": "Спросите Саидамина…",
     "tutor.send": "Отправить",
+    "tutor.coaching": "Подготовка к экзаменам с учётом вашей цели",
+    "tutor.freeRemaining": "Бесплатных сообщений осталось: {count}",
+    "tutor.speechUnsupported": "Этот браузер не поддерживает распознавание речи.",
+    "tutor.uploadFailed": "Не удалось загрузить файл.",
+    "tutor.analyzeFile": "Проанализируйте загруженный файл и объясните самое важное.",
+    "tutor.fileHelp": "Перетащите учебные файлы в чат. Поддерживаются изображения, PDF, DOCX, TXT и материалы для подготовки к экзаменам.",
     "tutor.uploadFile": "Загрузить файл",
     "tutor.uploadImage": "Загрузить изображение",
     "tutor.voice": "Голос",
@@ -566,7 +598,10 @@ const TRANSLATIONS: Record<AppLocale, Record<TranslationKey, string>> = {
     "tutor.expand": "Развернуть окно тьютора",
     "tutor.compact": "Уменьшить окно тьютора",
     "tutor.close": "Закрыть тьютора Саидамина",
-    "tutor.messageLabel": "Написать Саидамину",
+    "tutor.messageLabel": "Написать Noviq Tutor",
+    "tutor.languageLabel": "Язык тьютора",
+    "tutor.voiceToggle": "Переключить озвучивание",
+    "tutor.removeAttachment": "Удалить {name}",
     "tutor.open": "Открыть Noviq Tutor Саидамина",
     "tutor.launcher": "Спросить Noviq Tutor",
     "tutor.subtitle": "Экзаменационный наставник / следующий шаг",
@@ -683,6 +718,10 @@ const TRANSLATIONS: Record<AppLocale, Record<TranslationKey, string>> = {
     "notebook.auditUploadDisabled": "Загрузка отключена в режиме только для чтения.",
     "notebook.fileTooLarge": "Файл {name} больше {size}.",
     "notebook.sourceFailed": "Не удалось проанализировать источник.",
+    "notebook.digestUnavailable": "Автоматический анализ этого источника недоступен.",
+    "notebook.sourceBatchFailed": "Источники не добавлены. Проверьте файлы и попробуйте снова.",
+    "notebook.sourceBatchPartial": "В Notebook добавлено {added} из {total} источников. Некоторые файлы не удалось обработать.",
+    "notebook.sourceBatchAdded": "В Notebook добавлено {added} из {total} источников.",
     "notebook.sourceAdded": "Источник добавлен на это устройство.",
     "notebook.invalidUrl": "Введите адрес сайта, начинающийся с https:// или http://.",
     "notebook.fetchFailed": "Не удалось загрузить веб-сайт: {status}",
@@ -740,16 +779,24 @@ const LocaleContext = createContext<LocaleContextValue | null>(null);
 
 const readStoredLocale = (): AppLocale => {
   if (typeof window === "undefined") return "en";
-  const stored = window.localStorage.getItem("noviq-locale");
-  return stored === "uz" || stored === "ru" ? stored : "en";
+  try {
+    const stored = window.localStorage.getItem("noviq-locale");
+    return stored === "uz" || stored === "ru" ? stored : "en";
+  } catch {
+    return "en";
+  }
 };
 
 export const LocaleProvider = ({ children }: { children: ReactNode }) => {
   const [locale, setLocale] = useState<AppLocale>(readStoredLocale);
 
   useEffect(() => {
-    window.localStorage.setItem("noviq-locale", locale);
     document.documentElement.lang = locale;
+    try {
+      window.localStorage.setItem("noviq-locale", locale);
+    } catch {
+      // The selected language still applies for this session.
+    }
   }, [locale]);
 
   const t = useCallback(

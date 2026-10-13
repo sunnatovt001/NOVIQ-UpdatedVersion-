@@ -170,7 +170,7 @@ export const TodayDashboardView = ({
       )}
 
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1.65fr)_minmax(300px,0.75fr)]">
-        <main className="space-y-5">
+        <div className="space-y-5">
           <section className="today-next-card overflow-hidden rounded-[1.75rem] p-6 sm:p-8">
             <div className="flex flex-col gap-7 sm:flex-row sm:items-end sm:justify-between">
               <div className="min-w-0">
@@ -292,7 +292,7 @@ export const TodayDashboardView = ({
               ))}
             </div>
           </section>
-        </main>
+        </div>
 
         <aside className="space-y-5">
           <section className="today-card rounded-[1.5rem] p-5 sm:p-6">

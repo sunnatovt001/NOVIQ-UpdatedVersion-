@@ -238,7 +238,7 @@ export const NotebookAiPanel = ({
         {error ? (
           <div
             role="alert"
-            className="mb-3 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:bg-amber-300/10 dark:text-amber-200"
+            className="mb-3 rounded-xl border border-[var(--noviq-danger-border)] bg-[var(--noviq-danger-bg)] p-3 text-sm text-[var(--noviq-danger)]"
           >
             <p>{error}</p>
             <button

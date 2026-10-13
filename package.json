@@ -36,6 +36,7 @@
     "test:browser:server": "node tests/browser-server.mjs",
     "test:browser": "node tests/browser-check.cjs",
     "test:browser:ci": "node tests/run-browser.mjs",
+    "test:browser:core": "node tests/run-browser.mjs tests/core-browser-batch.cjs",
     "release:check": "node scripts/release-preflight.mjs",
     "release:check:live": "node scripts/release-preflight.mjs --live"
   },

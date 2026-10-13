@@ -1,4 +1,4 @@
-import { getLocalDayKey } from "@/src/lib/progress";
+import { getLocalDayKey } from "@/src/lib/progressMath";
 import {
   DEFAULT_EXAM_DATE,
   EXAM_OPTIONS,
@@ -512,6 +512,7 @@ export const normalizeTaskProgress = (
   const rawStatus = String(progress?.status || base.status).toLowerCase();
   return {
     ...merged,
+    elapsedSeconds: Number.isFinite(merged.elapsedSeconds) ? Math.max(0, Math.floor(merged.elapsedSeconds)) : 0,
     status:
       rawStatus === "completed"
         ? "completed"
@@ -584,10 +585,15 @@ export const normalizePlannerState = (
           active: true,
           missedDays,
           message:
-            missedDays >= 3
+            raw.recoveryMode?.active && missedSinceOpen === 0 && raw.recoveryMode.message
+              ? raw.recoveryMode.message
+              : missedDays >= 3
               ? `We noticed ${missedDays} missed study days. Your roadmap has been adjusted and your target is still achievable.`
               : raw.recoveryMode?.message ||
                 "Your roadmap has been adjusted for today.",
+          messageLocale: raw.recoveryMode?.active && missedSinceOpen === 0 && raw.recoveryMode.message
+            ? raw.recoveryMode.messageLocale
+            : "en" as const,
           adjustedAt: raw.recoveryMode?.adjustedAt || new Date().toISOString(),
         }
       : raw.recoveryMode;
@@ -1016,15 +1022,18 @@ export const getValidation = (
   const reasons: string[] = [];
   const mistakes: string[] = [];
   const requiredSeconds = task.minutes * 60;
-  if (progress.elapsedSeconds < requiredSeconds)
+  const elapsedSeconds = Number.isFinite(progress.elapsedSeconds) ? Math.max(0, Math.floor(progress.elapsedSeconds)) : 0;
+  if (elapsedSeconds < requiredSeconds)
     reasons.push(
-      `Study timer needs ${Math.ceil((requiredSeconds - progress.elapsedSeconds) / 60)} more min.`,
+      `Study timer needs ${Math.ceil((requiredSeconds - elapsedSeconds) / 60)} more min.`,
     );
 
   if (activity.type === "quiz") {
     const questions = activity.questions || [];
     const answered = questions.filter(
-      (question) => progress.quizAnswers[question.id] !== undefined,
+      (question) => Number.isInteger(progress.quizAnswers[question.id]) &&
+        progress.quizAnswers[question.id] >= 0 &&
+        progress.quizAnswers[question.id] < question.options.length,
     );
     if (answered.length < questions.length)
       reasons.push("Answer every quiz question.");

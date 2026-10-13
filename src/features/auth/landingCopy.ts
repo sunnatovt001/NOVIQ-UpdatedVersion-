@@ -1,0 +1,46 @@
+import type { AppLocale } from "@/src/contexts/LocaleContext";
+const en = {
+  signup: "Sign up", signupFree: "Sign up free", menu: "Toggle navigation menu", language: "Language",
+  eyebrow: "Exam preparation, organized",
+  title: "AI Study Operating System for exam preparation and academic success.",
+  description: "Plan, practice, and improve for IELTS, SAT, HSK, CEFR, school subjects, and university entrance exams with focused AI guidance.",
+  school: "School", entrance: "Entrance", daily: "Daily",
+  tracks: "Exam tracks mapped into focused study lanes.", drills: "Weak spots turn into repeatable drills.",
+  tutor: "Exam tutor stays ready between sessions.",
+  academy: "Study workspace", elite: "Preview", suite: "Exam suite", progress: "Academic Progress", focus: "Focus mode",
+  tutorMode: "Noviq Tutor Mode", active: "Study support", trackLabel: "Exam Tracks", loop: "Weakness Loop",
+  preview: "Generate focused drills for IELTS, SAT, HSK, CEFR, school subjects, and university entrance exams.",
+  start: "Start Exam Prep", center: "Academic command center", features: "Built for Exam Preparation",
+  featureDescription: "A focused academic workspace for IELTS, SAT, HSK, CEFR, school subjects, and university entrance exams.",
+  footer: "Copyright 2026 Noviq AI. Crafted for modern students.",
+};
+type Copy = {[K in keyof typeof en]: string};
+const copies: Record<AppLocale, Copy> = { en,
+  uz: {
+    signup: "Ro‘yxatdan o‘tish", signupFree: "Bepul ro‘yxatdan o‘tish", menu: "Navigatsiya menyusini ochish", language: "Til",
+    eyebrow: "Tartibli imtihon tayyorgarligi", title: "Imtihon va o‘qish uchun yagona AI o‘quv muhiti.",
+    description: "IELTS, SAT, HSK, CEFR, maktab fanlari va universitetga kirish imtihonlari uchun AI yordamida reja tuzing, mashq qiling va rivojlaning.",
+    school: "Maktab", entrance: "Kirish imtihoni", daily: "Har kuni", tracks: "Imtihon yo‘nalishlari bo‘yicha tartibli tayyorgarlik.",
+    drills: "Qiyin mavzular muntazam mashqlarga aylanadi.", tutor: "Mashg‘ulotlar orasida ham AI ustozdan yordam oling.",
+    academy: "O‘quv muhiti", elite: "Namuna", suite: "Imtihon vositalari", progress: "O‘qishdagi rivojlanish", focus: "Diqqat rejimi",
+    tutorMode: "Noviq AI ustoz", active: "O‘qishda yordam", trackLabel: "Imtihon yo‘nalishlari", loop: "Qiyin mavzularni takrorlash",
+    preview: "IELTS, SAT, HSK, CEFR, maktab fanlari va universitetga kirish imtihonlari uchun mashqlar yarating.",
+    start: "Tayyorgarlikni boshlash", center: "Yagona o‘quv markazi", features: "Imtihonga tayyorlanish uchun yaratilgan",
+    featureDescription: "IELTS, SAT, HSK, CEFR, maktab fanlari va kirish imtihonlari uchun tartibli o‘quv muhiti.",
+    footer: "Copyright 2026 Noviq AI. Zamonaviy o‘quvchilar uchun yaratilgan.",
+  },
+  ru: {
+    signup: "Регистрация", signupFree: "Бесплатная регистрация", menu: "Открыть меню навигации", language: "Язык",
+    eyebrow: "Организованная подготовка к экзаменам", title: "Единое учебное пространство с AI для экзаменов и учёбы.",
+    description: "Планируйте, практикуйтесь и готовьтесь к IELTS, SAT, HSK, CEFR, школьным предметам и вступительным экзаменам с помощью AI.",
+    school: "Школа", entrance: "Поступление", daily: "Ежедневно", tracks: "Организованная подготовка по экзаменационным направлениям.",
+    drills: "Сложные темы превращаются в регулярные упражнения.", tutor: "Получайте помощь AI-наставника между занятиями.",
+    academy: "Учебное пространство", elite: "Пример", suite: "Экзаменационные инструменты", progress: "Учебный прогресс", focus: "Режим фокуса",
+    tutorMode: "AI-наставник Noviq", active: "Учебная поддержка", trackLabel: "Экзаменационные направления", loop: "Повторение сложных тем",
+    preview: "Создавайте упражнения для IELTS, SAT, HSK, CEFR, школьных предметов и вступительных экзаменов.",
+    start: "Начать подготовку", center: "Единый учебный центр", features: "Создано для подготовки к экзаменам",
+    featureDescription: "Учебное пространство для IELTS, SAT, HSK, CEFR, школьных предметов и вступительных экзаменов.",
+    footer: "Copyright 2026 Noviq AI. Создано для современных студентов.",
+  },
+};
+export const getLandingCopy = (locale: AppLocale) => copies[locale];

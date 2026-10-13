@@ -196,6 +196,6 @@ export const NotebookSourceDialog = ({
         </motion.div>
       ) : null}
     </AnimatePresence>,
-    document.body,
+    document.querySelector(".noviq-app") || document.body,
   );
 };

@@ -7,6 +7,63 @@ const projectRoot = path.resolve(__dirname, "..");
 const read = (relativePath) =>
   fs.readFileSync(path.join(projectRoot, relativePath), "utf8");
 
+test("Firebase auth boundary avoids database and other service imports", () => {
+  const auth = read("src/lib/firebaseAuth.ts");
+  assert.match(auth, /from "firebase\/auth"/);
+  assert.doesNotMatch(auth, /firebase\/firestore|firebase\/functions|firebase\/storage|from "\.\/firebase"/);
+  assert.match(read("src/lib/firebase.ts"), /export \* from "\.\/firebaseAuth"/);
+  assert.match(read("src/lib/firebaseApp.ts"), /initializeApp\(firebaseConfig\)/);
+});
+
+test("Planner completion dialog wires modular surfaces and keyboard helpers", () => {
+  const dialog = read("src/features/planner/PlannerCompletionDialog.tsx");
+  assert.match(read("src/pages/Planner.tsx"), /<PlannerCompletionDialog celebration=\{celebration\}/);
+  for (const expected of ['createPortal', 'useDialogFocus(true, panel, onClose)', 'useBodyScrollLock(true)', 'role="dialog"', 'aria-modal="true"', 'var(--noviq-card)', 'var(--noviq-text)']) assert.ok(dialog.includes(expected), expected);
+  assert.doesNotMatch(dialog, /motion\/react|bg-white|text-\[#/);
+});
+
+test("Landing avoids backdrop blur and blurred hover glows", () => {
+  const landing = read("src/pages/Landing.tsx");
+  assert.doesNotMatch(landing, /backdrop-blur|blur-2xl|group-hover:scale-125|<motion\.article/);
+  assert.doesNotMatch(landing, /motion\/react|AnimatePresence|<motion\./);
+});
+
+test("Planner task icons do not load a motion runtime or wait for outgoing animations", () => {
+  const planner = read("src/pages/Planner.tsx");
+  assert.doesNotMatch(planner, /motion\/react|AnimatePresence|<motion\./);
+  assert.ok(planner.includes('complete ? <CheckCircle2 size={22} /> : <Icon size={22} />'));
+});
+
+test("onboarding advances without artificial delays or blur transitions", () => {
+  const source = read("src/components/Onboarding.tsx");
+  assert.doesNotMatch(source, /setTimeout|motion\/react|AnimatePresence|blur\(8px\)/);
+  assert.match(source, /headingRef\.current\?\.focus\(\)/);
+  assert.match(source, /if \(submittingRef\.current\) return/);
+  assert.match(source, /role="alert"/);
+});
+
+test("initial app loading uses semantic colors and no continuous or fake progress animation", () => {
+  const loading = read("src/features/auth/AppLoadingScreen.tsx");
+  const app = read("src/App.tsx");
+  assert.match(loading, /role="status"/);
+  assert.match(loading, /var\(--noviq-bg\)/);
+  assert.match(loading, /noviq-theme/);
+  assert.doesNotMatch(loading, /motion\/react|animate=|repeat:|progressbar/);
+  assert.doesNotMatch(app, /motion\/react|AnimatePresence/);
+  assert.match(app, /<AppLoadingScreen message=\{copy\.profileLoading\}/);
+});
+
+test("development watcher excludes reports without ignoring application source", () => {
+  const config = read("vite.config.ts");
+  const ignored = config.match(/watch:\s*\{\s*ignored:\s*\[([^\]]+)\]/)?.[1];
+  assert.ok(ignored);
+  for (const target of ['artifacts/**', 'backups/**', 'design-system/**', 'PRODUCTION_AUDIT.md', 'FOUNDATION_REDESIGN_STATUS.md']) {
+    assert.ok(ignored.includes(`**/${target}`), target);
+  }
+  assert.equal(ignored.includes('src'), false);
+  assert.equal(ignored.includes('**/*.ts'), false);
+});
+
 test("landing does not ship or request the legacy 56 MB background video", () => {
   const landing = read("src/pages/Landing.tsx");
   const legacyVideo = path.join(
@@ -17,7 +74,12 @@ test("landing does not ship or request the legacy 56 MB background video", () =>
 
   assert.equal(landing.includes("noviq-landing-background.mp4"), false);
   assert.equal(fs.existsSync(legacyVideo), false);
-  assert.match(landing, /landing-backdrop/);
+  assert.match(landing, /LandingStudents/);
+  const brain = read("src/features/landing/LandingStudents.tsx");
+  assert.match(brain, /IntersectionObserver/);
+  assert.match(brain, /prefers-reduced-motion/);
+  assert.doesNotMatch(brain, /<video|noviq-brain/);
+  assert.ok(fs.statSync(path.join(projectRoot, "public", "landing", "noviq-students.webp")).size < 200 * 1024);
 });
 
 test("app shell avoids layout and blur based route transitions", () => {
@@ -26,8 +88,8 @@ test("app shell avoids layout and blur based route transitions", () => {
   assert.equal(layout.includes("transition-[width,transform]"), false);
   assert.equal(layout.includes("filter: 'blur"), false);
   assert.match(layout, /transition-transform duration-200/);
-  assert.match(layout, /AnimatePresence mode="wait" initial=\{false\}/);
-  assert.match(layout, /duration: 0\.14/);
+  assert.equal(layout.includes('AnimatePresence mode="wait"'), false);
+  assert.match(layout, /<div data-route-content/);
 });
 
 test("global styles provide a reduced-motion fallback", () => {
@@ -95,7 +157,11 @@ test("application locale defaults to English and persists explicit choices", () 
   assert.match(locale, /return "en"/);
   assert.match(locale, /noviq-locale/);
   assert.match(locale, /document\.documentElement\.lang = locale/);
-  assert.match(shell, /aria-label=\{t\("shell\.language"\)\}/);
+  assert.match(shell, /<HeaderLanguagePicker/);
+  const picker = read("src/components/SidebarLanguagePicker.tsx");
+  assert.match(picker, /<legend className="sr-only">\{t\("shell\.language"\)\}/);
+  assert.match(picker, /type="radio"/);
+  assert.match(picker, /setLocale\(option\.value\)/);
   assert.match(shell, /t\("nav\.library"\)/);
 });
 

@@ -1,0 +1,21 @@
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const ts = require('typescript');
+const vm = require('node:vm');
+test('route definitions reuse loaded lazy types but retries replace rejected types', async () => {
+  const React = { Component: class {}, lazy: load => ({ load }) };
+  const exports = {};
+  const code = ts.transpileModule(fs.readFileSync('src/components/RoutePage.tsx','utf8'), {compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.React}}).outputText;
+  vm.runInNewContext(code, { exports, require: name => name === 'react' ? {default:React,...React} : {withDeadline:promise=>promise} });
+  const loader = async () => ({ Page: () => null, Other: () => null });
+  const first = exports.getCachedLazyPage(loader,'Page');
+  assert.equal(exports.getCachedLazyPage(loader,'Page'),first);
+  assert.notEqual(exports.getCachedLazyPage(loader,'Other'),first);
+  assert.notEqual(exports.getCachedLazyPage(async()=>({}),'Page'),first);
+  await first.load();
+  const retry = exports.getCachedLazyPage(loader,'Page',true);
+  assert.notEqual(retry,first);
+  assert.equal(exports.getCachedLazyPage(loader,'Page'),retry);
+  await assert.rejects(exports.getCachedLazyPage(async()=>({}),'Missing').load(),/export Missing is missing/);
+});

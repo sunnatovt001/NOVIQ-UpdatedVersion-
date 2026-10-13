@@ -2,12 +2,11 @@ import React, { createContext, useContext, useEffect, useState } from "react";
 import { withDeadline } from "@/src/lib/asyncRequest";
 import { isReadOnlyAudit } from "@/src/lib/auditMode";
 import { onAuthStateChanged, User } from "firebase/auth";
-import { doc, onSnapshot, runTransaction } from "firebase/firestore";
-import { auth, authPersistenceReady, db } from "@/src/lib/firebase";
+import { auth, authPersistenceReady } from "@/src/lib/firebaseAuth";
 import { UserProfile } from "@/src/types";
-import { getAppErrorMessage } from "@/src/lib/errors";
+import { getAccountErrorCode } from "@/src/features/auth/accountErrors";
 import { loadLocalData, removeLocalData, saveLocalData } from "@/src/lib/localStore";
-import { calculateLevel, calculateLevelName, createInitialXpState, getCurrentStreak } from "@/src/lib/progress";
+import { calculateLevel, calculateLevelName, createInitialXpState, getCurrentStreak } from "@/src/lib/progressMath";
 import { getDefaultSubscription } from "@/src/lib/subscription";
 import { getQueuedOperation, useOfflineSyncQueue, writeDocWithQueue } from "@/src/lib/offlineSync";
 
@@ -154,6 +153,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     let unsubscribeTrustedProgress: (() => void) | undefined;
     let unsubscribeAuth: (() => void) | undefined;
     let isDisposed = false;
+    let accountRevision = 0;
     let latestBaseProfile: UserProfile | null = null;
     let latestTrustedProgress: Partial<UserProfile> = {};
     let latestResolvedAdmin = false;
@@ -166,7 +166,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const current = auth.currentUser;
         const cached = current ? loadLocalData<UserProfile | null>(profileCacheKey(current.uid), null) : null;
         if (cached) { latestBaseProfile = cached; latestResolvedAdmin = false; publishProfile(); }
-        else setAuthError("Account data temporarily unavailable. Check your connection and try again.");
+        else setAuthError("timeout");
         setLoading(false);
         console.error("Auth/profile initialization timed out");
       }, 15000);
@@ -189,6 +189,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (isDisposed) return;
 
       unsubscribeAuth = onAuthStateChanged(auth, async (firebaseUser) => {
+      const revision = ++accountRevision;
       unsubscribeProfile?.();
       unsubscribeTrustedProgress?.();
       unsubscribeProfile = undefined;
@@ -211,13 +212,28 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return;
       }
 
+      let backend;
+      try {
+        backend = await withDeadline(Promise.all([
+          import("firebase/firestore"),
+          import("@/src/lib/firebase"),
+        ]), 10000);
+      } catch (error) {
+        if (isDisposed || revision !== accountRevision) return;
+        clearTimeout(loadTimer);
+        setAuthError(getAccountErrorCode(error));
+        setLoading(false);
+        return;
+      }
+      if (isDisposed || revision !== accountRevision || auth.currentUser?.uid !== firebaseUser.uid) return;
+      const [{ doc, onSnapshot, runTransaction }, { db }] = backend;
       const userDocRef = doc(db, "users", firebaseUser.uid);
       const trustedProgressRef = doc(db, "users", firebaseUser.uid, "trusted", "progress");
 
       unsubscribeTrustedProgress = onSnapshot(
         trustedProgressRef,
         (snapshot) => {
-          if (isDisposed || auth.currentUser?.uid !== firebaseUser.uid) return;
+          if (isDisposed || revision !== accountRevision || auth.currentUser?.uid !== firebaseUser.uid) return;
           latestTrustedProgress = snapshot.exists()
             ? buildTrustedProgressPatch(snapshot.data() as Record<string, unknown>)
             : {};
@@ -231,7 +247,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       unsubscribeProfile = onSnapshot(
         userDocRef,
         async (snapshot) => {
-          if (isDisposed || auth.currentUser?.uid !== firebaseUser.uid) return;
+          if (isDisposed || revision !== accountRevision || auth.currentUser?.uid !== firebaseUser.uid) return;
           if (snapshot.exists()) {
             setAuthError("");
             const rawProfile = snapshot.data() as UserProfile;
@@ -256,7 +272,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             return;
           }
           await withDeadline(firebaseUser.reload(), 10000).catch(error => console.warn("Auth user refresh failed", error));
-          if (isDisposed || auth.currentUser?.uid !== firebaseUser.uid) return;
+          if (isDisposed || revision !== accountRevision || auth.currentUser?.uid !== firebaseUser.uid) return;
           const newProfile = createInitialProfile(firebaseUser);
           const resolvedProfile = await withDeadline(runTransaction(db, async (transaction) => {
             const existing = await transaction.get(userDocRef);
@@ -265,21 +281,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             transaction.set(userDocRef, newProfile);
             return newProfile;
           }), 15000).catch((error) => {
+            if (isDisposed || revision !== accountRevision || auth.currentUser?.uid !== firebaseUser.uid) return null;
             console.error("Profile bootstrap failed", error);
-            setAuthError(getAppErrorMessage(error));
+            setAuthError(getAccountErrorCode(error));
             return cached;
           });
-          if (isDisposed || auth.currentUser?.uid !== firebaseUser.uid) return;
+          if (isDisposed || revision !== accountRevision || auth.currentUser?.uid !== firebaseUser.uid) return;
           latestBaseProfile = resolvedProfile;
           latestResolvedAdmin = Boolean(resolvedProfile?.isAdmin);
           publishProfile();
           setLoading(false);
         },
         (error) => {
-          if (isDisposed || auth.currentUser?.uid !== firebaseUser.uid) return;
+          if (isDisposed || revision !== accountRevision || auth.currentUser?.uid !== firebaseUser.uid) return;
           console.warn("Cloud profile listener failed", error);
           const cached = loadLocalData<UserProfile | null>(profileCacheKey(firebaseUser.uid), null);
-          if (!cached || error.code === "permission-denied") setAuthError(getAppErrorMessage(error));
+          if (!cached || error.code === "permission-denied") setAuthError(getAccountErrorCode(error));
           latestBaseProfile = withLocalProfilePatch(cached || createInitialProfile(firebaseUser));
           latestResolvedAdmin = false;
           publishProfile();

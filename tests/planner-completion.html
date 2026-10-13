@@ -1,0 +1,16 @@
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body><div id="root"></div><script type="module">
+import React from 'react';
+import {createRoot} from 'react-dom/client';
+import {LocaleProvider,useLocale} from '/src/contexts/LocaleContext.tsx';
+import {PlannerCompletionDialog} from '/src/features/planner/PlannerCompletionDialog.tsx';
+import '/src/index.css';
+function Fixture(){
+  const [open,setOpen]=React.useState(false);
+  const {locale}=useLocale();
+  const params=new URLSearchParams(location.search);
+  return React.createElement('div',{className:'noviq-app '+(params.get('theme')==='dark'?'dark':''),style:{minHeight:'100vh'}},
+    React.createElement('button',{id:'opener',onClick:()=>setOpen(true)},'Open completion'),
+    open&&React.createElement(PlannerCompletionDialog,{locale,onClose:()=>setOpen(false),celebration:{type:params.get('type')||'task',title:'Verified completion',subtitle:'Fixture result',xp:30,bonusXp:params.has('bonus')?10:undefined}}));
+}
+createRoot(document.getElementById('root')).render(React.createElement(LocaleProvider,null,React.createElement(Fixture)));
+</script></body></html>

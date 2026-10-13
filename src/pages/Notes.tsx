@@ -13,7 +13,7 @@ import {
   X,
   Youtube,
 } from "lucide-react";
-import { AiAttachment, askNotebook } from "@/src/lib/gemini";
+import { type AiAttachment, askNotebook } from "@/src/lib/gemini";
 import { cn } from "@/src/lib/utils";
 import { useAuth } from "@/src/contexts/AuthContext";
 import { trackUserEvent } from "@/src/lib/analytics";
@@ -28,6 +28,7 @@ import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
 import { db, storage } from "@/src/lib/firebase";
 import ReactMarkdown from "react-markdown";
 import { getAppErrorMessage } from "@/src/lib/errors";
+import { classifyAiFailure, getAiFailureMessage, type AiFailureKind } from "@/src/lib/aiFailure";
 import { loadLocalData, makeSyncId, saveLocalData } from "@/src/lib/localStore";
 import { useBodyScrollLock } from "@/src/lib/useBodyScrollLock";
 import { useDialogFocus } from "@/src/lib/useDialogFocus";
@@ -51,6 +52,9 @@ import {
 } from "@/src/features/notebook/notebookModel";
 import { NotebookSourceDialog, type NotebookSourceTab } from "@/src/features/notebook/NotebookSourceDialog";
 import { NotebookAiPanel } from "@/src/features/notebook/NotebookAiPanel";
+import { useNotebookAiScope } from "@/src/features/notebook/useNotebookAiScope";
+import { summarizeUploadedSource } from "@/src/features/notebook/notebookSourceAnalysis";
+import { createSourceBatch, highlightNotebookSelection, withSingleSourceRequest } from "@/src/features/notebook/sourceBatch";
 import { useLocale } from "@/src/contexts/LocaleContext";
 import type { TutorLanguage } from "@/src/features/tutor/tutorCopy";
 
@@ -69,8 +73,13 @@ export const Notes = () => {
   const [chatInput, setChatInput] = useState("");
   const [isSavingNote, setIsSavingNote] = useState(false);
   const [isAiLoading, setIsAiLoading] = useState(false);
-  const aiRequestRef = useRef(false);
-  const [aiError, setAiError] = useState("");
+  const { aiRequestRef, aiGenerationRef, aiOwnerRef } = useNotebookAiScope(user?.uid, () => {
+    setIsAiLoading(false);
+    setAiError("");
+    setLastAiPrompt("");
+  });
+  const [aiFailure, setAiError] = useState<"" | AiFailureKind>("");
+  const aiError = aiFailure ? getAiFailureMessage(aiFailure, locale) : "";
   const [lastAiPrompt, setLastAiPrompt] = useState("");
   const [isSourceLoading, setIsSourceLoading] = useState(false);
   const [status, setStatus] = useState("");
@@ -81,6 +90,7 @@ export const Notes = () => {
   const sourceDialogRef = useRef<HTMLDivElement>(null);
   const restorePanelFocusRef = useRef<HTMLElement | null>(null);
   const saveNoteRequestRef = useRef(false);
+  const sourceRequestRef = useRef(false);
   const openEditor = () => {
     editorOpenerRef.current = document.activeElement as HTMLElement;
     setMobileView("editor");
@@ -158,9 +168,9 @@ export const Notes = () => {
     if (!user) return;
     cloudLoadedCollectionsRef.current = new Set();
     setLocalReady(false);
-    setNotes([]);
-    setSources([]);
-    setMessages([]);
+    setNotes(loadLocalData<NotebookNote[]>(notesKey, []));
+    setSources(loadLocalData<NotebookSource[]>(sourcesKey, []));
+    setMessages(loadLocalData<NotebookMessage[]>(messagesKey, []));
   }, [messagesKey, notesKey, sourcesKey, user]);
 
   useEffect(() => {
@@ -375,38 +385,17 @@ export const Notes = () => {
     const editor = editorRef.current;
     if (!editor) return;
 
-    const start = editor.selectionStart;
-    const end = editor.selectionEnd;
-    if (start === end) return;
-
-    const selected = draftContent.slice(start, end);
-    const next = `${draftContent.slice(0, start)}==${selected}==${draftContent.slice(end)}`;
-    setDraftContent(next);
+    const next = highlightNotebookSelection(draftContent, editor.selectionStart, editor.selectionEnd);
+    if (next !== null) setDraftContent(next);
   };
 
-  const summarizeUploadedSource = async (file: File, attachment: AiAttachment, extractedText: string) => {
-    return askNotebook(
-      "Create a Noviq Notebook mastery digest for this uploaded source. Include executive summary, key concepts, exam-relevant concepts, important definitions, common mistakes, exam traps, recall questions, application questions, exam-style questions, application-based flashcards, knowledge graph, learning roadmap, weakness opportunities, and revision suggestions.",
-      [
-        notebookStudentContext,
-        `Uploaded source: ${file.name}. This uploaded file has highest source priority for this digest.`,
-        extractedText
-          ? `The uploaded source text is included below.\n\n${extractedText.slice(0, 18000)}`
-          : "The uploaded source is attached as inline data. Read the file and produce a source-grounded mastery digest.",
-      ]
-        .filter(Boolean)
-        .join("\n\n"),
-      "en-US",
-      { attachments: [attachment], retries: 2 }
-    );
-  };
-
-  const handleUploadSources = async (files: FileList | null) => {
+  const handleUploadSources = withSingleSourceRequest(sourceRequestRef, async (files: FileList | null) => {
     if (isReadOnlyAudit) { setStatus(t("notebook.auditUploadDisabled")); return; }
     if (!user || !files?.length) return;
     setIsSourceLoading(true);
     setStatus("");
     const uploadedFiles = Array.from(files);
+    const batch = createSourceBatch(uploadedFiles.length);
     const shouldAwardFirstTextbook =
       uploadedFiles.some(isTextbookUpload) && !profile?.xpAwarded?.[XP_KEYS.firstTextbookUpload];
     let firstTextbookAwardedThisBatch = false;
@@ -429,10 +418,10 @@ export const Notes = () => {
         };
         let summary = "";
         try {
-          summary = await summarizeUploadedSource(file, attachment, extractedText);
+          summary = await summarizeUploadedSource(file, attachment, extractedText, notebookStudentContext, notebookLanguage);
         } catch (err) {
           console.warn("Source digest failed, proceeding without automated digest", err);
-          summary = "(Digest unavailable - the file was saved, but automated source analysis failed.)";
+          summary = t("notebook.digestUnavailable");
         }
 
         const localSource: NotebookSource = {
@@ -448,6 +437,7 @@ export const Notes = () => {
           syncStatus: "pending",
         };
         setSources((current) => [localSource, ...current]);
+        batch.markAdded();
 
         if (shouldAwardFirstTextbook && !firstTextbookAwardedThisBatch && isTextbookUpload(file)) {
           const award = { key: XP_KEYS.firstTextbookUpload, xp: NOVIQ_XP.bonus.firstTextbookUpload };
@@ -488,22 +478,22 @@ export const Notes = () => {
           });
           setSources((current) =>
             current.map((source) =>
-              source.id === localSource.id ? { ...source, downloadURL, syncStatus } : source
+              source.id === localSource.id ? { ...source, downloadURL, syncStatus: downloadURL ? syncStatus : "failed" } : source
             )
           );
-          setCloudSyncBlocked(false);
-          trackUserEvent(user.uid, "notebook_source_uploaded", 0, { sourcesAdded: 1, sourceType: "file" }).catch(() => undefined);
+          setCloudSyncBlocked(syncStatus !== "synced" || !downloadURL);
+          if (downloadURL) trackUserEvent(user.uid, "notebook_source_uploaded", 0, { sourcesAdded: 1, sourceType: "file" }).catch(() => undefined);
         } catch (error) {
           console.warn(getAppErrorMessage(error));
           setCloudSyncBlocked(true);
         }
       } catch (error) {
-        setStatus(error instanceof Error ? error.message : t("notebook.sourceFailed"));
+        setStatus(t("notebook.sourceFailed"));
       }
     }
-    setStatus(t("notebook.sourceAdded"));
+    setStatus(t(batch.messageKey(), batch.values()));
     setIsSourceLoading(false);
-  };
+  });
 
   const fetchWebsiteText = async (url: string) => {
     const parsedUrl = new URL(url);
@@ -521,7 +511,7 @@ export const Notes = () => {
       .trim();
   };
 
-  const handleAddUrlSource = async () => {
+  const handleAddUrlSource = withSingleSourceRequest(sourceRequestRef, async () => {
     if (!user || !sourceUrl.trim()) return;
     setIsSourceLoading(true);
     setStatus("");
@@ -538,7 +528,7 @@ export const Notes = () => {
         ]
           .filter(Boolean)
           .join("\n\n"),
-        "en-US",
+        notebookLanguage,
         { retries: 2 }
       );
       const localSource: NotebookSource = {
@@ -578,13 +568,13 @@ export const Notes = () => {
       setSourceUrl("");
       setShowSourceModal(false);
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : t("notebook.websiteFailed"));
+      setStatus(t("notebook.websiteFailed"));
     } finally {
       setIsSourceLoading(false);
     }
-  };
+  });
 
-  const handleAddYoutubeSource = async () => {
+  const handleAddYoutubeSource = withSingleSourceRequest(sourceRequestRef, async () => {
     if (!user || !youtubeTranscript.trim()) {
       setStatus(t("notebook.transcriptRequired"));
       return;
@@ -603,7 +593,7 @@ export const Notes = () => {
         ]
           .filter(Boolean)
           .join("\n\n"),
-        "en-US",
+        notebookLanguage,
         { retries: 2 }
       );
       const localSource: NotebookSource = {
@@ -644,15 +634,18 @@ export const Notes = () => {
       setYoutubeTranscript("");
       setShowSourceModal(false);
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : t("notebook.transcriptFailed"));
+      setStatus(t("notebook.transcriptFailed"));
     } finally {
       setIsSourceLoading(false);
     }
-  };
+  });
 
   const runNotebookAi = async (prompt: string, saveUserMessage = true) => {
     if (!user || !prompt.trim() || aiRequestRef.current) return;
     prompt = prompt.trim();
+    const generation = aiGenerationRef.current;
+    const requestOwner = user.uid;
+    const isCurrent = () => generation === aiGenerationRef.current && requestOwner === aiOwnerRef.current;
     aiRequestRef.current = true;
     setAiError("");
     setLastAiPrompt(prompt);
@@ -682,11 +675,13 @@ export const Notes = () => {
           merge: true,
         })
           .then((syncStatus) => {
+            if (!isCurrent()) return;
             setMessages((current) => current.map((message) => (message.id === localUserMessage.id ? { ...message, syncStatus } : message)));
             setCloudSyncBlocked(false);
             trackUserEvent(user.uid, "notebook_message_sent", 0, { messagesSent: 1 }).catch(() => undefined);
           })
           .catch((error) => {
+            if (!isCurrent()) return;
             console.warn(getAppErrorMessage(error));
             setCloudSyncBlocked(true);
           });
@@ -697,6 +692,7 @@ export const Notes = () => {
         history: messages.map((message) => ({ role: message.role, content: message.content })),
         retries: 2,
       });
+      if (!isCurrent()) return;
       const localAiMessage: NotebookMessage = {
         id: makeSyncId("message"),
         role: "assistant",
@@ -720,18 +716,23 @@ export const Notes = () => {
         merge: true,
       })
         .then((syncStatus) => {
+          if (!isCurrent()) return;
           setMessages((current) => current.map((message) => (message.id === localAiMessage.id ? { ...message, syncStatus } : message)));
           setCloudSyncBlocked(false);
         })
         .catch((error) => {
+          if (!isCurrent()) return;
           console.warn(getAppErrorMessage(error));
           setCloudSyncBlocked(true);
         });
     } catch (error) {
-      setAiError(error instanceof Error ? error.message : t("notebook.engineFailed"));
+      if (!isCurrent()) return;
+      setAiError(classifyAiFailure(error));
     } finally {
-      aiRequestRef.current = false;
-      setIsAiLoading(false);
+      if (isCurrent()) {
+        aiRequestRef.current = false;
+        setIsAiLoading(false);
+      }
     }
   };
 
@@ -884,7 +885,7 @@ export const Notes = () => {
                 <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">
                   {t("notebook.sourceMeta", { count: sources.length })}
                 </p>
-                {cloudSyncBlocked && (
+                {(cloudSyncBlocked || sources.some(source => source.syncStatus === "failed")) && (
                   <p className="text-xs font-semibold text-amber-300">
                     {t("notebook.cloudWaiting")}
                   </p>
