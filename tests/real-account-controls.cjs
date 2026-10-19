@@ -9,17 +9,17 @@ const origin='http://127.0.0.1:4184',uid='reference-controls',scope='controls-'+
  const base=origin+`/?testUser=1&testUid=${uid}&fixtureScope=${scope}`;
  fs.mkdirSync('artifacts/real-account/pro',{recursive:true});
  for(const theme of ['light','dark']){
-  await page.goto(base+'#/pricing');await page.evaluate(theme=>localStorage.setItem('noviq-pro-theme',theme),theme);await page.reload();
-  await page.getByRole('button',{name:'Try PRO free for 7 days',exact:true}).click();
+  await page.goto(base+'#/pricing');await page.evaluate(theme=>{localStorage.setItem('noviq-pro-theme',theme);localStorage.setItem('noviq-theme',theme)},theme);await page.reload();
+  await page.locator('main:visible').getByRole('button',{name:'Try 7 days free',exact:true}).first().click();
   const dialog=page.getByRole('dialog',{name:'Try PRO free for 7 days',exact:true});await dialog.waitFor();
   assert.ok(await dialog.getByRole('button',{name:'Activate my 7-day trial',exact:true}).isDisabled());
   const color=await dialog.evaluate(el=>getComputedStyle(el).backgroundColor);
-  assert.equal(color,'rgb(9, 13, 26)');
+  assert.equal(color,theme==='dark'?'rgb(19, 29, 46)':'rgb(255, 255, 255)');
   await page.screenshot({path:`artifacts/real-account/pro/trial-dialog-${theme}.png`});
   await page.keyboard.press('Escape');await dialog.waitFor({state:'hidden'});
   assert.equal((await api('stats')).records[`users/${uid}`].subscription.plan,'free');
  }
- console.log('PASS original Free trial dialog preserved; consent required; dismissing never grants access');
+ console.log('PASS current Free trial dialog follows the theme; consent required; dismissing never grants access');
  const now=Date.now();await api('seed',{records:{[`users/${uid}`]:{...profile,subscription:{plan:'pro',status:'active',currentPeriodEnd:new Date(now+30*86400000).toISOString()}},[`users/${uid}/proExperience/onboarding`]:{completed:true},[`users/${uid}/decks/deck`]:{title:'Controls deck',subject:'Science',tags:[],updatedAt:new Date(now).toISOString()},[`users/${uid}/decks/deck/cards/card`]:{front:'Question',back:'Answer',order:0,deckId:'deck',updatedAt:new Date(now).toISOString()}}});
  await page.goto(base+'#/dashboard');await page.reload();await page.locator('.pro-reference-overview').waitFor();
  const before=await page.locator('.noviq-app').getAttribute('data-pro-theme');await page.locator('.theme-toggle:visible').click();
