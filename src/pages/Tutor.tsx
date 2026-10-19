@@ -147,9 +147,11 @@ export const Tutor = ({ setActiveTab }: { setActiveTab: (tab: string) => void })
 
   useEffect(() => {
     if (!user) return;
-    const cloudUsage = profile?.usage?.aiTutor?.[dayKey] || 0;
+    const cloudUsage = profile?.usage?.aiTutor?.[dayKey];
     const localUsage = getLocalDailyUsage(user.uid, "aiTutor", dayKey);
-    setTutorUsage(Math.max(cloudUsage, localUsage));
+    // Server usage can decrease after a correction. A stale browser counter
+    // must not keep blocking requests; the callable enforces the actual limit.
+    setTutorUsage(typeof cloudUsage === 'number' && Number.isFinite(cloudUsage) ? cloudUsage : localUsage);
   }, [dayKey, profile?.usage?.aiTutor, user]);
 
   useEffect(() => {

@@ -2,6 +2,14 @@ const test=require('node:test'),assert=require('node:assert/strict'),fs=require(
 function load(file,deps={}){const exports={};vm.runInNewContext(ts.transpileModule(fs.readFileSync(file,'utf8'),{fileName:file,compilerOptions:{jsx:ts.JsxEmit.React,module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,{exports,require:n=>deps[n]||{},Date,Intl,Map,Set});return exports;}
 const actualModel=load('src/features/planner/smartPlannerModel.ts',{'./smartSchedule':{}});
 const evidence=load('src/features/pro/intelligence.ts',{'@/src/features/planner/smartPlannerModel':actualModel});
+test('membership identity ignores Firestore map order but detects account and entitlement changes',()=>{
+ const {membershipSourceKey:key}=load('src/features/pro/MembershipContext.tsx',{'react':{createContext:()=>({})}});
+ const first={plan:'pro',status:'active',currentPeriodEnd:'2026-12-01T00:00:00.000Z',cancelAtPeriodEnd:false};
+ const reordered=Object.fromEntries(Object.entries(first).reverse());
+ assert.equal(key('alice',first),key('alice',reordered));
+ assert.notEqual(key('alice',first),key('bob',reordered));
+ for(const patch of [{status:'expired'},{plan:'free'},{currentPeriodEnd:'2026-10-01T00:00:00.000Z'},{cancelAtPeriodEnd:true}])assert.notEqual(key('alice',first),key('alice',{...first,...patch}));
+});
 test('learning evidence requires genuine dated attempts and isolates duplicate card IDs across decks',()=>{const now=Date.now(),cards=[{id:'same',deckId:'a',front:'Actual weakness'},{id:'same',deckId:'b',front:'Other deck'}];const attempts=[{cardId:'same',correct:false,at:new Date(now-1000).toISOString()},{cardId:'same',correct:false,at:new Date(now-2000).toISOString()},{cardId:'same',correct:false,at:'bad'}];const e=evidence.learningEvidence(null,cards,()=>({dueAt:new Date(now+1000).toISOString()}),[{deckId:'a',attempts}],now);assert.equal(e.weak.length,1);assert.equal(e.weak[0].card.deckId,'a');assert.equal(e.recent.length,2);assert.equal(e.due.length,0);});
 test('an empty evidence set does not invent confidence, mastery, accuracy or completed work',()=>{const e=evidence.learningEvidence(null,[],()=>({}),[]);assert.equal(e.recent.length,0);assert.equal(e.completed.length,0);assert.equal(e.weak.length,0);assert.equal(e.due.length,0);});
 test('AI deck drafts reject empty, oversized, malformed and blank pairs before saving',()=>{for(const value of ['{}','{"cards":[]}','{"cards":[{"front":"","back":"answer"}]}',JSON.stringify({cards:Array.from({length:13},()=>({front:'a',back:'b'}))})])assert.throws(()=>evidence.validateDeckDraft(value));const rows=evidence.validateDeckDraft('```json\n{"cards":[{"front":" Question ","back":" Answer "}]}\n```');assert.equal(rows[0].front,'Question');assert.equal(rows[0].back,'Answer');});

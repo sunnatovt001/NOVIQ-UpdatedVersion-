@@ -44,9 +44,18 @@ type Value = {
 const Context = createContext<Value | null>(null);
 const premiumStates = new Set(['PRO_ACTIVE', 'PRO_TRIAL', 'PRO_CANCEL_SCHEDULED']);
 
+// Firestore maps are unordered. A profile usage write can deliver identical
+// subscription fields in a different order; that is not an entitlement change.
+export function membershipSourceKey(uid: string | undefined, subscription: SubscriptionState | undefined) {
+  return JSON.stringify([uid, subscription || null], (_key, value) => {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return value;
+    return Object.fromEntries(Object.keys(value).sort().map(key => [key, value[key]]));
+  });
+}
+
 export function MembershipProvider({ children }: { children: React.ReactNode }) {
   const { user, profile } = useAuth(), uid = user?.uid;
-  const sourceKey = JSON.stringify([uid, profile?.subscription || null]);
+  const sourceKey = membershipSourceKey(uid, profile?.subscription);
   const latest = useRef({ uid, sourceKey }); latest.current = { uid, sourceKey };
   const [snapshot, setSnapshot] = useState<{ uid: string; sourceKey: string; value: Access } | null>(null);
   const [busy, setBusy] = useState(false), [error, setError] = useState(false), [tick, setTick] = useState(Date.now());
