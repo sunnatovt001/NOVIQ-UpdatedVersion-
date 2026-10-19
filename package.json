@@ -35,10 +35,13 @@
     "deploy:rules": "npx --yes firebase-tools@15.32.1 deploy --only firestore:ai-studio-b3129ca2-3cf9-4d3f-bf24-5a6d266fe7a1,storage --project gen-lang-client-0937997111",
     "test:browser:server": "node tests/browser-server.mjs",
     "test:browser": "node tests/browser-check.cjs",
-    "test:browser:ci": "node tests/run-browser.mjs",
-    "test:browser:core": "node tests/run-browser.mjs tests/core-browser-batch.cjs",
+    "test:browser:ci": "npm run test:browser:core",
+    "test:browser:core": "node tests/run-fixture.mjs tests/browser-server.mjs 4180 tests/browser-check.cjs tests/core-ai-browser.cjs tests/planner-populated-browser.cjs tests/membership-fallback-browser.cjs",
     "release:check": "node scripts/release-preflight.mjs",
-    "release:check:live": "node scripts/release-preflight.mjs --live"
+    "release:check:live": "node scripts/release-preflight.mjs --live",
+    "test:planner:browser": "node tests/run-fixture.mjs tests/planner21-browser-server.mjs 4182 tests/planner21-persistence-browser.cjs tests/planner21-integration-browser.cjs tests/planner21-experience-browser.cjs",
+    "test:pro:browser": "node tests/run-fixture.mjs tests/real-account-fixture-server.mjs 4184 tests/real-account-controls.cjs tests/real-account-workflows.cjs tests/real-account-data-browser.cjs",
+    "test:entitlements": "npx firebase-tools@15.32.1 emulators:exec --project demo-noviq --config tests/isolation-emulators.json --only auth,firestore \"node tests/run-fixture.mjs tests/entitlement-server.mjs 4184 tests/isolation-security.cjs\""
   },
   "dependencies": {
     "clsx": "^2.1.1",
@@ -54,7 +57,10 @@
     "tailwind-merge": "^3.6.0"
   },
   "overrides": {
-    "@grpc/grpc-js": "^1.14.5"
+    "@grpc/grpc-js": "^1.14.5",
+    "mammoth": {
+      "argparse": "2.0.1"
+    }
   },
   "devDependencies": {
     "@firebase/rules-unit-testing": "^5.0.2",

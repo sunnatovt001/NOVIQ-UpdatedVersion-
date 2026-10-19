@@ -1,0 +1,16 @@
+.git
+.vercel
+node_modules
+**/node_modules
+artifacts
+backups
+design-system
+tests
+*.md
+*.log
+*.err
+.env*
+**/.env*
+functions/*.test.js
+server/tests
+server/scripts

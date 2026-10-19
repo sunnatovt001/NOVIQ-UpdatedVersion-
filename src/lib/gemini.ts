@@ -1,4 +1,4 @@
-import { httpsCallable } from "firebase/functions";
+import { httpsCallable } from "@/src/lib/callable";
 import { auth, functions } from "@/src/lib/firebase";
 import { isReadOnlyAudit, isLocalAi, useDevelopmentAi } from "./auditMode";
 import {requestLocalAi} from "./localAiClient";

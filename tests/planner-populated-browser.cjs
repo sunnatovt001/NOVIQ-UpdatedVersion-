@@ -1,9 +1,10 @@
 const { chromium } = require('playwright');
 const assert = require('node:assert/strict');
 async function switchFeedbackLanguages(page, feedback) {
-  await page.getByRole('button', { name: 'Open menu', exact: true }).click();
-  for (const [currentLabel, nextLocale] of [['Language', 'uz'], ['Til', 'ru'], ['Язык', 'en']]) {
-    await page.getByRole('combobox', { name: currentLabel, exact: true }).selectOption(nextLocale);
+  for (const [label, nextLocale] of [['O‘zbekcha', 'uz'], ['Русский', 'ru'], ['English', 'en']]) {
+    await page.locator('.app-language-trigger:visible').click();
+    await page.getByRole('radio', { name: label, exact: true }).check();
+    await page.keyboard.press('Escape');
     const message = await page.evaluate(async ({ locale, feedback }) => {
       const { getPlannerCopy, formatPlannerText } = await import('/src/features/planner/plannerCopy.ts');
       const { localizePlannerValidation } = await import('/src/features/planner/plannerValidationCopy.ts');
@@ -12,15 +13,14 @@ async function switchFeedbackLanguages(page, feedback) {
     }, { locale: nextLocale, feedback });
     await page.getByText(message, { exact: true }).waitFor();
   }
-  await page.locator('aside').getByRole('button', { name: 'Close menu', exact: true }).click();
 }
 (async () => {
-  const browser = await chromium.launch({ channel: 'chrome', headless: true });
+  const browser = await chromium.launch({ ...(process.env.NOVIQ_BROWSER_CHANNEL === 'chromium' ? {} : {channel: 'chrome'}), headless: true });
   try {
     for (const theme of ['light', 'dark']) for (const locale of ['en', 'uz', 'ru']) {
       const context = await browser.newContext({ viewport: { width: 320, height: 740 }, reducedMotion: 'reduce' });
       const page = await context.newPage();
-      await page.goto('http://127.0.0.1:4180/?testUser=1&testTimer=1#/planner');
+      await page.goto('http://127.0.0.1:4180/?testUser=1&testTimer=1&examMissions=1#/planner');
       await page.locator('main h1').waitFor();
       const labels = await page.evaluate(async ({ locale, theme }) => {
         const engine = await import('/src/features/planner/plannerEngine.ts');
@@ -59,6 +59,7 @@ async function switchFeedbackLanguages(page, feedback) {
           await page.getByRole('button', { name: labels.submitQuiz, exact: true }).click();
           assert.equal(await option.isDisabled(), true);
           if (expectedScore === 0) {
+            await page.waitForFunction(expected => [...document.querySelectorAll('button')].some(button => button.textContent.trim() === 'Option B' && getComputedStyle(button).color === expected), theme === 'dark' ? 'rgb(255, 180, 192)' : 'rgb(163, 36, 58)');
             const colors = await option.evaluate(element => {
               const style = getComputedStyle(element);
               return { foreground: style.color, background: style.backgroundColor };
@@ -78,9 +79,10 @@ async function switchFeedbackLanguages(page, feedback) {
           await page.getByRole('button', { name: labels.startTimer, exact: true }).click();
           await page.getByText(labels.timerStartFailed, { exact: true }).waitFor();
           if (locale === 'en') {
-            await page.getByRole('button', { name: 'Open menu', exact: true }).click();
-            for (const [currentLabel, nextLocale] of [['Language', 'uz'], ['Til', 'ru'], ['Язык', 'en']]) {
-              await page.getByRole('combobox', { name: currentLabel, exact: true }).selectOption(nextLocale);
+            for (const [label, nextLocale] of [['O‘zbekcha', 'uz'], ['Русский', 'ru'], ['English', 'en']]) {
+              await page.locator('.app-language-trigger:visible').click();
+              await page.getByRole('radio', {name:label,exact:true}).check();
+              await page.keyboard.press('Escape');
               const message = await page.evaluate(async locale => {
                 const { getPlannerCopy } = await import('/src/features/planner/plannerCopy.ts');
                 return getPlannerCopy(locale).timerStartFailed;
@@ -88,7 +90,6 @@ async function switchFeedbackLanguages(page, feedback) {
               await page.getByText(message, { exact: true }).waitFor();
               assert.equal(await page.evaluate(() => window.__timerStarts), 1, 'Language change must not start another timer');
             }
-            await page.locator('aside').getByRole('button', { name: 'Close menu', exact: true }).click();
             console.log(`PASS Timer failure translates live EN → UZ → RU → EN in ${theme}`);
           }
           await page.evaluate(() => { window.__timerFail = false; });
@@ -179,12 +180,13 @@ async function switchFeedbackLanguages(page, feedback) {
           const { getPlannerActivityError } = await import('/src/features/planner/plannerActivityErrors.ts');
           return getPlannerActivityError(new Error('Injected AI unavailable'), 'en');
         });
-        await page.goto('http://127.0.0.1:4180/?testUser=1&testAI=unavailable#/planner');
-        await page.getByRole('button', { name: labels.openActivity, exact: true }).nth(3).click();
+        await page.goto('http://127.0.0.1:4180/?testUser=1&testAI=unavailable&examMissions=1#/planner');
+        await page.getByRole('button', { name: new RegExp('^(?:' + labels.openActivity + '|' + labels.continueActivity + ')$') }).last().click();
         await page.getByRole('alert').filter({ hasText: expectedError }).waitFor();
-        await page.getByRole('button', { name: 'Open menu', exact: true }).click();
-        for (const [currentLabel, nextLocale] of [['Language', 'uz'], ['Til', 'ru'], ['Язык', 'en']]) {
-          await page.getByRole('combobox', { name: currentLabel, exact: true }).selectOption(nextLocale);
+        for (const [languageLabel, nextLocale] of [['O‘zbekcha', 'uz'], ['Русский', 'ru'], ['English', 'en']]) {
+          await page.locator('.app-language-trigger:visible').click();
+          await page.getByRole('radio', { name: languageLabel, exact: true }).check();
+          await page.keyboard.press('Escape');
           const localizedError = await page.evaluate(async locale => {
             const { getPlannerActivityError } = await import('/src/features/planner/plannerActivityErrors.ts');
             return getPlannerActivityError(new Error('Injected AI unavailable'), locale);
@@ -192,7 +194,6 @@ async function switchFeedbackLanguages(page, feedback) {
           await page.getByRole('alert').filter({ hasText: localizedError }).waitFor();
           assert.equal(await page.evaluate(() => window.__tutorRequests), 1, 'Changing language must not regenerate the activity');
         }
-        await page.locator('aside').getByRole('button', { name: 'Close menu', exact: true }).click();
         console.log('PASS Existing Planner AI error translates live EN → UZ → RU → EN without another AI request');
         assert.equal(await page.evaluate(() => window.__tutorRequests), 1);
         assert.equal(await page.getByRole('heading', { name: 'Fixture flashcards', exact: true }).count(), 0);
@@ -202,7 +203,7 @@ async function switchFeedbackLanguages(page, feedback) {
         assert.equal(await page.getByRole('heading', { name: 'Fixture flashcards', exact: true }).count(), 0);
         assert.equal(await page.evaluate(() => window.__unexpectedWrites || 0), 0);
         console.log('PASS Planner generation failure and retry use safe guidance without fabricated activity');
-        await page.evaluate(() => history.replaceState(null, '', '?testUser=1&testAI=planner-valid#/planner'));
+        await page.evaluate(() => history.replaceState(null, '', '?testUser=1&testAI=planner-valid&examMissions=1#/planner'));
         await page.getByRole('button', { name: labels.retryActivity, exact: true }).click();
         await page.getByRole('heading', { name: 'Generated fixture flashcards', exact: true }).waitFor();
         await page.getByText(labels.aiGenerated, { exact: true }).waitFor();

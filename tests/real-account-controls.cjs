@@ -1,6 +1,6 @@
 const {chromium}=require('playwright'),assert=require('node:assert/strict'),fs=require('node:fs');
 const origin='http://127.0.0.1:4184',uid='reference-controls',scope='controls-'+Date.now();
-(async()=>{const browser=await chromium.launch({channel:'chrome',headless:true});try{
+(async()=>{const browser=await chromium.launch({...(process.env.NOVIQ_BROWSER_CHANNEL === 'chromium' ? {} : {channel:'chrome'}),headless:true});try{
  const context=await browser.newContext({viewport:{width:1440,height:1000},timezoneId:'Asia/Tashkent'}),page=await context.newPage();
  const errors=[],network=[];page.on('pageerror',e=>errors.push(e.message));page.on('request',r=>{if(/firestore.googleapis.com|cloudfunctions.net|generativelanguage.googleapis.com/.test(r.url()))network.push(r.url());});
  const api=async(action,data={})=>(await context.request.post(origin+'/__planner_fixture',{data:{scope,uid,action,...data}})).json();

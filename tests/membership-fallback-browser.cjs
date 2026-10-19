@@ -1,7 +1,7 @@
 const { chromium } = require('playwright');
 const assert = require('node:assert/strict');
 (async () => {
-  const browser = await chromium.launch({ channel: 'chrome', headless: true });
+  const browser = await chromium.launch({ ...(process.env.NOVIQ_BROWSER_CHANNEL === 'chromium' ? {} : {channel: 'chrome'}), headless: true });
   try {
     const page = await browser.newPage();
     await page.route(/fonts.googleapis.com|fonts.gstatic.com|api.dicebear.com/, route => route.abort());

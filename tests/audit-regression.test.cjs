@@ -565,7 +565,7 @@ test('Planner starts only after server proof, rejects a failed start and ignores
 });
 
 test('AI callable errors provide auth, quota, timeout and malformed-response guidance without keys', () => {
-  const gemini = load('src/lib/gemini.ts', { 'firebase/functions': { httpsCallable: () => () => {} } });
+  const gemini = load('src/lib/gemini.ts', { '@/src/lib/callable': { httpsCallable: () => () => {} } });
   assert.match(gemini.getFriendlyAiError({ code: 'functions/unauthenticated' }), /Sign in/);
   assert.match(gemini.getFriendlyAiError({ code: 'functions/deadline-exceeded' }), /timed out/);
   assert.match(gemini.getFriendlyAiError({ message: 'AI_DAILY_LIMIT' }), /daily AI allowance/);

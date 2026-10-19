@@ -32,7 +32,7 @@ export async function membershipCall<T = Access>(name: string, data: unknown = {
     if (!response.ok) throw Object.assign(new Error('Membership verification failed'),{code:`functions/${result.error||'unavailable'}`});
     return result as T;
   }
-  const [{ httpsCallable }, { functions }] = await Promise.all([import('firebase/functions'), import('@/src/lib/firebase')]);
+  const [{ httpsCallable }, { functions }] = await Promise.all([import('@/src/lib/callable'), import('@/src/lib/firebase')]);
   return (await httpsCallable<unknown, T>(functions, name, { timeout: name === 'getMembershipStatus' ? 8000 : 130000 })(data)).data;
 }
 

@@ -152,7 +152,7 @@ export const recordCheckout = async ({
   void userId;
   void amount; // Price is selected on the server.
   const [{ httpsCallable }, { functions }] = await Promise.all([
-    import("firebase/functions"),
+    import("@/src/lib/callable"),
     import("@/src/lib/firebase"),
   ]);
   const createCheckout = httpsCallable<

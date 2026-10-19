@@ -31,7 +31,7 @@ async function changeLanguage(name) {
 }
 const evaluate=code=>page.evaluate(code);
 async function until(code) {await page.waitForFunction(code,{},{timeout:22000}); return true;}
-const navigate=(query='',route='')=>ab('open',`http://127.0.0.1:4180/${query}${route}`);
+const navigate=(query='',route='')=>ab('open',`http://127.0.0.1:4180/${query}${route === '#/planner' ? '&examMissions=1' : ''}${route}`);
 const textHas=value=>until(`document.body.innerText.toLowerCase().includes(${JSON.stringify(value.toLowerCase())})`);
 const clickText=value=>value==='Exam Planning'?page.locator('.nl-feature-card').first().click():value==='Create account'?page.locator('form button[type=submit]').click():page.getByRole('button',{name:new RegExp('^'+value.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'$','i')}).click();
 async function fit(){assert.equal(await evaluate('document.documentElement.scrollWidth <= innerWidth'),true);}
@@ -39,7 +39,11 @@ const shot=name=>ab('screenshot',`${output}/${name}.png`);
 const passed=[];function record(name){passed.push(name);console.log('PASS',name);}
 if (!process.env.NOVIQ_AUTH_ONLY) {
 await ab('set','viewport','1440','900');
-await navigate('?testUser=1','#/planner');await textHas('Your mentor for today');await fit();await shot('planner-desktop');record('Planner opens on desktop');
+await ab('open','http://127.0.0.1:4180/?testUser=1#/planner');
+await page.getByRole('heading',{name:'Smart Planner',exact:true}).waitFor();
+await page.getByRole('button',{name:'Create my plan',exact:true}).waitFor();
+await page.getByRole('button',{name:'Exam missions & history',exact:true}).click();
+await textHas('Your mentor for today');await fit();await shot('planner-desktop');record('Smart Planner is the default and existing exam missions remain accessible');
 await navigate('?testUser=1','#/tutor');await textHas('your Noviq Tutor');assert.equal(await page.getByRole('combobox',{name:'Tutor language',exact:true}).inputValue(),'en-US');await fit();await shot('tutor-desktop');record('Tutor opens on desktop with English as the default language');
 await ab('set','viewport','390','844');
 await navigate('?testUser=1','#/planner');await textHas('Your mentor for today');await fit();await shot('planner-mobile');
@@ -67,7 +71,7 @@ await navigate('?testUser=1','#/profile');await textHas('Manage your account, st
 // Dialog focus is intentionally scheduled on the next animation frame.
 await page.waitForFunction(() => document.activeElement?.getAttribute('aria-label') === 'Close avatar editor', {}, {timeout:5000});
 assert.equal(await evaluate(`document.activeElement.getAttribute('aria-label')`),'Close avatar editor');assert.equal(await evaluate(`!!document.elementFromPoint(10,10).closest('.noviq-modal-backdrop')`),true);await fit();await shot('profile-avatar-mobile');await ab('press','Escape');await avatarDialog.waitFor({state:'detached'});await page.getByRole('button',{name:'Switch to dark theme',exact:true}).click();assert.equal(await evaluate(`getComputedStyle(document.querySelector('.sync-recovery-card p')).color`),'rgb(23, 32, 51)');await shot('profile-dark-mobile');await page.getByRole('button',{name:'Switch to light theme',exact:true}).click();await evaluate(`localStorage.setItem('noviq-locale','uz')`);await navigate('?testUser=1&localeReload=profile-uz','#/profile');await textHas('Hisob, o‘qish sozlamalari');await fit();await evaluate(`localStorage.setItem('noviq-locale','en')`);record('Profile supports themes, localized copy and keyboard-safe avatar editing');
-await navigate('?testUser=1','#/pricing');await textHas('Simple pricing for focused study.');await fit();assert.equal(await page.getByRole('button',{name:'Monthly',exact:true}).getAttribute('aria-pressed'),'true');assert.equal(await page.getByRole('button',{name:/^Click\s+Uzbekistan$/}).getAttribute('aria-pressed'),'true');await shot('pricing-light-mobile');await ab('set','viewport','320','740');await fit();await shot('pricing-320px');await page.getByRole('button',{name:'Switch to dark theme',exact:true}).click();assert.equal(await evaluate(`getComputedStyle(document.querySelector('h1')).color`),'rgb(248, 250, 252)');await shot('pricing-dark-mobile');await page.getByRole('button',{name:'Switch to light theme',exact:true}).click();await evaluate(`localStorage.setItem('noviq-locale','uz')`);await navigate('?testUser=1&localeReload=pricing-uz','#/pricing');await textHas('Fokusli o‘qish uchun sodda tariflar.');await fit();await evaluate(`localStorage.setItem('noviq-locale','en')`);await ab('set','viewport','390','844');record('Pricing supports themes, 320px, explicit selection states and Uzbek copy');
+await navigate('?testUser=1','#/pricing');await textHas('Give your learning a clear direction.');await fit();assert.equal(await page.getByRole('button',{name:'Monthly',exact:true}).getAttribute('aria-pressed'),'true');await page.getByRole('button',{name:'Yearly',exact:true}).click();assert.equal(await page.getByRole('button',{name:'Yearly',exact:true}).getAttribute('aria-pressed'),'true');await textHas('299,000');await page.getByRole('button',{name:'Monthly',exact:true}).click();await page.locator('.discovery-purchase summary').click();await textHas('Online purchase is currently unavailable. You will not be charged.');await shot('pricing-light-mobile');await ab('set','viewport','320','740');await fit();await shot('pricing-320px');await page.getByRole('button',{name:'Switch to dark theme',exact:true}).click();assert.equal(await evaluate(`getComputedStyle(document.querySelector('h1')).color`),'rgb(248, 250, 252)');await shot('pricing-dark-mobile');await page.getByRole('button',{name:'Switch to light theme',exact:true}).click();await evaluate(`localStorage.setItem('noviq-locale','uz')`);await navigate('?testUser=1&localeReload=pricing-uz','#/pricing');await textHas('O‘qishingizga aniq yo‘nalish bering.');await fit();await evaluate(`localStorage.setItem('noviq-locale','en')`);await ab('set','viewport','390','844');record('Pricing supports themes, 320px, explicit selection states and Uzbek copy');
 await navigate('?testUser=1','#/community');await textHas('Study together, share ideas');await fit();await shot('community-light-mobile');await ab('set','viewport','320','740');await fit();await shot('community-320px');await page.getByRole('button',{name:'Switch to dark theme',exact:true}).click();assert.equal(await evaluate(`getComputedStyle(document.querySelector('h1')).color`),'rgb(248, 250, 252)');await shot('community-dark-mobile');await page.getByRole('button',{name:'Switch to light theme',exact:true}).click();await evaluate(`localStorage.setItem('noviq-locale','uz')`);await navigate('?testUser=1&localeReload=community-uz','#/community');await textHas('Do‘stlaringiz bilan birga o‘qing');await fit();assert.equal(await page.getByRole('heading',{name:'Guruhlarim',exact:true}).count(),1);await evaluate(`localStorage.setItem('noviq-locale','en')`);await ab('set','viewport','390','844');record('Community supports themes, 320px, modular UI and Uzbek copy');
 await navigate('?testUser=1','#/dashboard');await textHas('No mission yet');
 assert.equal(await page.getByRole('button',{name:'Open Saidamin Noviq Tutor',exact:true}).count(),0);
@@ -86,9 +90,9 @@ if (process.env.NOVIQ_CAPTURE_ONLY) return;
 await navigate('?testUser=1&service=pending','#/planner');await textHas('Your saved plan could not be loaded');
 assert.equal(await evaluate(`document.body.innerText.includes('Loading saved planner')`),false);
 await evaluate(`history.replaceState(null,'','?testUser=1&service=ready#/planner')`);await clickText('Try again');await textHas('Your mentor for today');record('Planner silent listener deadline and retry');
-await navigate('?testUser=1&service=pending','#/tutor');await textHas('Saved conversation temporarily unavailable');
+await navigate('?testUser=1&service=pending','#/tutor');await page.locator('.tutor-workspace').waitFor();await textHas('Saved conversation temporarily unavailable');
 await evaluate(`history.replaceState(null,'','?testUser=1&service=ready#/tutor')`);await clickText('Retry history');await until(`!document.body.innerText.includes('Saved conversation temporarily unavailable')`);record('Tutor history deadline and retry');
-await navigate('planner?testUser=1');await textHas('Your mentor for today');record('Direct /planner pathname opens Planner');
+await navigate('planner?testUser=1');await page.getByRole('heading',{name:'Smart Planner',exact:true}).waitFor();record('Direct /planner pathname opens the current Smart Planner');
 for(const scenario of ['import','runtime','hang']) {
   await navigate(`tests/route-recovery.html?case=${scenario}`);await textHas('This page could not be loaded');await clickText('Retry page');await textHas('Recovered page');record(`Route ${scenario} error and retry`);
 }
@@ -123,6 +127,7 @@ assert.deepEqual(runtimeErrors.filter(value=>!value.includes('Injected component
 
 await ab('set','viewport','390','844'); await navigate('?testUser=1','#/profile');
 await textHas('No pending cloud changes'); await fit();
+await page.locator('details').filter({hasText:'No pending cloud changes'}).locator('summary').click();
 assert.equal(await page.getByRole('button',{name:'Import pending changes',exact:true}).count(),1);
 await evaluate(`localStorage.setItem('noviq:offlineSyncQueue:v1',JSON.stringify([{id:'set:users/isolated-browser-user/notes/offline',userId:'isolated-browser-user',path:['users','isolated-browser-user','notes','offline'],kind:'set',data:{title:'Retained offline note'},createdAt:new Date().toISOString(),updatedAt:new Date().toISOString(),attempts:0,status:'pending'}]))`);
 await navigate('?testUser=1','#/planner'); await textHas("1 changes saved on this device"); await fit();

@@ -7,6 +7,13 @@ const client = read('firebase-applet-config.json');
 const functions = read('functions/package.json');
 const failures = [];
 const check = (ok, message) => { if (!ok) failures.push(message); };
+const onVercel = process.argv.includes('--vercel');
+if (onVercel) {
+  const vercel = read('vercel.json');
+  check(fs.existsSync('api/rpc.js'), 'Vercel Firebase backend entry is missing.');
+  check(vercel.installCommand.includes('npm ci --prefix functions'), 'Vercel must install server dependencies.');
+  check(vercel.rewrites.every(rule => rule.source !== '/(.*)'), 'SPA fallback must not capture API requests.');
+}
 check(hosting.functions.runtime === 'nodejs22' && functions.engines.node === '22', 'Functions runtime must match Node.js 22 in both configurations.');
 const databases = Array.isArray(hosting.firestore) ? hosting.firestore : [hosting.firestore];
 check(databases.some(database => database.database === client.firestoreDatabaseId), 'Client and deployed Firestore databases differ.');
@@ -14,7 +21,24 @@ check(fs.existsSync('dist/index.html'), 'Production build missing; run npm run v
 check(hosting.hosting.rewrites.some(r => r.source === '**' && r.destination === '/index.html'), 'Direct SPA routes must rewrite to index.html.');
 check(hosting.hosting.headers.some(r => r.source === '**' && r.headers.some(h => h.key === 'Cache-Control' && h.value === 'no-cache')), 'SPA documents must revalidate to prevent stale chunk references.');
 
-if (process.argv.includes('--live')) {
+if (process.argv.includes('--live') && onVercel) {
+  const index = process.argv.indexOf('--url');
+  const origin = index >= 0 ? process.argv[index + 1] : '';
+  check(/^https:\/\/[a-zA-Z0-9.-]+$/.test(origin), 'Pass --url https://your-production-domain for live Vercel verification.');
+  if (origin) {
+    try {
+      check((await fetch(origin, { signal: AbortSignal.timeout(20000) })).ok, 'Production page is unavailable.');
+      for (const token of ['', 'invalid-release-check-token']) {
+        const response = await fetch(`${origin}/api/rpc?name=getMembershipStatus`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json', ...(token ? {Authorization:`Bearer ${token}`} : {}) },
+          body: JSON.stringify({data:{}}), signal: AbortSignal.timeout(30000),
+        });
+        const body = await response.json();
+        check(response.status === 401 && body.error?.status === 'UNAUTHENTICATED', 'Firebase backend must reject anonymous/forged tokens using the callable protocol.');
+      }
+    } catch { check(false, 'Live Vercel backend verification failed.'); }
+  }
+} else if (process.argv.includes('--live')) {
   if (!process.argv.includes('--backend-only')) {
     const domain = new URL(read('package.json').homepage).hostname;
     try { await resolve(domain); } catch { check(false, `Primary domain does not resolve in DNS: ${domain}`); }
@@ -42,4 +66,4 @@ if (process.argv.includes('--live')) {
 if (failures.length) {
   for (const message of failures) console.error(`BLOCKED: ${message}`);
   process.exitCode = 1;
-} else console.log('Release configuration checks passed. Auth/domain, backup restore and provider smoke checks remain required (see LAUNCH_READINESS.md).');
+} else console.log('Release configuration checks passed. Authenticated provider smoke tests are a separate check (see LAUNCH_READINESS.md).');

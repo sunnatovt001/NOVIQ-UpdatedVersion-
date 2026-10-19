@@ -1,7 +1,7 @@
 import { isLocalId, loadLocalData, saveLocalData } from "@/src/lib/localStore";
 import { writeDocWithQueue, type SyncStatus } from "@/src/lib/offlineSync";
 import type { StudySession, UserProfile } from "@/src/types";
-import { httpsCallable } from "firebase/functions";
+import { httpsCallable } from "@/src/lib/callable";
 import { functions } from "@/src/lib/firebase";
 import { isReadOnlyAudit } from "./auditMode";
 import { NOVIQ_XP, studySessionsKey, buildDailyActivityPatch, buildXpAwardPatch, getLocalDayKey } from "./progressMath";

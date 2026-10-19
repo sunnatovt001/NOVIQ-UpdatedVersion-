@@ -7,7 +7,7 @@ const origin = 'http://127.0.0.1:4184', uid = 'visual-reference-user', scope = '
 const model={};
 vm.runInNewContext(ts.transpileModule(fs.readFileSync('src/features/planner/smartPlannerModel.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,{exports:model,require:()=>({}),Date,Intl,crypto:require('node:crypto').webcrypto});
 (async()=>{
- const browser=await chromium.launch({channel:'chrome',headless:true});
+ const browser=await chromium.launch({...(process.env.NOVIQ_BROWSER_CHANNEL === 'chromium' ? {} : {channel:'chrome'}),headless:true});
  try{
   const context=await browser.newContext({viewport:{width:1600,height:1100},timezoneId:'Asia/Tashkent'}),page=await context.newPage();
   const errors=[],production=[];page.on('pageerror',e=>errors.push(e.message));page.on('request',r=>{if(/firestore.googleapis.com|cloudfunctions.net|generativelanguage.googleapis.com/.test(r.url()))production.push(r.url());});

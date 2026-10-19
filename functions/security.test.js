@@ -160,7 +160,7 @@ function harness(env = {}, overrides = {}) {
   }
   const handler = (...args) => args.at(-1);
   const services = {
-    "firebase-admin": { initializeApp() {}, auth: () => ({}) },
+    "firebase-admin": { apps: [], initializeApp() {}, auth: () => ({}) },
     "firebase-admin/firestore": {
       getFirestore: () => db,
       FieldValue: {

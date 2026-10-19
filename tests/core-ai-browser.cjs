@@ -6,7 +6,7 @@ const copy = {
   ru: { tutorRetry: 'Повторить ответ', create: 'Создать заметку', send: 'Отправить', ask: 'Спросить Notebook AI', panel: 'Панель Notebook AI', retry: 'Повторить ответ AI' },
 };
 (async () => {
-  const browser = await chromium.launch({ channel: 'chrome', headless: true });
+  const browser = await chromium.launch({ ...(process.env.NOVIQ_BROWSER_CHANNEL === 'chromium' ? {} : {channel: 'chrome'}), headless: true });
   try {
     for (const theme of ['light', 'dark']) for (const locale of ['en', 'uz', 'ru']) {
       const context = await browser.newContext({ viewport: { width: 320, height: 740 }, reducedMotion: 'reduce' });

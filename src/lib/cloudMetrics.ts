@@ -1,4 +1,4 @@
-import { httpsCallable } from "firebase/functions";
+import { httpsCallable } from "@/src/lib/callable";
 import { functions } from "./firebase";
 export const serverMetricsEnabled = import.meta.env.VITE_SERVER_METRICS_ENABLED === "true";
 type Summary = {

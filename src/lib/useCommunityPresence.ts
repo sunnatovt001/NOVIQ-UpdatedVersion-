@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { httpsCallable } from "firebase/functions";
+import { httpsCallable } from "@/src/lib/callable";
 import { functions } from "./firebase";
 import { isReadOnlyAudit } from "./auditMode";
 

@@ -10,29 +10,42 @@ permissions:
 jobs:
   verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: 22
           cache: npm
           cache-dependency-path: |
             package-lock.json
             functions/package-lock.json
-      - uses: actions/setup-java@v4
+            server/package-lock.json
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
         with:
           distribution: temurin
           java-version: 21
       - run: npm ci
       - run: npm ci --prefix functions
+      - run: npm ci --prefix server
+      - run: npm audit
+      - run: npm audit --prefix functions
+      - run: npm audit --prefix server
+      - run: npm --prefix server test
       - run: npm run verify
       - run: npm run test:rules
+      - run: npm run test:entitlements
       - run: npx playwright install --with-deps chromium
       - run: npm run test:browser:ci
         env:
           NOVIQ_BROWSER_CHANNEL: chromium
-      - uses: actions/upload-artifact@v4
+      - run: npm run test:planner:browser
+        env:
+          NOVIQ_BROWSER_CHANNEL: chromium
+      - run: npm run test:pro:browser
+        env:
+          NOVIQ_BROWSER_CHANNEL: chromium
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         if: always()
         with:
           name: production-audit

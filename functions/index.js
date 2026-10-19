@@ -24,7 +24,7 @@ const {
   nextBillingDate,
 } = require("./policy");
 
-admin.initializeApp();
+if (!admin.apps.length) admin.initializeApp();
 
 const REGION = process.env.FUNCTIONS_REGION || "us-central1";
 const FIRESTORE_DATABASE =
@@ -98,7 +98,7 @@ const isNotificationPreferenceEnabled = (user, key) =>
 const TUTOR_MODEL = "gemini-3.5-flash-lite";
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || "";
 const GEMINI_MODELS = [
-  ...String(process.env.GEMINI_MODELS || "gemini-3.8-flash").split(",").map((model) => model.trim()).filter((model) => /^[a-zA-Z0-9._-]+$/.test(model)),
+  ...String(process.env.GEMINI_MODELS || "gemini-3.5-flash,gemini-3.1-flash-lite").split(",").map((model) => model.trim()).filter((model) => /^[a-zA-Z0-9._-]+$/.test(model)),
 ];
 
 const normalizeGeminiContents = (contents) => {
@@ -112,9 +112,11 @@ const normalizeGeminiContents = (contents) => {
 const normalizeGeminiConfig = (config, tutor = false) => {
   if (!config || typeof config !== "object") return {};
   const { systemInstruction, responseMimeType, responseSchema } = config;
+  const instruction = typeof systemInstruction === 'string' ? systemInstruction :
+    Array.isArray(systemInstruction?.parts) ? systemInstruction.parts.map(part => typeof part?.text === 'string' ? part.text : '').join('\n') : undefined;
   return {
     systemInstruction:
-      typeof systemInstruction === "string" ? systemInstruction : undefined,
+      instruction,
     generationConfig: {
       maxOutputTokens: tutor ? 4096 : 8192,
       ...(tutor ? { thinkingConfig: { thinkingLevel: "minimal" } } : {}),

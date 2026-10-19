@@ -31,7 +31,7 @@ const server=await createServer({mode:'audit',server:{host:'127.0.0.1',port:4182
  resolveId(id){if(id==='firebase/firestore')return '\0planner-firestore';if(id==='firebase/functions')return '\0planner-functions';},
  load(id){if(id==='\0planner-firestore')return mock;if(id==='\0planner-functions')return `export const getFunctions=()=>({});export const httpsCallable=()=>async()=>{throw Object.assign(new Error('Isolated callable unavailable'),{code:'functions/unavailable'})};`;},
  transform(code,id){const p=id.replaceAll('\\','/');
-   if(p.endsWith('/src/lib/auditMode.ts'))return `export const isReadOnlyAudit=false,isLocalAi=false,useDevelopmentAi=false;`;
+   if(p.endsWith('/src/lib/auditMode.ts'))return `export const isReadOnlyAudit=false,isLocalAi=false,useDevelopmentAi=false,useLocalMembership=false;`;
    if(p.endsWith('/src/contexts/AuthContext.tsx'))return `import React from 'react';const params=new URLSearchParams(location.search);const signed=params.has('testUser');const value={user:signed?{uid:params.get('testUid') || 'isolated-browser-user'}:null,profile:signed?{displayName:'Planner Test',onboarded:true,onboardingAnswers:{mainGoal:'IELTS',userType:'student',struggle:'focus'},goals:[],xp:0,settings:{}}:null,loading:false,authError:'',isAdmin:false,signOut:async()=>{},completeOnboarding:async()=>{},updateLocalProfile:()=>{}};export const useAuth=()=>value;export const AuthProvider=({children})=>children;`;
    if(p.endsWith('/src/lib/analytics.ts'))return `export const trackSiteVisit=async()=>{},trackUserEvent=async()=>{};`;
  },

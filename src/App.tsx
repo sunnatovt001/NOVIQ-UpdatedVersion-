@@ -156,14 +156,14 @@ const AppContent = () => {
   const pageName = activeTab.charAt(0).toUpperCase() + activeTab.slice(1);
   const name = pageLoaders[pageName] ? pageName : "Dashboard";
   return (
-    <>
-      {!membership.available && membership.error && <div role="alert" className="relative z-[500] flex flex-wrap items-center justify-center gap-3 border-b border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-950">
-        <span>{membershipFailureMessage(membership.failure, locale)}</span><button className="min-h-11 px-3 underline" onClick={() => void membership.refresh()}>{proCopy.retry}</button>
-      </div>}
       <RoutePage key={`${user.uid}:${premium ? 'pro' : 'free'}`} loader={premium ? loadLayout : loadFreeLayout} name="Layout" pageProps={{ activeTab, setActiveTab,
-        children: <RoutePage key={name} loader={!premium && freePageLoaders[name] ? freePageLoaders[name] : pageLoaders[name]} name={name} pageProps={{ setActiveTab }} />,
+        children: <>
+          {!membership.available && membership.error && <div role="alert" className="flex shrink-0 flex-wrap items-center justify-center gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-950">
+            <span>{membershipFailureMessage(membership.failure, locale)}</span><button className="min-h-11 px-3 underline" onClick={() => void membership.refresh()}>{proCopy.retry}</button>
+          </div>}
+          <RoutePage key={name} loader={!premium && freePageLoaders[name] ? freePageLoaders[name] : pageLoaders[name]} name={name} pageProps={{ setActiveTab }} />
+        </>,
       }} />
-    </>
   );
 };
 

@@ -20,7 +20,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/src/lib/utils";
 import { doc, updateDoc } from "firebase/firestore";
-import { httpsCallable } from "firebase/functions";
+import { httpsCallable } from "@/src/lib/callable";
 import { db, functions, storage } from "@/src/lib/firebase";
 import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
 import { updateProfile } from "firebase/auth";

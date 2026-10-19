@@ -1,6 +1,6 @@
 const {chromium}=require('playwright'),assert=require('node:assert/strict');
 const origin='http://127.0.0.1:4182',uid='isolated-browser-user',scope='planner-persistence-'+Date.now();
-(async()=>{const browser=await chromium.launch({channel:'chrome',headless:true});try{
+(async()=>{const browser=await chromium.launch({...(process.env.NOVIQ_BROWSER_CHANNEL === 'chromium' ? {} : {channel:'chrome'}),headless:true});try{
  const context=await browser.newContext({viewport:{width:1440,height:1000},timezoneId:'Asia/Tashkent'}),page=await context.newPage(),errors=[],requests=[];
  page.on('pageerror',e=>errors.push(e.message));page.on('request',r=>{if(/firestore.googleapis.com|cloudfunctions.net/.test(r.url()))requests.push(r.url());});
  const base=origin+`/?testUser=1&fixtureScope=${scope}`,sp=page.locator('.smart-planner');

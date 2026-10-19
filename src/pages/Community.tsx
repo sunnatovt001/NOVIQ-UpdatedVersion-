@@ -30,7 +30,7 @@ import {
   type DocumentData,
   type QueryDocumentSnapshot,
 } from "firebase/firestore";
-import { httpsCallable } from "firebase/functions";
+import { httpsCallable } from "@/src/lib/callable";
 import { sendEmailVerification } from "firebase/auth";
 import { db, functions } from "@/src/lib/firebase";
 import { useAuth } from "@/src/contexts/AuthContext";
