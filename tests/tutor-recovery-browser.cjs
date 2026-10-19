@@ -1,6 +1,8 @@
 const {chromium}=require('playwright');
 const assert=require('node:assert/strict');
 const origin='http://127.0.0.1:4184',uid='tutor-recovery-user',scope='tutor-recovery-'+Date.now();
+const pro=process.env.NOVIQ_TEST_PRO==='1';
+const subscription=pro?{plan:'pro',status:'active',currentPeriodEnd:new Date(Date.now()+86400000*30).toISOString()}:{plan:'free',status:'active'};
 (async()=>{
  const browser=await chromium.launch({channel:'chrome',headless:true});
  try{
@@ -9,7 +11,7 @@ const origin='http://127.0.0.1:4184',uid='tutor-recovery-user',scope='tutor-reco
   await context.route(/fonts.googleapis.com|fonts.gstatic.com|api.dicebear.com/,r=>r.abort());
   const day=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Tashkent',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
   await context.addInitScript(({uid,day})=>{localStorage.setItem(`noviq:${uid}:usage:aiTutor:${day}`,'100');window.SpeechRecognition=class{constructor(){throw new Error('Voice blocked by browser policy');}};},{uid,day});
-  await context.request.post(origin+'/__planner_fixture',{data:{action:'seed',uid,scope,records:{['users/'+uid]:{uid,displayName:'Tutor regression',onboarded:true,onboardingAnswers:{mainGoal:'Math',userType:'student',struggle:'focus'},settings:{},usage:{aiTutor:{[day]:0}},subscription:{plan:'free',status:'active'}}}}});
+  await context.request.post(origin+'/__planner_fixture',{data:{action:'seed',uid,scope,records:{['users/'+uid]:{uid,displayName:'Tutor regression',onboarded:true,onboardingAnswers:{mainGoal:'Math',userType:'student',struggle:'focus'},settings:{},usage:{aiTutor:{[day]:0}},subscription}}}});
   await page.goto(origin+`/?testUser=1&testUid=${uid}&fixtureScope=${scope}#/tutor`);
   const input=page.locator('textarea').first();await input.waitFor();await input.fill('Keep this draft while checking membership');
   let releaseMembership,releaseAi,seenMembership,seenAi;
@@ -23,14 +25,22 @@ const origin='http://127.0.0.1:4184',uid='tutor-recovery-user',scope='tutor-reco
   await input.fill('Explain the addition of two numbers');await input.press('Enter');await aiSeen;
   // Firestore can return the same map in a different key order after the AI
   // usage write updates the profile. This must not invalidate membership.
-  await context.request.post(origin+'/__planner_fixture',{data:{action:'set',uid,scope,path:'users/'+uid,merge:true,value:{usage:{aiTutor:{today:1}},subscription:{status:'active',plan:'free'}}}});
+  await context.request.post(origin+'/__planner_fixture',{data:{action:'set',uid,scope,path:'users/'+uid,merge:true,value:{usage:{aiTutor:{today:1}},subscription:Object.fromEntries(Object.entries(subscription).reverse())}}});
   await page.waitForTimeout(750);
   assert.equal(await input.count(),1,'Profile usage update must not replace Tutor with membership loading');
   await page.evaluate(()=>document.dispatchEvent(new Event('visibilitychange')));
   await page.waitForTimeout(300);releaseAi();
   await page.getByText('A fixture coaching response grounded in the supplied learning evidence.',{exact:true}).waitFor({timeout:20000});
+  if(pro){
+   for(const mode of ['coach','practice','mistake']){
+    await page.getByRole('combobox',{name:'Ask Tutor',exact:true}).selectOption(mode);
+    await input.fill('Explain addition in '+mode+' mode');await input.press('Enter');
+    const expected=['coach','practice','mistake'].indexOf(mode)+2;
+    await page.waitForFunction(n=>[...document.querySelectorAll('p')].filter(e=>e.textContent==='A fixture coaching response grounded in the supplied learning evidence.').length===n,expected,{timeout:20000});
+   }
+  }
   assert.equal(await page.getByRole('button',{name:/Reload app|Qayta yuklash/i}).count(),0);
   assert.deepEqual(errors,[]);
-  console.log('PASS corrected server usage overrides stale cache; reordered Firestore profile and tab revalidation retain pending AI reply; blocked voice APIs preserve text Tutor');
+  console.log('PASS '+(pro?'PRO Standard, Coach, Practice, Explain: ':'Free: ')+'corrected server usage overrides stale cache; reordered Firestore profile and tab revalidation retain pending AI reply; blocked voice APIs preserve text Tutor');
  }finally{await browser.close();}
 })().catch(e=>{console.error(e);process.exitCode=1;});
