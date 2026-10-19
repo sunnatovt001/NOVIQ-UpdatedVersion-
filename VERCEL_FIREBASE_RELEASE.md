@@ -24,7 +24,8 @@ current Spark project without upgrading billing. Billing was not upgraded.
 ## Deployment
 
 Canonical source: `sunnatovt001/NOVIQ-UpdatedVersion-`.
-Production URL: https://noviq-saidamins-projects-aa9c99df.vercel.app
+Production URL: https://noviq-delta.vercel.app
+Additional production alias: https://noviq-saidamins-projects-aa9c99df.vercel.app
 
 Vercel production requires `FIREBASE_SERVICE_ACCOUNT_JSON`, `GEMINI_API_KEY`,
 `GEMINI_MODELS`, `FIRESTORE_DATABASE` and `GOOGLE_CLOUD_PROJECT`.
