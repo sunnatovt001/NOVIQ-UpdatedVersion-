@@ -1,4 +1,9 @@
+import {useStudyEvidence,type StudyEvidence} from '@/src/features/pro/useStudyEvidence';
+import {activityDay,actualDuration} from '@/src/features/pro/activitySummary';
+import {ReferenceActivityRail} from '@/src/features/pro/ReferenceActivityRail';
+import {ProEntry} from '@/src/features/pro/ProEntry';
 import React, { useEffect, useMemo, useState } from "react";
+import { SmartPlannerInsights } from '@/src/features/planner/SmartPlannerInsights';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, PieChart, Pie, Cell } from "recharts";
 import { MeasuredChart } from "@/src/components/MeasuredChart";
 import { isMeaningfulSession, missionCompletion } from "@/src/lib/activityEvidence";
@@ -17,29 +22,16 @@ import { formatAnalyticsCopy, getAnalyticsCopy } from "@/src/features/analytics/
 const COLORS = ["#315EFB", "#5B7CFA", "#829AF8", "#A8B9F5"];
 const DAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
-type AnalyticsStudySession = StudySession & { id: string };
+type AnalyticsStudySession = StudyEvidence;
 
 const timestampToIso = (value: unknown) => recordDate(value)?.toISOString() || "";
 
-const formatDuration = (seconds: number, locale: AppLocale = "en") => {
-  const minutes = Math.round(Math.max(0, seconds) / 60);
-  const hourUnit = locale === "uz" ? "soat" : locale === "ru" ? "ч" : "h";
-  const minuteUnit = locale === "uz" ? "daq" : locale === "ru" ? "мин" : "m";
-  if (minutes >= 60) {
-    const hours = Math.floor(minutes / 60);
-    const remainingMinutes = minutes % 60;
-    return remainingMinutes ? `${hours} ${hourUnit} ${remainingMinutes} ${minuteUnit}` : `${hours} ${hourUnit}`;
-  }
-  return `${minutes} ${minuteUnit}`;
-};
+const formatDuration = actualDuration;
 
 const getWeekStart = (weekOffset = 0) => {
-  const now = new Date();
-  const mondayOffset = (now.getDay() + 6) % 7;
-  const start = new Date(now);
-  start.setHours(0, 0, 0, 0);
-  start.setDate(now.getDate() - mondayOffset + weekOffset * 7);
-  return start;
+  const day=new Date(activityDay(new Date().getTime())+'T00:00:00Z');
+  day.setUTCDate(day.getUTCDate()-((day.getUTCDay()+6)%7)+weekOffset*7);
+  return day;
 };
 
 const buildWeeklyData = (sessions: AnalyticsStudySession[], weekOffset = 0) => {
@@ -47,9 +39,9 @@ const buildWeeklyData = (sessions: AnalyticsStudySession[], weekOffset = 0) => {
 
   return DAY_LABELS.map((name, index) => {
     const date = new Date(weekStart);
-    date.setDate(weekStart.getDate() + index);
-    const dayKey = getLocalDayKey(date);
-    const daySessions = sessions.filter((session) => getLocalDayKey(session.timestamp) === dayKey);
+    date.setUTCDate(weekStart.getUTCDate() + index);
+    const dayKey = date.toISOString().slice(0,10);
+    const daySessions = sessions.filter((session) => activityDay(Date.parse(session.timestamp)) === dayKey);
     const seconds = daySessions.reduce((total, session) => total + session.duration, 0);
 
     return {
@@ -72,7 +64,7 @@ const buildHeatmapData = (sessions: AnalyticsStudySession[], dailyTargetMinutes:
     const date = new Date();
     date.setDate(date.getDate() - 34 + index);
     const dayKey = getLocalDayKey(date);
-    const minutes = Math.round((totalsByDay.get(dayKey) || 0) / 60);
+    const minutes = (totalsByDay.get(dayKey) || 0) / 60;
     const intensity = minutes <= 0 ? 0 : Math.min(4, Math.ceil((minutes / Math.max(dailyTargetMinutes, 1)) * 4));
 
     return { dayKey, minutes, intensity };
@@ -106,53 +98,12 @@ export const Analytics = ({ setActiveTab }: { setActiveTab?: (t: string) => void
   const { locale } = useLocale();
   const copy = useMemo(() => getAnalyticsCopy(locale), [locale]);
   const activityMetrics = useUserActivityMetrics(user?.uid);
-  const [studySessions, setStudySessions] = useState<AnalyticsStudySession[]>([]);
-  const [weekOffset, setWeekOffset] = useState(0);
-  const [sessionError, setSessionError] = useState("");
-  const [sessionLoading, setSessionLoading] = useState(true);
-  const [sessionRevision, setSessionRevision] = useState(0);
-
-  useEffect(() => {
-    if (!user) {
-      setStudySessions([]);
-      return;
-    }
-
-    const sessionsQuery = query(
-      collection(db, "users", user.uid, "studySessions"),
-      orderBy("timestamp", "desc"),
-      limit(300)
-    );
-    setSessionLoading(true);
-    setSessionError("");
-    return onSnapshot(
-      sessionsQuery,
-      (snapshot) => {
-        setStudySessions(
-          snapshot.docs.map((doc) => {
-            const data = doc.data() as any;
-            return {
-              id: doc.id,
-              userId: data.userId || user.uid,
-              duration: Number(data.duration) || 0,
-              subject: data.subject || "Study",
-              category: data.category || "focus",
-              xpEarned: Number(data.xpEarned) || 0,
-              status: data.status,
-              timestamp: timestampToIso(data.timestamp) || timestampToIso(data.createdAt),
-            } as AnalyticsStudySession;
-          }).filter(isMeaningfulSession)
-        );
-        setSessionLoading(false);
-      },
-      (error) => {
-        console.warn("Analytics session listener failed", error);
-        setSessionError(copy.historyError);
-        setSessionLoading(false);
-      }
-    );
-  }, [copy.historyError, user?.uid, sessionRevision]);
-
+  const evidence=useStudyEvidence(user?.uid,300);
+  const [weekOffset,setWeekOffset]=useState(0);
+  const studySessions=evidence.records;
+  const sessionError=evidence.error?copy.historyError:'';
+  const sessionLoading=!evidence.ready;
+  const dataReady=evidence.ready&&!evidence.error;
   const dailyTargetMinutes = profile?.dailyTargetMinutes || 30;
   const weeklyData = useMemo(
     () => buildWeeklyData(studySessions, weekOffset).map((day, index) => ({ ...day, name: copy.dayLabels[index] })),
@@ -210,9 +161,12 @@ export const Analytics = ({ setActiveTab }: { setActiveTab?: (t: string) => void
   ];
 
   return (
-    <div className="space-y-8 px-0 pb-24 text-slate-950 dark:text-slate-50 sm:space-y-10">
+    <div className="pro-analytics-workspace space-y-8 px-0 pb-24 text-slate-950 dark:text-slate-50 sm:space-y-10">
+      <div className="flex justify-end"><ProEntry area="reports"/></div>
+      <SmartPlannerInsights />
+      {evidence.deviceSeconds>0 && <p role="status">{locale==='uz'?'Qurilmada saqlangan faoliyat ham kiritilgan.':locale==='ru'?'Включена активность, сохранённая на устройстве.':'Includes activity saved only on this device.'}</p>}
       {sessionLoading && <p role="status" className="text-sm font-medium text-slate-600 dark:text-slate-300">{copy.loading}</p>}
-      {(sessionError || activityMetrics.error) && <div role="alert" className="rounded-2xl border border-amber-300 bg-amber-50 p-4 text-sm font-medium text-amber-900 dark:border-amber-500/30 dark:bg-amber-950/30 dark:text-amber-100">{sessionError || activityMetrics.error} <button type="button" className="ml-2 min-h-11 font-bold underline underline-offset-4" onClick={() => { setSessionRevision((current) => current + 1); activityMetrics.retry(); }}>{copy.retry}</button></div>}
+      {(sessionError || activityMetrics.error) && <div role="alert" className="rounded-2xl border border-amber-300 bg-amber-50 p-4 text-sm font-medium text-amber-900 dark:border-amber-500/30 dark:bg-amber-950/30 dark:text-amber-100">{sessionError || activityMetrics.error} <button type="button" className="ml-2 min-h-11 font-bold underline underline-offset-4" onClick={() => { evidence.retry(); activityMetrics.retry(); }}>{copy.retry}</button></div>}
       <header className="flex flex-col xl:flex-row xl:items-center justify-between gap-8">
         <div className="space-y-3">
           <div className="flex items-center gap-2">
@@ -229,28 +183,29 @@ export const Analytics = ({ setActiveTab }: { setActiveTab?: (t: string) => void
            </div>
            <div className="min-w-[140px] flex-1 rounded-2xl border border-slate-200 bg-white px-6 py-4 dark:border-slate-700 dark:bg-slate-900">
               <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400">{levelName}</p>
-              <p className="text-xl font-bold leading-none text-slate-950 [font-variant-numeric:tabular-nums] dark:text-white sm:text-2xl">{activityMetrics.level}</p>
+              <p className="text-xl font-bold leading-none text-slate-950 [font-variant-numeric:tabular-nums] dark:text-white sm:text-2xl">{activityMetrics.loading||activityMetrics.error?'—':activityMetrics.level}</p>
            </div>
         </div>
       </header>
 
+      <ReferenceActivityRail/>
       {/* Hero Stats */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="pro-analytics-metrics grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {metricCards.map((s) => (
           <article key={s.label} className="relative overflow-hidden rounded-3xl border border-slate-200 bg-white p-6 dark:border-slate-700 dark:bg-slate-900">
             <div className="relative z-10 mb-6 flex items-start justify-between gap-3">
               <div className={cn("p-2.5 sm:p-3 rounded-xl sm:rounded-2xl", s.bg, s.color)}>
                 <s.icon size={20} aria-hidden="true" />
               </div>
-              <span className="max-w-[11rem] text-right text-[10px] font-bold leading-4 text-slate-500 dark:text-slate-400">{s.trend}</span>
+              <span className="max-w-[11rem] text-right text-[10px] font-bold leading-4 text-slate-500 dark:text-slate-400">{dataReady ? s.trend : sessionLoading ? copy.loading : copy.historyError}</span>
             </div>
             <p className="mb-2 text-[10px] font-black uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">{s.label}</p>
-            <p className="font-display text-2xl font-bold text-slate-950 [font-variant-numeric:tabular-nums] dark:text-white sm:text-3xl">{s.value}</p>
+            <p className="font-display text-2xl font-bold text-slate-950 [font-variant-numeric:tabular-nums] dark:text-white sm:text-3xl">{dataReady && (s.icon===Clock || s.icon===Zap || !activityMetrics.loading&&!activityMetrics.error) ? s.value : '—'}</p>
           </article>
         ))}
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
+      <div className="pro-analytics-charts grid grid-cols-1 xl:grid-cols-3 gap-8">
         {/* Activity Chart */}
         <section className="rounded-3xl border border-slate-200 bg-white p-6 dark:border-slate-700 dark:bg-slate-900 sm:p-8 xl:col-span-2">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6 mb-8 sm:mb-10">
@@ -263,7 +218,7 @@ export const Analytics = ({ setActiveTab }: { setActiveTab?: (t: string) => void
                <option value={-1}>{copy.lastWeek}</option>
             </select>
           </div>
-          
+
           <div className="h-[250px] sm:h-[300px] w-full mt-4">
             <MeasuredChart>
               <AreaChart data={weeklyData}>
@@ -274,32 +229,32 @@ export const Analytics = ({ setActiveTab }: { setActiveTab?: (t: string) => void
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--noviq-border)" />
-                <XAxis 
-                  dataKey="name" 
-                  axisLine={false} 
-                  tickLine={false} 
+                <XAxis
+                  dataKey="name"
+                  axisLine={false}
+                  tickLine={false}
                   tick={{ fill: "var(--noviq-muted)", fontSize: 11, fontWeight: 700 }}
                   dy={15}
                 />
-                <YAxis 
-                  axisLine={false} 
-                  tickLine={false} 
+                <YAxis
+                  axisLine={false}
+                  tickLine={false}
                   tick={{ fill: "var(--noviq-muted)", fontSize: 11, fontWeight: 700 }}
                   dx={-10}
                 />
-                <Tooltip 
+                <Tooltip
                   formatter={(value) => [`${value}`, copy.hours]}
                   contentStyle={{ backgroundColor: "var(--noviq-card)", color: "var(--noviq-text)", border: "1px solid var(--noviq-border)", borderRadius: "16px", padding: "12px", boxShadow: "0 12px 28px rgba(15,23,42,0.14)" }}
                   itemStyle={{ color: "var(--noviq-accent)", fontWeight: "bold" }}
                   cursor={{ stroke: 'var(--noviq-accent)', strokeWidth: 2 }}
                 />
-                <Area 
-                  type="monotone" 
-                  dataKey="hours" 
-                  stroke="#3b82f6" 
+                <Area
+                  type="monotone"
+                  dataKey="hours"
+                  stroke="#3b82f6"
                   strokeWidth={4}
-                  fillOpacity={1} 
-                  fill="url(#colorHours)" 
+                  fillOpacity={1}
+                  fill="url(#colorHours)"
                 />
               </AreaChart>
             </MeasuredChart>
@@ -307,23 +262,23 @@ export const Analytics = ({ setActiveTab }: { setActiveTab?: (t: string) => void
         </section>
 
         {/* Consistency Heatmap */}
-        <section className="flex flex-col rounded-3xl border border-slate-200 bg-white p-6 dark:border-slate-700 dark:bg-slate-900 sm:p-8">
+        <section className="pro-engagement-heatmap flex flex-col rounded-3xl border border-slate-200 bg-white p-6 dark:border-slate-700 dark:bg-slate-900 sm:p-8">
           <div className="space-y-1 mb-10">
              <h3 className="text-2xl font-bold tracking-tight text-slate-950 dark:text-white">{copy.consistency}</h3>
              <p className="text-xs font-medium leading-5 text-slate-500 dark:text-slate-400">{copy.dailyStudyMinutes}</p>
           </div>
-          
+
           <div className="flex-1 grid grid-cols-7 gap-2.5">
              {heatmapData.map((item) => (
-               <div 
-                 key={item.dayKey} 
+               <div
+                 key={item.dayKey}
                  title={formatAnalyticsCopy(copy.minutesShort, { count: item.minutes })}
                  role="img"
                  aria-label={`${item.dayKey}: ${formatAnalyticsCopy(copy.minutesShort, { count: item.minutes })}`}
                  className={cn(
                    "aspect-square rounded-lg border border-slate-200 dark:border-white/5",
                    heatmapClass(item.intensity)
-                 )} 
+                 )}
                />
              ))}
           </div>
@@ -390,7 +345,7 @@ export const Analytics = ({ setActiveTab }: { setActiveTab?: (t: string) => void
              <ShieldCheck className="text-blue-700 dark:text-blue-300" size={24} aria-hidden="true" />
              <h3 className="text-2xl font-bold tracking-tight text-slate-950 dark:text-white">{copy.recallGuidance}</h3>
           </div>
-          
+
           <div className="space-y-3 mb-10">
             <p className="font-medium leading-7 text-slate-700 dark:text-slate-200">
               {latestSession
@@ -400,7 +355,7 @@ export const Analytics = ({ setActiveTab }: { setActiveTab?: (t: string) => void
             <p className="text-xs font-bold leading-5 text-slate-500 dark:text-slate-400">{copy.retentionNote}</p>
           </div>
 
-          <button 
+          <button
             onClick={() => setActiveTab?.('flashcards')}
             className="min-h-12 w-full rounded-2xl bg-blue-600 px-5 py-3 text-center text-sm font-black text-white transition-colors hover:bg-blue-700 active:bg-blue-800"
           >

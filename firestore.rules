@@ -214,6 +214,23 @@ service cloud.firestore {
       }
     }
 
+    // Private review state is separate from card content. Non-destructive v2 additions.
+    match /users/{userId}/decks/{deckId}/reviews/{cardId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow create, update: if isOwner(userId) && request.resource.data.id == cardId
+        && request.resource.data.reviewCount is number && request.resource.data.reviewCount >= 0
+        && request.resource.data.dueAt is string;
+      allow delete: if isOwner(userId);
+    }
+    match /users/{userId}/flashcardSessions/{sessionId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow create, update: if isOwner(userId) && request.resource.data.id == sessionId
+        && request.resource.data.attempts is list && request.resource.data.attempts.size() <= 200
+        && request.resource.data.cardIds is list && request.resource.data.cardIds.size() <= 200
+        && request.resource.data.activeSeconds is number && request.resource.data.activeSeconds >= 0;
+      allow delete: if isOwner(userId);
+    }
+
     // NotebookLM-style workspace.
     match /users/{userId}/notebookNotes/{noteId} {
       allow read: if isOwner(userId) || isAdmin();
@@ -280,8 +297,39 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    function validPlanner(userId) {
+      return request.resource.data.userId == userId && request.resource.data.version == 2
+        && request.resource.data.persistenceVersion == 3 && request.resource.data.revision is string
+        && request.resource.data.revision.size() > 0 && request.resource.data.tasks is list
+        && request.resource.data.sessions is list && request.resource.data.subjects is list
+        && request.resource.data.ready is bool && request.resource.data.sequence is int;
+    }
     match /users/{userId}/planner/{plannerId} {
-      allow create, read, update, delete: if isOwner(userId);
+      allow read: if isOwner(userId);
+      allow create: if isOwner(userId) && (plannerId != 'smart-v2' ||
+        validPlanner(userId) && request.resource.data.sequence == 1 && request.resource.data.previousRevision == null);
+      allow update: if isOwner(userId) && (plannerId != 'smart-v2' ||
+        validPlanner(userId) && request.resource.data.previousRevision == resource.data.get('revision', null)
+        && request.resource.data.sequence == resource.data.get('sequence', 0) + 1
+        && request.resource.data.revision != resource.data.get('revision', null));
+      allow delete: if isOwner(userId) && plannerId != 'smart-v2';
+    }
+    match /users/{userId}/proExperience/{documentId} {
+      allow read, create, update, delete: if isOwner(userId);
+    }
+    match /users/{userId}/proReflections/{documentId} {
+      allow read, create, update, delete: if isOwner(userId);
+    }
+    match /users/{userId}/proEvents/{documentId} {
+      allow read: if isOwner(userId);
+      allow write: if false;
+    }
+    match /users/{userId}/plannerHistory/{revisionId} {
+      allow read: if isOwner(userId);
+      allow create: if isOwner(userId) && request.resource.data.userId == userId
+        && request.resource.data.plan.userId == userId
+        && request.resource.data.plan.revision == get(/databases/$(database)/documents/users/$(userId)/planner/smart-v2).data.revision;
+      allow update, delete: if false;
     }
 
     match /users/{userId}/joinedCommunities/{communityId} {

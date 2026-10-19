@@ -1,4 +1,6 @@
 import { PlannerFlashcardActivity } from "@/src/features/planner/PlannerFlashcardActivity";
+import { SmartPlanner } from '@/src/features/planner/SmartPlanner';
+import { getSmartCopy } from '@/src/features/planner/smartPlannerCopy';
 import { PlannerRoadmapCards } from "@/src/features/planner/PlannerRoadmapCards";
 import { PlannerWritingActivity, PlannerSpeakingActivity } from "@/src/features/planner/PlannerTextActivities";
 import { classifyPlannerActivityError, getPlannerActivityErrorMessage, type PlannerActivityErrorKind } from "@/src/features/planner/plannerActivityErrors";
@@ -103,7 +105,7 @@ const missionIcon = (task: MissionTask) => {
 };
 
 
-export const Planner = () => {
+const LegacyPlanner = () => {
   const { locale, t } = useLocale();
   const getValidation = (...args: Parameters<typeof validatePlannerActivity>) => {
     const result = validatePlannerActivity(...args);
@@ -1751,4 +1753,11 @@ export const Planner = () => {
       {celebration && <PlannerCompletionDialog celebration={celebration} locale={locale} onClose={() => setCelebration(null)} />}
     </div>
   );
+};
+
+export const Planner = () => {
+  const { locale } = useLocale();
+  const [legacy, setLegacy] = useState(() => new URLSearchParams(window.location.search).has('examMissions'));
+  const c = getSmartCopy(locale);
+  return legacy ? <><button className="sp-button m-4" onClick={() => setLegacy(false)}>{c.returnSmart}</button><LegacyPlanner /></> : <SmartPlanner onLegacy={() => setLegacy(true)} />;
 };

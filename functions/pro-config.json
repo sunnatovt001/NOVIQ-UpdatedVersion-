@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "trialDays": 7,
+  "prices": { "monthly": 39000, "yearly": 299000 },
+  "currency": "UZS",
+  "quotas": {
+    "free": { "total": 14, "perMinute": 10, "tutor": 5, "notebook": 5, "planner": 2, "flashcards": 2, "intelligence": 0 },
+    "pro": { "total": 300, "perMinute": 10, "tutor": 200, "notebook": 60, "planner": 40, "flashcards": 60, "intelligence": 30 }
+  },
+  "features": { "trial": true, "intelligence": true, "coach": true, "deckDrafts": true, "reports": true, "atlas": true, "examCenter": true, "focusReflections": true, "calendarSync": false, "liveRecurringBilling": false }
+}

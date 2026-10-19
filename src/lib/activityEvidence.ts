@@ -10,12 +10,13 @@ export const isMeaningfulSession = (session: { duration?: unknown; timestamp?: u
 };
 
 export const summarizeCards = (cards: Record<string, unknown>[], now = Date.now()) => ({
-  total: cards.length,
+  total: cards.filter(card => card.deleted !== true).length,
   due: cards.filter((card) => {
+    if (card.deleted === true) return false;
     const date = recordDate(card.dueAt);
     return date != null && date.getTime() <= now;
   }).length,
-  reviewed: cards.filter((card) => Number(card.reviewCount) > 0).length,
+  reviewed: cards.filter((card) => card.deleted !== true && Number(card.reviewCount) > 0).length,
 });
 
 export const reviewGuidance = (total: number, reviewed: number, due: number) => {

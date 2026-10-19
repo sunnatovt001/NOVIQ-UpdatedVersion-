@@ -1,10 +1,7 @@
-const AI_LIMITS = Object.freeze({
-  tutor: 5,
-  notebook: 5,
-  planner: 2,
-  flashcards: 2,
-});
-const PRICES = Object.freeze({ monthly: 39000, yearly: 299000 });
+const PRO_CONFIG = require('./pro-config.json');
+const {membership,registerMembership} = require('./membership');
+const AI_LIMITS = Object.freeze(Object.fromEntries(Object.entries(PRO_CONFIG.quotas.free).filter(([key])=>!['total','perMinute'].includes(key))));
+const PRICES = Object.freeze(PRO_CONFIG.prices);
 const dayKey = (date = new Date()) =>
   new Intl.DateTimeFormat("en-CA", {
     timeZone: "Asia/Tashkent",
@@ -12,11 +9,7 @@ const dayKey = (date = new Date()) =>
     month: "2-digit",
     day: "2-digit",
   }).format(date);
-const hasPro = (subscription, now = Date.now()) =>
-  subscription?.plan === "pro" &&
-  ["active", "trialing"].includes(subscription.status) &&
-  Number.isFinite(Date.parse(subscription.currentPeriodEnd)) &&
-  Date.parse(subscription.currentPeriodEnd) > now;
+const hasPro = (subscription, now = Date.now()) => membership(subscription,now).entitled;
 const sessionReward = (session, now = Date.now()) => {
   const duration = Number(session.duration);
   const ended = Date.parse(session.timestamp);
@@ -56,6 +49,7 @@ const nextBillingDate = (cycle, from = new Date()) => {
   return result;
 };
 module.exports = {
+  PRO_CONFIG, membership, registerMembership,
   AI_LIMITS,
   PRICES,
   dayKey,

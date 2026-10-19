@@ -43,12 +43,14 @@ function focusHarness({
     throw new Error("404");
   },
   cached,
+  plannerContext,
 } = {}) {
   const slots = [],
     effects = [],
     intervals = new Map(),
     storage = new Map();
   if (cached) storage.set("noviq-focus-user", cached);
+  if (plannerContext) storage.set('noviq:user:plannerFocusContext:v2', plannerContext);
   let index = 0,
     dirty = false,
     tree,
@@ -99,6 +101,14 @@ function focusHarness({
     },
   };
   const modules = {
+    "@/src/features/pro/useStudyEvidence": {useStudyEvidence:()=>({records:(storage.get('noviq-focus-history-user')||[]).map(record=>({...record,userId:'user',category:'focus',xpEarned:0})),ready:true,error:false,deviceSeconds:0,retry:()=>{}})},
+    "@/src/features/pro/activitySummary": {activityDay:value=>new Date(value).toISOString().slice(0,10),actualDuration:value=>String(value)},
+    "@/src/features/planner/useSmartPlanner": {
+      focusContextKey: uid => `noviq:${uid}:plannerFocusContext:v2`,
+      recordPlannerFocus: (uid, id, seconds, timestamp, verified, context) => {
+        if (context) storage.set(`planner-receipt-${id}`, {uid,id,seconds,timestamp,verified,context});
+      },
+    },
     react,
     "react/jsx-runtime": {
       jsx: (type, props) => ({ type, props }),
@@ -127,6 +137,7 @@ function focusHarness({
       },
       persistStudySession: async () => {
         cloudWrites++;
+        return 'verified-receipt';
       },
     },
     "@/src/lib/focusTimer": {
@@ -149,13 +160,15 @@ function focusHarness({
   vm.runInNewContext(compile("src/pages/Focus.tsx"), {
     exports,
     require: (name) => {
+      if(name==='@/src/features/pro/FocusReflection')return {FocusReflection:()=>null};
       assert.ok(name in modules, name);
       return modules[name];
     },
     Date: Clock,
     crypto: { randomUUID: () => `local-${now}` },
     console,
-    window: { setInterval: setTestInterval },
+    window: { setInterval: setTestInterval,dispatchEvent:()=>{} },
+    Event: class Event {},
     setInterval: setTestInterval,
     clearInterval: (id) => intervals.delete(id),
   });
@@ -262,7 +275,9 @@ test("verified focus sessions still use server completion", async () => {
   app.click("Complete focus session");
   await app.settle();
   assert.equal(app.cloudWrites, 1);
-  assert.equal(app.storage.has("noviq-focus-history-user"), false);
+  assert.equal(app.storage.get("noviq-focus-history-user")[0].id, 'verified-receipt');
+  assert.equal(app.storage.get("noviq-focus-history-user")[0].origin, 'server');
+  assert.equal(app.storage.get("noviq-focus-history-user")[0].duration, 60);
   assert.match(app.text(), /Short break/);
 });
 
@@ -283,4 +298,22 @@ test("restored device-only session resumes without losing elapsed time", async (
   app.click("Complete focus session");
   await app.settle();
   assert.equal(app.storage.get("noviq-focus-history-user")[0].duration, 510);
+});
+
+test('Focus attributes completed local time to the selected Planner assignment', async () => {
+  const app=focusHarness({plannerContext:{taskId:'assignment',title:'My homework',subject:'Physics'}});
+  app.click('Start timer');await app.settle();app.tick(60);app.click('Complete focus session');await app.settle();
+  const receipts=[...app.storage.entries()].filter(([key])=>key.startsWith('planner-receipt-'));
+  assert.equal(receipts.length,1);assert.equal(receipts[0][1].context.taskId,'assignment');assert.equal(receipts[0][1].seconds,60);assert.equal(receipts[0][1].verified,false);
+});
+
+test('Focus attributes verified time once without creating an extra study session', async () => {
+  const app=focusHarness({start:async()=> 'verified-receipt',plannerContext:{taskId:'assignment',title:'My homework',subject:'Physics'}});
+  app.click('Start timer');await app.settle();app.tick(60);app.click('Complete focus session');await app.settle();
+  assert.equal(app.cloudWrites,1);assert.equal(app.storage.get('planner-receipt-verified-receipt').seconds,60);
+});
+
+test('switching assignments cannot attribute a previous timer to the new assignment', async () => {
+  const app=focusHarness({plannerContext:{taskId:'new',title:'New',subject:'Physics'},cached:{time:1000,mode:'focus',startedAt:999000,localOnly:true,localId:'old',plannerTaskId:'old'}});
+  assert.match(app.text(),/25:00/);
 });

@@ -142,6 +142,9 @@ const markQueuedOperation = (
 };
 
 const applyOperation = async (operation: OfflineSyncOperation) => {
+  if(operation.path.length===4 && operation.path[0]==='users' && operation.path[2]==='planner' && operation.path[3]==='smart-v2') {
+    throw new Error('This previous Planner draft needs review in Planner before it can replace a saved plan.');
+  }
   const [rootPath, ...pathSegments] = normalizePath(operation.path);
   if (!rootPath) {
     throw new Error(
@@ -336,4 +339,13 @@ export const useOfflineSyncQueue = (userId?: string | null) => {
     window.addEventListener("online", handleOnline);
     return () => window.removeEventListener("online", handleOnline);
   }, [userId]);
+};
+
+
+// Called only after a version-checked replacement is acknowledged or the user explicitly
+// chooses the saved plan after preserving the old draft in Planner recovery storage.
+export const retirePlannerQueue = (uid: string) => {
+  const path = ['users',uid,'planner','smart-v2'].join('/');
+  const queue = loadQueue();
+  saveQueue(queue.filter(item => !(item.userId===uid && item.path.join('/')===path)));
 };

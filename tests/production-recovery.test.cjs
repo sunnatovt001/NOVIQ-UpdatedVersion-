@@ -7,7 +7,7 @@ const vm = require('node:vm');
 function metricsHarness(server = false) {
   let metrics, effect, cleanup;
   const listeners = [], timers = new Map(); let timerId = 0;
-  const react = { useState(initial) { if(typeof initial === 'number') return [initial,()=>{}]; metrics=initial; return [metrics, update=>{metrics=typeof update==='function'?update(metrics):update;}]; }, useCallback: fn=>fn, useMemo: fn=>fn(), useEffect: fn=>{effect=fn;} };
+  const react = { useState(initial) { if(typeof initial === 'number' || typeof initial === 'string') return [initial,()=>{}]; metrics=initial; return [metrics, update=>{metrics=typeof update==='function'?update(metrics):update;}]; }, useCallback: fn=>fn, useMemo: fn=>fn(), useEffect: fn=>{effect=fn;} };
   const firestore = {
     collection: (...args)=>({path:args.join('/')}), doc:(...args)=>({path:args.join('/')}),
     query: target=>target, where:()=>{}, or:()=>{}, sum:()=>{}, limit:()=>{},
@@ -34,7 +34,7 @@ test('server aggregation outage settles error and readiness retry recovers',asyn
   h.cloud.getCloudMetrics=async()=>{throw new Error('unavailable');};
   for(const l of h.listeners)l.next(h.snap());await flush();
   assert.equal(h.state.loading,false);assert.match(h.state.error,/temporarily unavailable/);
-  h.cloud.getCloudMetrics=success;h.listeners[3].next(h.snap());await flush();
+  h.cloud.getCloudMetrics=success;h.listeners.find(l=>/\/(decks|trusted\/metrics)$/.test(l.target.path)).next(h.snap());await flush();
   assert.equal(h.state.error,null);assert.equal(h.state.dueCards,9000);h.cleanup();
 });
 test('verified focus history uses server sums without downloading all session records',async()=>{
@@ -74,6 +74,6 @@ test('aggregation unavailable clears loading and a subsequent success cannot hid
   assert.equal(h.state.loading,false); assert.match(h.state.error,/temporarily unavailable/);
   h.listeners[2].error(new Error('planner permission denied'));
   h.firestore.getCountFromServer=async()=>({data:()=>({count:0})});
-  h.listeners[3].next(h.snap()); await flush(); assert.match(h.state.error,/temporarily unavailable/);
+  h.listeners.find(l=>/\/(decks|trusted\/metrics)$/.test(l.target.path)).next(h.snap()); await flush(); assert.match(h.state.error,/temporarily unavailable/);
   h.listeners[2].next(h.snap()); assert.equal(h.state.error,null); h.cleanup();
 });

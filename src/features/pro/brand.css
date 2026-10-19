@@ -1,0 +1,41 @@
+/* Derived from the protected src/index.css NOVIQ identity; premium scope only.
+   Geometry is owned by reference.css. These tokens never target a Free root. */
+.noviq-app.pro-environment,
+[data-pro-portal="study"],
+[data-pro-portal="trial"] {
+  --pro-primary: #2e5eaa;
+  --pro-secondary: #7c6be8;
+  --pro-bg: #f7f8f6;
+  --pro-card: #ffffff;
+  --pro-soft: #eef4ff;
+  --pro-border: #d8dee7;
+  --pro-text: #14213d;
+  --pro-muted: #52627a;
+  --pro-accent: var(--pro-primary);
+  --pro-ink: #14213d;
+  --pro-on-dark: #f8fafc;
+  --pro-muted-dark: #a7b0c0;
+  --pro-border-dark: #27344b;
+  --pro-tint: color-mix(in srgb, var(--pro-secondary) 24%, white);
+  --pro-chart-mid: color-mix(in srgb, var(--pro-primary) 68%, var(--pro-secondary));
+  --pro-track: #eef4ff;
+  --pro-timer: var(--pro-primary);
+  --pro-aura: color-mix(in srgb, var(--pro-secondary) 12%, transparent);
+  --pro-shadow: color-mix(in srgb, #14213d 5%, transparent);
+  --pro-chart-track: color-mix(in srgb, var(--pro-secondary) 38%, transparent);
+}
+.noviq-app.pro-environment.dark,
+[data-pro-portal="study"].dark,
+html.dark [data-pro-portal="trial"] {
+  --pro-bg: #0b1220;
+  --pro-card: #131d2e;
+  --pro-soft: color-mix(in srgb, #91a7ff 13%, #131d2e);
+  --pro-border: #27344b;
+  --pro-text: #f8fafc;
+  --pro-muted: #a7b0c0;
+  --pro-accent: #91a7ff;
+  --pro-tint: color-mix(in srgb, #91a7ff 28%, #131d2e);
+  --pro-chart-mid: color-mix(in srgb, #91a7ff 68%, #7c6be8);
+  --pro-track: #27344b;
+  --pro-timer: #91a7ff;
+}

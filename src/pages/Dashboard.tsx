@@ -1,3 +1,4 @@
+import {useMembership} from '@/src/features/pro/MembershipContext';
 import React from "react";
 import { isMeaningfulSession } from "@/src/lib/activityEvidence";
 import { useAuth } from "@/src/contexts/AuthContext";
@@ -78,7 +79,7 @@ const getDateForWeekday = (day: WeekdayLabel, baseDate: Date) => {
   return date;
 };
 
-export const Dashboard = ({ setActiveTab }: { setActiveTab: (tab: string) => void }) => {
+const FreeDashboard = ({ setActiveTab }: { setActiveTab: (tab: string) => void }) => {
   const { profile, user } = useAuth();
   const { t } = useLocale();
   const [selectedTask, setSelectedTask] = React.useState<string | null>(null);
@@ -497,3 +498,6 @@ export const Dashboard = ({ setActiveTab }: { setActiveTab: (tab: string) => voi
       </>
   );
 };
+
+const IntelligenceDashboard=React.lazy(()=>import('@/src/features/pro/ProHub').then(m=>({default:m.ProHub})));
+export const Dashboard=(props:{setActiveTab:(tab:string)=>void})=>{const {access}=useMembership();return access.entitled?<React.Suspense fallback={<div role="status">NOVIQ PRO…</div>}><IntelligenceDashboard/></React.Suspense>:<FreeDashboard {...props}/>;};

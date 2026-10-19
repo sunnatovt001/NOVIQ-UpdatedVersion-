@@ -30,6 +30,8 @@ if (process.argv.includes('--live')) {
     // Community exports are assigned from createCommunityHandlers at the entry.
     required.push(...[...community.matchAll(/api\.(\w+)\s*=/g)].map(m => m[1]));
     required.push(...(await import('../functions/metrics.js')).default.exportNames);
+    const membership = fs.readFileSync('functions/membership.js', 'utf8');
+    required.push(...[...membership.matchAll(/exports\.(\w+)\s*=/g)].map(m => m[1]));
     const names = new Set(deployed.map(f => f.id));
     for (const name of required) check(names.has(name), `Required backend Function is not deployed: ${name}`);
     for (const fn of deployed) check(fn.runtime === 'nodejs22', `Backend runtime needs migration: ${fn.id} (${fn.runtime})`);

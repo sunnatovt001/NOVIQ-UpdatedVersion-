@@ -12,3 +12,6 @@ coverage/
 backups/
 *.err
 saidaminpicture.jpg
+
+# Local verification output may include private account data.
+artifacts/

@@ -2,3 +2,4 @@
 export const isReadOnlyAudit = ["audit", "local-ai"].includes(import.meta.env.MODE);
 export const isLocalAi = import.meta.env.DEV && import.meta.env.MODE === "local-ai";
 export const useDevelopmentAi = import.meta.env.DEV && !isReadOnlyAudit;
+export const useLocalMembership = import.meta.env.DEV && import.meta.env.MODE === "development";

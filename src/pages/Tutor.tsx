@@ -1,3 +1,4 @@
+import {TutorProControls,useTutorModes} from '@/src/features/pro/TutorProControls';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "@/src/contexts/AuthContext";
 import { askTutor } from "@/src/lib/gemini";
@@ -89,6 +90,7 @@ const Avatar = ({ src, alt, size = "sm" }: { src: string; alt: string; size?: "s
 
 export const Tutor = ({ setActiveTab }: { setActiveTab: (tab: string) => void }) => {
   const { profile, user } = useAuth();
+  const tutorModes=useTutorModes(user?.uid),{proTutorMode,explanationDepth,shareProContext}=tutorModes;
   const { locale, setLocale, t } = useLocale();
   const chat = useTutorHistory(user?.uid);
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -96,8 +98,8 @@ export const Tutor = ({ setActiveTab }: { setActiveTab: (tab: string) => void })
   const voiceLanguage: TutorLanguage =
     locale === "uz" ? "uz-UZ" : locale === "ru" ? "ru-RU" : "en-US";
   const intro = useMemo(
-    () => ({ ...INTRO_MESSAGE, content: getTutorIntro(voiceLanguage) }),
-    [voiceLanguage],
+    () => ({ ...INTRO_MESSAGE, content: locale === 'uz' ? 'Avval nimani o‘rganamiz?' : locale === 'ru' ? 'С чем помочь в первую очередь?' : 'What would you like help with first?' }),
+    [locale],
   );
   const messages: Message[] = useMemo(
     () => (chat.messages.length ? chat.messages : [intro]),
@@ -285,7 +287,7 @@ export const Tutor = ({ setActiveTab }: { setActiveTab: (tab: string) => void })
 
     try {
       trackUserEvent(user.uid, "tutor_message_sent", 0, { tutorMessagesSent: 1 }).catch(() => undefined);
-      const studentContext = buildStudentTutorContext(profile, user?.uid);
+      const studentContext = activePro && proTutorMode!=='standard' && !shareProContext ? '' : buildStudentTutorContext(profile, user?.uid);
       const tutorContext = buildTutorRequestContext(voiceLanguage, studentContext, files);
 
       const response = await askTutor(cleanPrompt, tutorContext, voiceLanguage, {
@@ -294,6 +296,7 @@ export const Tutor = ({ setActiveTab }: { setActiveTab: (tab: string) => void })
           content: message.content,
         })),
         attachments: files,
+        ...(activePro&&proTutorMode!=='standard'?{premiumMode:proTutorMode,depth:explanationDepth}:{}),
         retries: 2,
       });
 
@@ -324,14 +327,14 @@ export const Tutor = ({ setActiveTab }: { setActiveTab: (tab: string) => void })
   const historyProps = { chat, disabled: isTyping, onSelect: selectConversation, onNew: newConversation };
 
   return (
-    <div className="tutor-workspace flex min-h-0 min-w-0 flex-1 overflow-hidden rounded-2xl border border-slate-200 shadow-xl sm:rounded-[1.5rem]">
+    <div data-welcome={!messages.some(message => message.role === "user")} className="tutor-workspace flex min-h-0 min-w-0 flex-1 overflow-hidden rounded-2xl border border-slate-200 shadow-xl sm:rounded-[1.5rem]">
       <aside className="hidden w-60 shrink-0 border-r border-slate-200 xl:block" style={{background: "var(--noviq-card)"}}>
         <TutorChatHistory {...historyProps} />
       </aside>
       <TutorHistoryDrawer {...historyProps} open={historyOpen} onClose={closeHistory} />
     <div
       className={cn(
-        "relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-slate-950/70 backdrop-blur-2xl",
+        "pro-tutor-canvas relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-slate-950/70 backdrop-blur-2xl",
         isDragging ? "border-cyan-300/50 ring-4 ring-cyan-300/10" : "border-white/10"
       )}
       onDragOver={(event) => {
@@ -363,6 +366,7 @@ export const Tutor = ({ setActiveTab }: { setActiveTab: (tab: string) => void })
         }}
       />
 
+      {activePro&&<TutorProControls isTyping={isTyping} {...tutorModes}/> }
       <input
         ref={fileInputRef}
         type="file"
@@ -431,7 +435,7 @@ export const Tutor = ({ setActiveTab }: { setActiveTab: (tab: string) => void })
       <div ref={scrollRef} className="CustomScrollbar tutor-messages min-h-0 flex-1 space-y-5 overflow-y-auto p-3 sm:p-5">
       {historyError && <div role="alert" className="z-10 shrink-0 bg-amber-50 p-3 text-sm text-amber-900 xl:hidden">{historyError} <button onClick={chat.retry} className="underline">{t("tutor.retryHistory")}</button></div>}
       <TutorSaveStatus message={chat.saveError} retry={chat.retrySaving} />
-        {messages.map((message) => (
+        {!messages.some(message => message.role === "user") && <div className="pro-tutor-orb" aria-hidden="true"/>}{messages.map((message) => (
           <div key={message.id} className={cn("flex gap-2.5 sm:gap-3", message.role === "user" && "flex-row-reverse")}>
             <Avatar
               src={message.role === "assistant" ? ASSISTANT_AVATAR : userAvatar}
@@ -550,7 +554,7 @@ export const Tutor = ({ setActiveTab }: { setActiveTab: (tab: string) => void })
         </AnimatePresence>
       </div>
 
-      <div className="mt-auto shrink-0 border-t border-white/10 bg-white/[0.02] p-3 sm:p-4">
+      <div className="pro-tutor-composer-wrap mt-auto shrink-0 border-t border-white/10 bg-white/[0.02] p-3 sm:p-4">
 
 
         <div className="tutor-composer rounded-2xl border border-white/10 bg-white/5 p-2 transition-colors focus-within:border-slate-400">

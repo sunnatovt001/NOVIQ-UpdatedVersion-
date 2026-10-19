@@ -1,3 +1,4 @@
+import {FocusReflection} from '@/src/features/pro/FocusReflection';
 import {
   loadLocalData,
   trySaveLocalData as saveLocalData,
@@ -34,6 +35,9 @@ import {
 import { formatTime, cn } from "@/src/lib/utils";
 import { withFocusTimeout } from "@/src/lib/focusTimer";
 import { formatFocusCopy, getFocusCopy } from "@/src/features/focus/focusCopy";
+import { focusContextKey, recordPlannerFocus, type PlannerFocusContext } from '@/src/features/planner/useSmartPlanner';
+import {useStudyEvidence} from '@/src/features/pro/useStudyEvidence';
+import {activityDay,actualDuration} from '@/src/features/pro/activitySummary';
 
 const FOCUS_DURATION = 25 * 60;
 const SHORT_BREAK_DURATION = 5 * 60;
@@ -67,10 +71,12 @@ const tracks = [
   },
 ] as const;
 
-type FocusHistoryEntry = { id: string; duration: number; timestamp: string };
+type FocusHistoryEntry = { id: string; duration: number; timestamp: string; origin?:'device'|'server'; status?:string };
 
 export const Focus = () => {
   const { user, profile } = useAuth();
+  const study = useStudyEvidence(user?.uid);
+  const [plannerContext, setPlannerContext] = useState(() => user ? loadLocalData<PlannerFocusContext | null>(focusContextKey(user.uid), null) : null);
   const { locale } = useLocale();
   const copy = useMemo(() => getFocusCopy(locale), [locale]);
   const [cached] = useState(() =>
@@ -82,10 +88,12 @@ export const Focus = () => {
       localOnly?: boolean;
       localId?: string;
       breakDuration?: number;
+      plannerTaskId?: string;
     } | null>(`noviq-focus-${user?.uid}`, null),
   );
   const validCache =
     cached &&
+    cached.plannerTaskId === plannerContext?.taskId &&
     ["focus", "break"].includes(cached.mode) &&
     Date.now() - cached.startedAt < 8 * 3600000 &&
     Number.isFinite(cached.time) &&
@@ -157,12 +165,13 @@ export const Focus = () => {
         localOnly,
         localId: localIdRef.current,
         breakDuration,
+        plannerTaskId: plannerContext?.taskId,
       })
     )
       setSessionError(
         copy.storageUnavailable,
       );
-  }, [time, mode, isActive, localOnly, breakDuration, user?.uid, copy.storageUnavailable]);
+  }, [time, mode, isActive, localOnly, breakDuration, user?.uid, copy.storageUnavailable, plannerContext?.taskId]);
 
   useEffect(() => {
     if (user) saveLocalData(`noviq-focus-task-${user.uid}`, focusTask);
@@ -212,7 +221,7 @@ export const Focus = () => {
     const sessionData = {
       userId: user.uid,
       duration: sessionDuration,
-      subject: deepWork ? "Deep Focus" : "Focus",
+      subject: plannerContext?.subject || (deepWork ? "Deep Focus" : "Focus"),
       category: "focus" as const,
       xpEarned,
       timestamp: completedAt.toISOString(),
@@ -226,6 +235,8 @@ export const Focus = () => {
         id,
         duration: sessionDuration,
         timestamp: completedAt.toISOString(),
+        origin: 'device' as const,
+        status: 'completed',
       };
       const nextHistory = [
         savedSession,
@@ -240,6 +251,8 @@ export const Focus = () => {
         return false;
       }
       setFocusHistory(nextHistory);
+      window.dispatchEvent(new Event('noviq:focus-history'));
+      try { recordPlannerFocus(user.uid, id, sessionDuration, completedAt.getTime(), false, plannerContext); } catch { setSessionError(copy.localSaveFailed); }
       setSessionError(
         copy.localSaved,
       );
@@ -247,22 +260,26 @@ export const Focus = () => {
     }
 
     try {
-      await withFocusTimeout(
+      const recordedId = await withFocusTimeout(
         () =>
           persistStudySession(sessionData, profile, [], sessionIdRef.current),
         10000,
       );
+      try { recordPlannerFocus(user.uid, recordedId, sessionDuration, completedAt.getTime(), true, plannerContext); } catch { setSessionError(copy.localSaveFailed); }
       sessionIdRef.current = undefined;
-      setFocusHistory((current) =>
-        [
+      const current=loadLocalData<FocusHistoryEntry[]>(`noviq-focus-history-${user.uid}`,[]);
+      const next = [
           {
-            id: crypto.randomUUID(),
+            id: recordedId,
             duration: sessionDuration,
             timestamp: completedAt.toISOString(),
+            origin: 'server' as const,
+            status: 'completed',
           },
-          ...current,
-        ].slice(0, 100),
-      );
+          ...current.filter(record=>record.id!==recordedId),
+        ].slice(0,100);
+      saveLocalData(`noviq-focus-history-${user.uid}`,next);setFocusHistory(next);
+      window.dispatchEvent(new Event('noviq:focus-history'));
       trackUserEvent(user.uid, "focus_session_completed", 0, {
         focusMinutes: Math.round(sessionDuration / 60),
         durationSeconds: sessionDuration,
@@ -368,8 +385,19 @@ export const Focus = () => {
     setIsActive((current) => !current);
   };
 
+  const preservePartial = () => {
+    const elapsed=FOCUS_DURATION-time;
+    if(!user || mode!=='focus' || elapsed<=0)return;
+    const id=sessionIdRef.current || localIdRef.current || crypto.randomUUID();
+    const row:FocusHistoryEntry={id,duration:elapsed,timestamp:new Date().toISOString(),origin:'device',status:'partial'};
+    const previous=loadLocalData<FocusHistoryEntry[]>(`noviq-focus-history-${user.uid}`,[]);
+    const next=[row,...previous.filter(item=>item.id!==id)].slice(0,100);
+    saveLocalData(`noviq-focus-history-${user.uid}`,next);setFocusHistory(next);
+    window.dispatchEvent(new Event('noviq:focus-history'));
+  };
   const resetTimer = () => {
     if (completingRef.current) return;
+    preservePartial();
     generationRef.current += 1;
     startingRef.current = false;
     setVerifying(false);
@@ -387,6 +415,8 @@ export const Focus = () => {
     nextDuration: number,
   ) => {
     if (completingRef.current || sessionBusy) return;
+    preservePartial();
+    generationRef.current += 1; sessionIdRef.current=undefined;localIdRef.current=undefined;setLocalOnly(false);
     setIsActive(false);
     if (timerRef.current) clearInterval(timerRef.current);
     setMode(nextMode);
@@ -397,6 +427,8 @@ export const Focus = () => {
   const updateFocusTask = () => {
     const nextTask = taskDraft.trim();
     if (!nextTask) return;
+    setPlannerContext(null);
+    if (user) saveLocalData(focusContextKey(user.uid), null);
     setFocusTask(nextTask.slice(0, 120));
     setTaskDraft("");
     setTaskDone(false);
@@ -417,19 +449,10 @@ export const Focus = () => {
     }
   };
 
-  const completedToday = focusHistory.filter(
-    (session) =>
-      new Date(session.timestamp).toDateString() === new Date().toDateString(),
-  ).length;
-  const focusMinutes = Math.round(
-    focusHistory
-      .filter(
-        (session) =>
-          new Date(session.timestamp).toDateString() ===
-          new Date().toDateString(),
-      )
-      .reduce((total, session) => total + session.duration, 0) / 60,
-  );
+  const timezone='Asia/Tashkent';
+  const todaySessions=study.records.filter(session=>session.category==='focus' && activityDay(Date.parse(session.timestamp),timezone)===activityDay(Date.now(),timezone));
+  const completedToday=todaySessions.filter(session=>session.status!=='partial').length;
+  const focusMinutes=Math.floor(todaySessions.reduce((total,session)=>total+session.duration,0)/60);
   const progress = Math.min(
     100,
     Math.max(
@@ -444,11 +467,12 @@ export const Focus = () => {
   return (
     <div
       className={cn(
-        "min-h-[calc(100dvh-9rem)] rounded-[32px] border border-slate-200/90 bg-[#f8fbff] p-3 text-slate-900 shadow-[0_20px_70px_rgba(15,23,42,0.05)] sm:p-4 dark:border-slate-800 dark:bg-slate-950",
+        "pro-focus-workspace min-h-[calc(100dvh-9rem)] rounded-[32px] border border-slate-200/90 bg-[#f8fbff] p-3 text-slate-900 shadow-[0_20px_70px_rgba(15,23,42,0.05)] sm:p-4 dark:border-slate-800 dark:bg-slate-950",
         deepWork && "dark:bg-black",
       )}
     >
       <audio ref={audioRef} loop />
+      {(study.error || !study.ready || study.deviceSeconds>0) && <p role="status" className="mb-3 text-sm">{study.error ? (locale==='uz'?'Server tarixi olinmadi; qurilmadagi yozuvlar saqlangan.':locale==='ru'?'История сервера недоступна. Данные устройства сохранены.':'Server history unavailable; device records are preserved.') : !study.ready ? (locale==='uz'?'Tarix yuklanmoqda…':locale==='ru'?'Загрузка истории…':'Loading activity history…') : (locale==='uz'?'Qurilmada saqlangan, sinxronlanmagan vaqt ham kiritilgan.':locale==='ru'?'Включена активность, сохранённая только на устройстве.':'Includes activity saved only on this device.')} <button className="underline" onClick={study.retry}>{locale==='uz'?'Qayta urinish':locale==='ru'?'Повторить':'Retry'}</button></p>}
       <div className="mx-auto grid w-full max-w-none gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(360px,0.9fr)]">
         <section className="rounded-[28px] border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900 sm:p-5 lg:p-6">
           <header className="flex flex-wrap items-center justify-between gap-4">
@@ -566,7 +590,7 @@ export const Focus = () => {
           )}
 
           <div
-            className="mx-auto mt-6 grid h-[clamp(270px,31vw,340px)] w-[clamp(270px,31vw,340px)] place-items-center rounded-full bg-[conic-gradient(var(--focus-ring)_0%,#e8eff9_var(--focus-ring)_100%)] p-3 shadow-[0_0_0_16px_rgba(37,99,235,0.05)]"
+            className="pro-focus-dial mx-auto mt-6 grid h-[clamp(270px,31vw,340px)] w-[clamp(270px,31vw,340px)] place-items-center rounded-full bg-[conic-gradient(var(--focus-ring)_0%,#e8eff9_var(--focus-ring)_100%)] p-3 shadow-[0_0_0_16px_rgba(37,99,235,0.05)]"
             style={{ "--focus-ring": `${progress}%` } as React.CSSProperties}
           >
             <div className="grid h-full w-full place-items-center rounded-full bg-white text-center shadow-inner dark:bg-slate-900">
@@ -668,7 +692,7 @@ export const Focus = () => {
           </div>
         </section>
 
-        <aside className="space-y-4">
+        <aside className="pro-focus-context space-y-4">
           <section className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
             <div className="flex items-center justify-between gap-3">
               <h2 className="flex items-center gap-2 text-lg font-black">
@@ -841,6 +865,7 @@ export const Focus = () => {
           </section>
         </aside>
       </div>
+      <FocusReflection/>
     </div>
   );
 };

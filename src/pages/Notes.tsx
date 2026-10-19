@@ -29,7 +29,10 @@ import { db, storage } from "@/src/lib/firebase";
 import ReactMarkdown from "react-markdown";
 import { getAppErrorMessage } from "@/src/lib/errors";
 import { classifyAiFailure, getAiFailureMessage, type AiFailureKind } from "@/src/lib/aiFailure";
-import { loadLocalData, makeSyncId, saveLocalData } from "@/src/lib/localStore";
+import { loadLocalData, loadLocalDataStrict, makeSyncId, saveLocalData } from "@/src/lib/localStore";
+import {useNotebookDraft} from '@/src/features/pro/useNotebookDraft';
+import {notebookDraftKey,validNotebookDraft,type NotebookDraft} from '@/src/features/pro/notebookDraft';
+import {recordDate} from '@/src/lib/recordDate';
 import { useBodyScrollLock } from "@/src/lib/useBodyScrollLock";
 import { useDialogFocus } from "@/src/lib/useDialogFocus";
 import { isReadOnlyAudit, isLocalAi } from "@/src/lib/auditMode";
@@ -67,8 +70,7 @@ export const Notes = () => {
   const [sources, setSources] = useState<NotebookSource[]>([]);
   const [messages, setMessages] = useState<NotebookMessage[]>([]);
   const [activeNoteId, setActiveNoteId] = useState("");
-  const [draftTitle, setDraftTitle] = useState("");
-  const [draftContent, setDraftContent] = useState("");
+  const notebookOwnerRef=useRef(user?.uid);notebookOwnerRef.current=user?.uid;
   const [search, setSearch] = useState("");
   const [chatInput, setChatInput] = useState("");
   const [isSavingNote, setIsSavingNote] = useState(false);
@@ -136,6 +138,7 @@ export const Notes = () => {
   }, [mobileView, showSourceModal]);
 
   const activeNote = useMemo(() => notes.find((note) => note.id === activeNoteId) || null, [activeNoteId, notes]);
+  const {draftTitle,setDraftTitle,draftContent,setDraftContent,draftRef,draftConflict,setDraftConflict,draftStorageError,setDraftStorageError,changeDraft}=useNotebookDraft(user?.uid,activeNote,isSavingNote);
   const showAiSourcePreviews = isNotificationPreferenceEnabled(profile, "aiSourcePreviews");
   const filteredNotes = notes.filter(
     (note) =>
@@ -199,6 +202,7 @@ export const Notes = () => {
         const remoteNotes = snapshot.docs.map((document) => ({
           id: document.id,
           ...document.data(),
+          tags: Array.isArray(document.data().tags) ? document.data().tags.filter((tag:unknown)=>typeof tag==='string') : [],
         })) as NotebookNote[];
         setCloudSyncBlocked(false);
         setNotes((current) => mergeLocalRemote(current, remoteNotes));
@@ -267,12 +271,6 @@ export const Notes = () => {
     );
   }, [messagesKey, user]);
 
-  useEffect(() => {
-    if (!activeNote) return;
-    setDraftTitle(activeNote.title);
-    setDraftContent(activeNote.content);
-  }, [activeNote]);
-
   const handleCreateNote = async () => {
     if (!user) return;
 
@@ -329,6 +327,10 @@ export const Notes = () => {
       content: draftContent,
       updatedAt: new Date().toISOString(),
     };
+    if(draftRef.current?.noteId===activeNote.id){
+      draftRef.current={...draftRef.current,baseUpdatedAt:nextNote.updatedAt};
+      if(!draftStorageError){try{saveLocalData(notebookDraftKey(user.uid,activeNote.id),draftRef.current);}catch{setDraftStorageError(true);}}
+    }
     setNotes((current) => current.map((note) => (note.id === activeNote.id ? nextNote : note)));
 
     try {
@@ -349,6 +351,12 @@ export const Notes = () => {
         current.map((note) => (note.id === activeNote.id ? { ...note, syncStatus } : note))
       );
       setStatus(t("notebook.savedLocal"));
+      if(notebookOwnerRef.current===user.uid && draftRef.current?.noteId===activeNote.id && draftRef.current.title===draftTitle && draftRef.current.content===draftContent){
+        const clean={...draftRef.current,dirty:false,baseUpdatedAt:nextNote.updatedAt};
+        draftRef.current=clean;
+        if(!draftStorageError)saveLocalData(notebookDraftKey(user.uid,activeNote.id),clean);
+        setDraftConflict(false);
+      }
       setCloudSyncBlocked(false);
     } catch (error) {
       console.warn(getAppErrorMessage(error));
@@ -359,6 +367,12 @@ export const Notes = () => {
       setIsSavingNote(false);
     }
   };
+
+  useEffect(()=>{
+    if(!user || !activeNote || isReadOnlyAudit || isSavingNote || draftConflict || draftStorageError || !draftRef.current?.dirty || draftRef.current.noteId!==activeNote.id)return;
+    const timer=window.setTimeout(()=>void handleSaveNote(),900);
+    return()=>window.clearTimeout(timer);
+  },[draftTitle,draftContent,activeNote?.id,user?.uid,isSavingNote,draftConflict,draftStorageError]);
 
   const handleDeleteNote = async (note: NotebookNote) => {
     if (!user) return;
@@ -737,7 +751,7 @@ export const Notes = () => {
   };
 
   return (
-    <div className="grid h-full min-h-0 grid-cols-1 gap-3 overflow-hidden sm:gap-4 xl:grid-cols-[250px_minmax(0,1fr)_310px] 2xl:grid-cols-[300px_minmax(0,1fr)_360px]">
+    <div className="pro-notebook-workspace grid h-full min-h-0 grid-cols-1 gap-3 overflow-hidden sm:gap-4 xl:grid-cols-[250px_minmax(0,1fr)_310px] 2xl:grid-cols-[300px_minmax(0,1fr)_360px]">
       <input
         ref={sourceInputRef}
         type="file"
@@ -879,7 +893,7 @@ export const Notes = () => {
                 <input
                   aria-label={t("notebook.noteTitle")}
                   value={draftTitle}
-                  onChange={(event) => setDraftTitle(event.target.value)}
+                    onChange={(event) => changeDraft(event.target.value,draftContent)}
                   className="w-full truncate bg-transparent font-display text-2xl font-bold text-white outline-none"
                 />
                 <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">
@@ -938,11 +952,14 @@ export const Notes = () => {
               </div>
             </header>
 
+            {draftConflict && <p role="alert" className="px-6 text-sm text-amber-600">{locale==='uz'?'Qayd boshqa joyda o‘zgargan. Loyihangiz saqlangan; ko‘rib chiqib Saqlash tugmasini bosing.':locale==='ru'?'Заметка изменилась в другом месте. Черновик сохранён; проверьте и нажмите «Сохранить».':'This note changed elsewhere. Your draft is preserved; review it and choose Save to resolve.'}</p>}
+            {draftStorageError && <p role="alert" className="px-6 text-sm text-amber-600">{locale==='uz'?'Mahalliy loyiha saqlanmadi. Matnni saqlang yoki nusxalang.':locale==='ru'?'Не удалось сохранить черновик. Сохраните или скопируйте текст.':'The local draft could not be stored. Save or copy your text before leaving.'}</p>}
+            <p role="status" data-notebook-autosave className="px-6 text-xs">{isSavingNote ? (locale==='uz'?'Saqlanmoqda…':locale==='ru'?'Сохранение…':'Saving…') : draftRef.current?.dirty ? (locale==='uz'?'Loyiha qurilmada saqlangan':locale==='ru'?'Черновик сохранён на устройстве':'Draft saved on this device') : status}</p>
             <textarea
               ref={editorRef}
               aria-label={t("notebook.noteContent")}
               value={draftContent}
-              onChange={(event) => setDraftContent(event.target.value)}
+              onChange={(event) => changeDraft(draftTitle,event.target.value)}
               placeholder={t("notebook.contentPlaceholder")}
               className="CustomScrollbar flex-1 resize-none bg-transparent p-6 text-base leading-8 text-slate-200 outline-none placeholder:text-slate-600 sm:p-10"
             />

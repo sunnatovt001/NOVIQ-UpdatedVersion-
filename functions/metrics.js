@@ -34,7 +34,7 @@ module.exports = ({db,onCall,onDocumentWritten,onDocumentCreated,HttpsError,Fiel
       const refs = [source,projected];
       if (kind === 'card') refs.push(db.doc(`users/${uid}/decks/${deckId}`));
       const snapshots = await tx.getAll(...refs);
-      const exists = snapshots[0].exists && (kind !== 'card' || snapshots[2].exists);
+      const exists = snapshots[0].exists && (kind !== 'card' || snapshots[2].exists && snapshots[0].data()?.deleted !== true);
       if (!exists) { if (snapshots[1].exists) tx.delete(projected); return; }
       const next=normalize(kind,snapshots[0].data(),sourcePath,deckId);
       const previous=snapshots[1].data();

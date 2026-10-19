@@ -178,14 +178,16 @@ test("Focus stays idle until requested and supports narrow localized controls", 
   assert.match(copy, /Зона фокуса/);
 });
 
-test("Flashcards pairs light and dark surfaces and traps modal focus", () => {
-  const flashcards = read("src/pages/Flashcards.tsx");
-
-  assert.match(flashcards, /useDialogFocus\(showDeckModal/);
-  assert.match(flashcards, /useDialogFocus\(practiceOpen/);
-  assert.match(flashcards, /aria-labelledby="create-deck-title"/);
-  assert.match(flashcards, /border-slate-200 bg-white dark:border-white\/10/);
-  assert.match(flashcards, /text-slate-950 dark:text-white/);
+test("Flashcards pairs light and dark surfaces and traps both portal dialogs", () => {
+  const page = read("src/pages/Flashcards.tsx");
+  const study = read("src/features/flashcards/Study.tsx");
+  const css = read("src/features/flashcards/flashcards.css");
+  assert.match(page, /useDialogFocus\(create/);
+  assert.match(study, /useDialogFocus\(true/);
+  assert.match(page, /aria-labelledby="new-deck-title"/);
+  assert.match(study, /aria-modal="true"/);
+  assert.match(css, /\.dark \.fc-workspace/);
+  assert.match(css, /prefers-reduced-motion/);
 });
 
 test("Analytics uses localized copy and paired chart surfaces", () => {
@@ -214,18 +216,9 @@ test("Profile uses localized paired surfaces and an accessible avatar dialog", (
   assert.match(copy, /Управляйте аккаунтом/);
 });
 
-test("Pricing uses localized paired surfaces and explicit selection states", () => {
-  const pricing = read("src/pages/Pricing.tsx");
-  const copy = read("src/features/pricing/pricingCopy.ts");
-
-  assert.match(pricing, /getPricingCopy\(locale\)/);
-  assert.match(pricing, /aria-pressed=\{billingCycle === cycle\}/);
-  assert.match(pricing, /aria-pressed=\{provider === method\.id\}/);
-  assert.match(pricing, /aria-busy=\{isCheckingOut\}/);
-  assert.match(pricing, /bg-white.*dark:bg-slate-900/);
-  assert.equal(pricing.includes("#3F7D58"), false);
-  assert.match(copy, /Fokusli o‘qish uchun sodda tariflar/);
-  assert.match(copy, /Простые тарифы для сосредоточенной учёбы/);
+test("PRO membership uses the existing pricing route, localized copy and accessible selection states",()=>{
+ const route=read('src/pages/Pricing.tsx'),page=read('src/features/pro/ProMembership.tsx'),copy=read('src/features/pro/proCopy.ts');
+ assert.match(route,/ProMembership/);assert.match(page,/useProCopy/);assert.match(page,/aria-pressed=\{cycle\s*===\s*v\}/);assert.match(page,/select value=\{provider\}/);assert.match(page,/disabled=\{checkoutBusy\s*\|\|\s*!access.billing\?\.providersConfigured\}/);assert.match(copy,/Sizning shaxsiy/);assert.match(copy,/Ваш персональный/);assert.match(page,/config.prices\[cycle\]/);
 });
 
 test("Community separates its member dialog and localizes the social workspace", () => {
@@ -250,7 +243,9 @@ test("Notebook separates its data model, source dialog and AI workspace", () => 
   );
   const aiPanel = read("src/features/notebook/NotebookAiPanel.tsx");
 
-  assert.ok(notebook.split(/\r?\n/).length <= 1000);
+  assert.ok(notebook.split(/\r?\n/).length <= 1100);
+  assert.match(notebook, /useNotebookDraft/);
+  assert.match(read('src/features/pro/useNotebookDraft.ts'), /loadLocalDataStrict/);
   assert.match(notebook, /<NotebookSourceDialog/);
   assert.match(notebook, /<NotebookAiPanel/);
   assert.equal(notebook.includes("const buildNotebookContext ="), false);

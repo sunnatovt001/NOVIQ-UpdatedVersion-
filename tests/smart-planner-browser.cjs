@@ -1,0 +1,44 @@
+const {chromium}=require('playwright');const assert=require('node:assert/strict');const fs=require('node:fs');
+const root=process.env.NOVIQ_PLANNER_ARTIFACTS || 'artifacts/smart-planner';
+let activePage;
+(async()=>{
+ fs.mkdirSync(root,{recursive:true});const browser=await chromium.launch({headless:true,channel:'chrome'});
+ const context=await browser.newContext({viewport:{width:1440,height:1000},timezoneId:'Asia/Tashkent'});const page=await context.newPage();const errors=[];page.on('pageerror',e=>errors.push(e.message));
+ activePage=page;
+ await page.goto('http://127.0.0.1:4180/?testUser=1#/planner');
+ const sp=page.locator('.smart-planner');await sp.getByRole('heading',{name:'Smart Planner',exact:true}).waitFor();
+ await sp.getByRole('button',{name:'Independent learner',exact:true}).click();await sp.getByRole('button',{name:'Continue',exact:true}).click();
+ await sp.getByRole('button',{name:'IELTS',exact:true}).click();await sp.getByRole('button',{name:'SAT',exact:true}).click();
+ await page.reload();await sp.getByRole('heading',{name:'Subjects',exact:true}).waitFor();assert.equal(await sp.locator('fieldset').count(),2);
+ await sp.getByRole('button',{name:'Continue',exact:true}).click();await sp.getByRole('heading',{name:'Learning methods',exact:true}).waitFor();
+ const subjectFields=sp.locator('fieldset');await subjectFields.filter({has:page.locator('legend',{hasText:'IELTS'})}).getByRole('button',{name:'Hybrid',exact:true}).click();
+ assert.equal(await subjectFields.filter({has:page.locator('legend',{hasText:'SAT'})}).getByRole('button',{name:'Self-study',exact:true}).getAttribute('aria-pressed'),'true');
+ await sp.getByRole('button',{name:'Continue',exact:true}).click();await sp.getByLabel('Timezone',{exact:true}).fill('Asia/Tashkent');
+ await sp.getByRole('button',{name:'Continue',exact:true}).click();await sp.getByLabel('Planning style',{exact:true}).selectOption('list');await sp.getByRole('button',{name:'Continue',exact:true}).click();
+ await sp.getByLabel('What do you need to work on?',{exact:true}).fill('Cambridge 18 Reading Test 2');await sp.getByLabel('Estimated total minutes',{exact:true}).fill('60');await sp.getByRole('button',{name:'Add task',exact:true}).click();
+ await sp.getByRole('button',{name:'Save and open Planner',exact:true}).click();await sp.getByRole('heading',{name:'Review schedule',exact:true}).waitFor();await sp.getByRole('button',{name:'Apply this plan',exact:true}).click();await sp.getByRole('heading',{name:'Week overview',exact:true}).waitFor();
+ assert.ok(await sp.getByText('Cambridge 18 Reading Test 2',{exact:true}).count()>0);
+ await page.screenshot({path:`${root}/planner-desktop.png`,fullPage:true});
+ await page.reload();await sp.getByRole('heading',{name:'Week overview',exact:true}).waitFor();
+ await sp.getByRole('button',{name:'Complete: Cambridge 18 Reading Test 2',exact:true}).last().click();assert.equal(await sp.locator('.sp-completed').count(),1);
+ await sp.getByRole('button',{name:'Undo',exact:true}).click();assert.equal(await sp.locator('.sp-completed').count(),0);
+ await sp.getByRole('button',{name:'Edit',exact:true}).last().click();await sp.getByLabel('Estimated total minutes',{exact:true}).fill('90');await sp.getByRole('button',{name:'Save task',exact:true}).click();
+ await sp.getByRole('button',{name:'Review schedule',exact:true}).click();await sp.getByRole('button',{name:'Apply this plan',exact:true}).click();
+ await sp.getByRole('button',{name:'Start Focus',exact:true}).click();await page.waitForURL('**#/focus');const ctx=await page.evaluate(()=>JSON.parse(localStorage.getItem('noviq:isolated-browser-user:plannerFocusContext:v2')));assert.equal(ctx.title,'Cambridge 18 Reading Test 2');
+ await page.goto('http://127.0.0.1:4180/?testUser=1#/analytics');await page.getByRole('heading',{name:/Smart Planner ·/}).waitFor();
+ await page.goto('http://127.0.0.1:4180/?testUser=1#/planner');await sp.getByRole('heading',{name:'Week overview',exact:true}).waitFor();await page.setViewportSize({width:320,height:900});await page.emulateMedia({reducedMotion:'reduce'});await page.waitForTimeout(300);
+ assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth),true);await page.screenshot({path:`${root}/planner-mobile.png`,fullPage:true});
+ // Localization and partial-onboarding recovery on a separate account.
+ const mobile=await context.newPage();await mobile.setViewportSize({width:390,height:844});await mobile.goto('http://127.0.0.1:4180/?testUser=1&testUid=uz-user#/planner');
+ await mobile.evaluate(()=>{localStorage.setItem('noviq-locale','uz');});
+ await mobile.reload();await mobile.locator('.smart-planner').getByRole('heading',{name:'Aqlli rejalashtiruvchi',exact:true}).waitFor();
+ await mobile.screenshot({path:`${root}/onboarding-uz-mobile.png`,fullPage:true});
+ await page.bringToFront();await page.evaluate(()=>localStorage.setItem('noviq-locale','en'));await page.setViewportSize({width:1440,height:1000});await page.reload();await sp.getByRole('heading',{name:'Week overview',exact:true}).waitFor();
+ await page.getByRole('button',{name:'Switch to dark theme',exact:true}).first().click();await page.waitForTimeout(500);
+ assert.equal(await sp.evaluate(el=>getComputedStyle(el.querySelector('h2')).color),'rgb(248, 250, 252)');
+ assert.equal(await sp.evaluate(el=>getComputedStyle(el).backgroundColor),'rgb(11, 18, 32)');
+ await page.screenshot({path:`${root}/planner-dark.png`,fullPage:true});
+ // Confirm authenticated fixtures never wrote to production.
+ assert.equal(await page.evaluate(()=>window.__unexpectedWrites || 0),0);assert.deepEqual(errors,[]);
+ await browser.close();console.log('Smart Planner browser checks passed: onboarding branches, reload, real task, preview/apply, checklist, completion/undo, duration edit, Focus handoff, Analytics, 320px layout, no cloud writes.');
+})().catch(async error=>{if(activePage){console.error(await activePage.locator('.smart-planner').innerText());await activePage.screenshot({path:`${root}/failure.png`,fullPage:true});}console.error(error);process.exit(1);});

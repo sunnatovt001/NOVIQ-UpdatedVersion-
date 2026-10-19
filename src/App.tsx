@@ -10,11 +10,16 @@ import { getAppCopy } from "@/src/features/auth/appCopy";
 import { AppLoadingScreen } from "@/src/features/auth/AppLoadingScreen";
 import { getAccountErrorMessage } from "@/src/features/auth/accountErrors";
 import { RoutePage } from "@/src/components/RoutePage";
+import {useMembership} from '@/src/features/pro/MembershipContext';
+import {useProCopy} from '@/src/features/pro/proCopy';
+import {MembershipProvider} from '@/src/features/pro/MembershipContext';
+import {membershipFailureMessage} from '@/src/features/pro/membershipFailure';
 import { Landing } from "@/src/pages/Landing";
 import { trackSiteVisit } from "@/src/lib/analytics";
 import type { OnboardingAnswers } from "@/src/components/Onboarding";
 import { AlertCircle } from "lucide-react";
 const loadMongoBackendCheck = () => import('@/src/features/auth/MongoBackendCheck');
+const loadFreeLayout = () => import('@/src/features/free/FreeLayout');
 const loadLayout = () => import("@/src/components/Layout");
 const loadOnboarding = () => import("@/src/components/Onboarding");
 
@@ -26,7 +31,19 @@ const pageLoaders: Record<string, () => Promise<Record<string, any>>> = {
   Admin: () => import("@/src/pages/Admin"), Profile: () => import("@/src/pages/Profile"), Pricing: () => import("@/src/pages/Pricing"),
 };
 
+const freePageLoaders: Record<string, () => Promise<Record<string, any>>> = {
+  Dashboard: () => import('@/src/features/free/FreeDashboard'),
+  Planner: () => import('@/src/features/free/FreePlanner'),
+  Flashcards: () => import('@/src/features/free/FreeFlashcards'),
+  Focus: () => import('@/src/features/free/FreeFocus'),
+  Notes: () => import('@/src/features/free/FreeNotes'),
+  Tutor: () => import('@/src/features/free/FreeTutor'),
+  Analytics: () => import('@/src/features/free/FreeAnalytics'),
+  Pricing: () => import('@/src/features/free/FreePricing'),
+};
+
 const AppContent = () => {
+  const membership = useMembership(), proCopy = useProCopy();
   const { locale } = useLocale();
   const copy = getAppCopy(locale);
   const { user, profile, loading, authError, completeOnboarding } = useAuth();
@@ -130,12 +147,23 @@ const AppContent = () => {
     );
   }
 
+  // Verification failure must not take the user's existing Free tools offline.
+  // Premium access still requires the provider's authenticated server response.
+  if (!membership.available && !membership.error) {
+    return <AppLoadingScreen message={proCopy.loading}/>;
+  }
+  const premium = membership.cinematic;
   const pageName = activeTab.charAt(0).toUpperCase() + activeTab.slice(1);
   const name = pageLoaders[pageName] ? pageName : "Dashboard";
   return (
-    <RoutePage loader={loadLayout} name="Layout" pageProps={{ activeTab, setActiveTab,
-      children: <RoutePage key={name} loader={pageLoaders[name]} name={name} pageProps={{ setActiveTab }} />,
-    }} />
+    <>
+      {!membership.available && membership.error && <div role="alert" className="relative z-[500] flex flex-wrap items-center justify-center gap-3 border-b border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-950">
+        <span>{membershipFailureMessage(membership.failure, locale)}</span><button className="min-h-11 px-3 underline" onClick={() => void membership.refresh()}>{proCopy.retry}</button>
+      </div>}
+      <RoutePage key={`${user.uid}:${premium ? 'pro' : 'free'}`} loader={premium ? loadLayout : loadFreeLayout} name="Layout" pageProps={{ activeTab, setActiveTab,
+        children: <RoutePage key={name} loader={!premium && freePageLoaders[name] ? freePageLoaders[name] : pageLoaders[name]} name={name} pageProps={{ setActiveTab }} />,
+      }} />
+    </>
   );
 };
 
@@ -143,7 +171,7 @@ export default function App() {
   if (window.location.pathname === '/backend-check') return <RoutePage loader={loadMongoBackendCheck} name="MongoBackendCheck" />;
   return (
     <AuthProvider>
-      <AppContent />
+      <MembershipProvider><AppContent /></MembershipProvider>
     </AuthProvider>
   );
 }

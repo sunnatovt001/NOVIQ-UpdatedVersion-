@@ -272,8 +272,10 @@ export const useUserActivityMetrics = (
   );
   const [metrics, setMetrics] =
     React.useState<UserActivityMetrics>({ ...EMPTY_METRICS, loading: !!uid });
+  const [metricsUid,setMetricsUid]=React.useState(uid);
   React.useEffect(() => {
     setMetrics({ ...EMPTY_METRICS, loading: !!uid });
+    setMetricsUid(uid);
     if (!uid) return;
     let active = true,
       refreshing = false,
@@ -498,6 +500,14 @@ export const useUserActivityMetrics = (
       deckIds="docs" in snap ? snap.docs.map(document=>document.id) : [];
       void refresh(true);
     };
+    let primaryPlan:Record<string,any>|null=null,legacyPlan:Record<string,any>|null=null,primaryKnown=false,legacyKnown=false;
+    const publishPlan=()=>{
+      if(!primaryKnown || !primaryPlan&&!legacyKnown)return;
+      const data=primaryPlan||legacyPlan,state=data?.state||data||{};
+      plannerDone=countPlannerTasksDone(data,dayScope);
+      update({tasksDone:roadmapDone+plannerDone,missionTotal:Array.isArray(state.tasks)?state.tasks.length:0,missionCompleted:countPlannerTasksDone(data,null)});
+      settled('planner');
+    };
     const stop = [
       onSnapshot(
         doc(db, "users", uid),
@@ -521,19 +531,17 @@ export const useUserActivityMetrics = (
         (error) => failure(error, "trusted"),
       ),
       onSnapshot(
+        doc(db, "users", uid, "planner", "smart-v2"),
+        { includeMetadataChanges: true },
+        snap=>{if(snap.metadata.fromCache)return;primaryKnown=true;primaryPlan=snap.exists()?snap.data():null;publishPlan();},
+        error=>failure(error,'planner'),
+      ),
+      onSnapshot(
         doc(db, "users", uid, "planner", "state"),
         { includeMetadataChanges: true },
         (snap) => {
           if (snap.metadata.fromCache) return;
-          plannerDone = snap.exists()
-            ? countPlannerTasksDone(snap.data(), dayScope)
-            : 0;
-          const state = snap.data()?.state || snap.data() || {};
-          update({ tasksDone: roadmapDone + plannerDone,
-            missionTotal: Array.isArray(state.tasks) ? state.tasks.length : 0,
-            missionCompleted: countPlannerTasksDone(snap.exists() ? snap.data() : null, null),
-          });
-          settled("planner");
+          legacyKnown=true;legacyPlan=snap.exists()?snap.data():null;publishPlan();
         },
         (error) => failure(error, "planner"),
       ),
@@ -560,5 +568,5 @@ export const useUserActivityMetrics = (
     () => calculateExamReadiness(metrics),
     [metrics],
   );
-  return uid ? { ...metrics, examReadiness, retry } : EMPTY_METRICS;
+  return uid ? metricsUid===uid ? { ...metrics, examReadiness, retry } : {...EMPTY_METRICS,loading:true,retry} : EMPTY_METRICS;
 };

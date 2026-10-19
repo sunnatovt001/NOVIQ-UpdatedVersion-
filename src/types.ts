@@ -37,8 +37,12 @@ export type PaymentProvider =
   | "card";
 
 export interface SubscriptionState {
+  trialUsed?: boolean;
+  trialStartedAt?: string;
+  trialEndsAt?: string;
+  autoRenew?: boolean;
   plan: SubscriptionPlan;
-  status: "active" | "trialing" | "past_due" | "canceled" | "inactive";
+  status: "active" | "trialing" | "past_due" | "canceled" | "inactive" | "expired";
   billingCycle?: BillingCycle;
   provider?: PaymentProvider;
   startedAt?: string;

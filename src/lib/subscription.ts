@@ -1,3 +1,4 @@
+import config from '../../functions/pro-config.json';
 import { getLocalDayKey } from "@/src/lib/progressMath";
 import { loadLocalData, makeSyncId, saveLocalData } from "@/src/lib/localStore";
 import { writeDocWithQueue } from "@/src/lib/offlineSync";
@@ -10,19 +11,19 @@ import type {
 
 export const PRO_PRICING = {
   monthly: {
-    amount: 39000,
+    amount: config.prices.monthly,
     label: "39,000 UZS / month",
   },
   yearly: {
-    amount: 299000,
+    amount: config.prices.yearly,
     label: "299,000 UZS / year",
   },
 } as const;
 
 export const FREE_LIMITS = {
-  aiTutorMessagesPerDay: 5,
-  aiGeneratedQuizzesPerDay: 2,
-  aiFlashcardGenerationsPerDay: 2,
+  aiTutorMessagesPerDay: config.quotas.free.tutor,
+  aiGeneratedQuizzesPerDay: config.quotas.free.planner,
+  aiFlashcardGenerationsPerDay: config.quotas.free.flashcards,
 } as const;
 
 export const FREE_FEATURES = [
@@ -38,18 +39,18 @@ export const FREE_FEATURES = [
 ];
 
 export const PRO_FEATURES = [
-  "Unlimited Noviq Tutor",
-  "Unlimited Exam Quizzes",
-  "Unlimited Exam Flashcards",
+  "Higher-limit Noviq Tutor",
+  "Higher-limit Exam Quizzes",
+  "Higher-limit Exam Flashcards",
   "AI Writing Evaluation",
   "AI Speaking Evaluation",
   "Weakness Intelligence",
-  "Success Probability Engine",
+  "Evidence-based Learning Insights",
   "Dynamic AI Roadmap",
   "Recovery Mode",
   "Advanced Analytics",
-  "Priority AI Exam Processing",
-  "Faster Exam Responses",
+  "Connected Learning Studio",
+  "Weekly Learning Reviews",
 ];
 
 export const PAYMENT_METHODS: {
@@ -75,8 +76,8 @@ export const isPro = (profile?: UserProfile | null) => {
   const subscription = getSubscription(profile);
   if (subscription.plan !== "pro") return false;
   if (!["active", "trialing"].includes(subscription.status)) return false;
-  if (!subscription.currentPeriodEnd) return false;
-  return new Date(subscription.currentPeriodEnd).getTime() > Date.now();
+  const end=subscription.status==='trialing'?subscription.trialEndsAt || subscription.currentPeriodEnd:subscription.currentPeriodEnd;
+  return !!end && new Date(end).getTime() > Date.now();
 };
 
 export const getPlanLabel = (profile?: UserProfile | null) =>

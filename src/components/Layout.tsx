@@ -1,3 +1,9 @@
+import '@/src/features/pro/brand.css';
+import '@/src/features/pro/reference.css';
+import '@/src/features/pro/recovery.css';
+import {useProCopy} from '@/src/features/pro/proCopy';
+import {useMembership} from '@/src/features/pro/MembershipContext';
+import {MembershipBadge} from '@/src/features/pro/ProMembership';
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "@/src/contexts/AuthContext";
 import { useCommunityPresence } from "@/src/lib/useCommunityPresence";
@@ -73,8 +79,8 @@ const SidebarItem = ({ id, icon, label, active, collapsed, onClick }: SidebarIte
     className={cn(
       "group relative flex w-full items-center gap-4 rounded-2xl border px-5 py-3.5 transition-[background-color,border-color,color] duration-150",
       collapsed && "lg:mx-auto lg:h-[3.25rem] lg:w-[3.25rem] lg:justify-center lg:gap-0 lg:px-0 lg:py-0",
-      active 
-        ? "border-[var(--noviq-accent)]/25 bg-[var(--noviq-soft)] text-[var(--noviq-accent)]" 
+      active
+        ? "border-[var(--noviq-accent)]/25 bg-[var(--noviq-soft)] text-[var(--noviq-accent)]"
         : "border-transparent text-[#6B7280] hover:border-[#E5E7EB] hover:bg-white hover:text-[#111827]"
     )}
   >
@@ -90,9 +96,9 @@ const SidebarItem = ({ id, icon, label, active, collapsed, onClick }: SidebarIte
     )}>
       {label}
     </span>
-    
+
     {active && !collapsed ? (
-      <motion.div 
+      <motion.div
         layoutId="active-pill"
         className="ml-auto h-1.5 w-1.5 rounded-full bg-[var(--noviq-accent)]"
       />
@@ -109,6 +115,7 @@ type AppTheme = "light" | "dark";
 
 interface AppNotification {
   id: string;
+  titleKey?: string;
   title: string;
   body: string;
   type: "streak" | "reminder" | "review" | "ai" | "system";
@@ -212,9 +219,9 @@ const getMomentumState = (
   };
 };
 
-export const Layout: React.FC<{ 
-  children: React.ReactNode; 
-  activeTab: string; 
+export const Layout: React.FC<{
+  children: React.ReactNode;
+  activeTab: string;
   setActiveTab: (tab: string) => void;
 }> = ({ children, activeTab, setActiveTab }) => {
   const { profile, signOut, user } = useAuth();
@@ -230,7 +237,7 @@ export const Layout: React.FC<{
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => {
     if (typeof window === "undefined") return false;
-    try { return window.localStorage.getItem("noviq-sidebar") === "collapsed"; }
+    try { return window.localStorage.getItem("noviq-pro-sidebar") === "collapsed"; }
     catch { return false; }
   });
   const [notificationsOpen, setNotificationsOpen] = useState(false);
@@ -240,9 +247,11 @@ export const Layout: React.FC<{
     () => getMomentumState(profile, t),
     [profile, t],
   );
+  const membership = useMembership();
+  const proCopy = useProCopy();
   const [theme, setTheme] = useState<AppTheme>(() => {
     if (typeof window === "undefined") return "light";
-    try { return window.localStorage.getItem("noviq-theme") === "dark" ? "dark" : "light"; }
+    try { return window.localStorage.getItem("noviq-pro-theme") === "dark" ? "dark" : "light"; }
     catch { return "light"; }
   });
   const [pushPermission, setPushPermission] = useState<NotificationPermission>(
@@ -278,12 +287,12 @@ export const Layout: React.FC<{
 
   useEffect(() => {
     document.documentElement.classList.toggle("dark", isDarkTheme);
-    try { window.localStorage.setItem("noviq-theme", theme); }
+    try { window.localStorage.setItem("noviq-pro-theme", theme); }
     catch { /* Theme still applies to this session. */ }
   }, [isDarkTheme, theme]);
 
   useEffect(() => {
-    try { window.localStorage.setItem("noviq-sidebar", isSidebarCollapsed ? "collapsed" : "expanded"); }
+    try { window.localStorage.setItem("noviq-pro-sidebar", isSidebarCollapsed ? "collapsed" : "expanded"); }
     catch { /* Sidebar remains usable without persistence. */ }
   }, [isSidebarCollapsed]);
 
@@ -408,6 +417,8 @@ export const Layout: React.FC<{
   useEffect(() => {
     if (!visibleNotifications.length || pushPermission !== "granted") return;
     const latest = visibleNotifications[0];
+    // Membership reminders stay in-app and never interrupt a study session.
+    if(latest.titleKey?.startsWith('pro.')) return;
     const timestamp = latest.createdAt?.toMillis?.() || 0;
     if (latest.read || Date.now() - timestamp > 5000 || pushedNotificationIdsRef.current.has(latest.id)) return;
     pushedNotificationIdsRef.current.add(latest.id);
@@ -525,8 +536,8 @@ export const Layout: React.FC<{
                   <Bell size={16} />
                 </span>
                 <span className="min-w-0 flex-1">
-                  <span className="block text-sm font-bold text-[#111827]">{notification.title}</span>
-                  <span className="mt-1 block text-xs leading-5 text-[#6B7280]">{notification.body}</span>
+                  <span className="block text-sm font-bold text-[#111827]">{notification.titleKey==='pro.expired'?proCopy.expired:notification.titleKey==='pro.reminder'?proCopy.expires:notification.title}</span>
+                  <span className="mt-1 block text-xs leading-5 text-[#6B7280]">{notification.titleKey==='pro.expired'?proCopy.expiredHelp:notification.titleKey==='pro.reminder'?proCopy.trialHelp:notification.body}</span>
                   <span className="mt-2 block text-[10px] font-bold uppercase tracking-widest text-[#9CA3AF]">
                     {formatNotificationTime(notification)}
                   </span>
@@ -558,7 +569,7 @@ export const Layout: React.FC<{
   );
 
   return (
-    <div className={cn("noviq-app relative flex h-screen overflow-hidden font-sans", isDarkTheme && "dark")}>
+    <div data-pro-page={activeTab} data-pro-theme={isDarkTheme ? "midnight-aurora" : "cloud-lavender"} className={cn("noviq-app relative flex h-screen overflow-hidden font-sans", isDarkTheme && "dark", membership.cinematic && "pro-environment")}>
       <div className="app-bg pointer-events-none fixed inset-0 -z-20 overflow-hidden" />
 
       {/* Mobile Top Nav */}
@@ -574,7 +585,7 @@ export const Layout: React.FC<{
         <div className="flex items-center gap-2">
           <HeaderLanguagePicker/>
           {renderThemeToggleButton()}
-          <button 
+          <button
             onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
             className="app-icon-button flex h-12 w-12 items-center justify-center rounded-2xl border border-[#E5E7EB] bg-white text-[#111827] transition-transform active:scale-90"
             aria-label={isMobileMenuOpen ? t("shell.closeMenu") : t("shell.openMenu")}
@@ -594,7 +605,7 @@ export const Layout: React.FC<{
           "flex items-center justify-between p-10 lg:pt-10",
           isSidebarCollapsed && "lg:flex-col lg:gap-4 lg:px-4 lg:py-8"
         )}>
-          <button 
+          <button
             onClick={() => window.open('https://noviq.uz', '_blank')}
             className={cn(
               "flex items-center gap-4 hover:opacity-80 transition-opacity group",
@@ -632,12 +643,13 @@ export const Layout: React.FC<{
           >
             {isSidebarCollapsed ? <ChevronsRight size={17} /> : <ChevronsLeft size={17} />}
           </button>
-          
+
           <button className="text-[#6B7280] lg:hidden" onClick={() => setIsMobileMenuOpen(false)} aria-label={t("shell.closeMenu")}>
             <X size={24} />
           </button>
         </div>
 
+        <MembershipBadge/>
         <nav aria-label={t("shell.workspaceNavigation")} className={cn(
           "CustomScrollbar flex-1 space-y-2 overflow-y-auto px-6 py-4",
           isSidebarCollapsed && "lg:px-4"
@@ -693,9 +705,9 @@ export const Layout: React.FC<{
               <div className="h-full rounded-full bg-[var(--noviq-accent)]" style={{ width: `${momentum.progress}%` }}/>
             </div>
           </div>
-          
 
-          <button 
+
+          <button
             onClick={signOut}
             className={cn(
               "flex w-full items-center gap-4 rounded-2xl border border-[#E5E7EB] bg-white px-5 py-4 text-[10px] font-black uppercase tracking-[0.22em] text-[#6B7280] transition-colors hover:border-red-200 hover:bg-red-50 hover:text-red-600",
@@ -713,8 +725,8 @@ export const Layout: React.FC<{
       {/* Main Content */}
       <main ref={mainContent} tabIndex={-1} aria-label={[...primaryMenuItems, ...secondaryMenuItems].find(item => item.id === activeTab)?.label} className="relative flex flex-1 flex-col overflow-hidden pb-[calc(4.75rem+env(safe-area-inset-bottom))] pt-[calc(5rem+env(safe-area-inset-top))] lg:pb-0 lg:pt-0">
         <div className="app-main-surface pointer-events-none absolute inset-0 rounded-[2rem] border border-[#E5E7EB] bg-white/45" />
-        {activeTab === "dashboard" && <div className="relative z-[300] hidden h-14 shrink-0 items-center justify-end px-10 lg:flex xl:px-14"><HeaderLanguagePicker/></div>}
-        {activeTab !== "dashboard" && <header className={cn("relative z-[300] hidden shrink-0 items-center justify-between lg:flex", activeTab === "tutor" ? "h-20 px-5" : "h-28 px-10 xl:px-14")}>
+        {activeTab === "dashboard" && <div className="relative z-[300] hidden h-14 shrink-0 items-center justify-end gap-3 px-6 lg:flex"><HeaderLanguagePicker/>{renderThemeToggleButton()}</div>}
+        {activeTab !== "dashboard" && <header data-pro-shell-header className={cn("relative z-[300] hidden shrink-0 items-center justify-between lg:flex", activeTab === "tutor" ? "h-20 px-5" : "h-28 px-10 xl:px-14")}>
           <div className="space-y-1">
             <h2 className="group flex items-center gap-3 text-3xl font-bold leading-none tracking-tight text-[#111827]">
                 {t("shell.greeting")}, {firstName}
@@ -723,7 +735,7 @@ export const Layout: React.FC<{
                {t("shell.readyPrefix")} <span className="font-bold text-[var(--noviq-accent)]">{t("shell.ready")}</span>
             </p>
           </div>
-          
+
           <div className="flex items-center gap-8">
             <div className="hidden gap-8 xl:flex">
                <div className="text-right">
@@ -759,12 +771,12 @@ export const Layout: React.FC<{
                  </button>
                  {notificationDropdown}
                </div>
-               <button 
+               <button
                  aria-label="Open profile"
                  onClick={() => setActiveTab('profile')}
                  className="group relative h-14 w-14 overflow-hidden rounded-[1.25rem] border border-[#E5E7EB] bg-white transition-colors hover:border-[var(--noviq-accent)]"
                >
-                 <img src={profile?.photoURL || "https://api.dicebear.com/7.x/avataaars/svg?seed=Felix&hairColor=2c1b18&skinColor=f8d25c"} alt="" className="w-full h-full object-cover" />
+                 <img src={profile?.photoURL || "/profile-placeholder.svg"} alt="" onError={event => { if (!event.currentTarget.src.endsWith("/profile-placeholder.svg")) event.currentTarget.src = "/profile-placeholder.svg"; }} className="w-full h-full object-cover" />
                  <div className="absolute inset-0 bg-[var(--noviq-accent)]/0 transition-colors group-hover:bg-[var(--noviq-accent)]/10" />
                </button>
             </div>
@@ -781,10 +793,10 @@ export const Layout: React.FC<{
               {children}
             </div>
         </div>
-        
+
         {/* Mobile Floating Nav Overlay */}
         {isMobileMenuOpen && (
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}

@@ -1,0 +1,48 @@
+{
+  "historicalHead": "31d5c57dd2e056111a25be322d3d0bd6b6cbe0a5",
+  "preservedProCommit": "db9970a385141a29932d3dde4a388a60d8800a8c",
+  "recoveredBaselineCommit": "7d24341ebb959168e3cbf5c4982616795cb63f43",
+  "source": "Pre-eight-page original file backups; historical HEAD predates uncommitted Planner/Flashcards/Ascend work.",
+  "originalFiles": [
+    {
+      "path": "src/components/Layout.tsx",
+      "sha256": "e9a6af84135876d50b64ad796dde2deb0acd9468d7d570c4ae464ab7d76ce227"
+    },
+    {
+      "path": "src/features/planner/SmartPlanner.tsx",
+      "sha256": "124455ccca8dbad09df5a787c268543328b252ce37e4694b4bae088e9bf93154"
+    },
+    {
+      "path": "src/features/pro/ProHub.tsx",
+      "sha256": "2faeb0bbff76bdf9d6e61b819305a2e33a8de097b60cf6586fa637d192718dbf"
+    },
+    {
+      "path": "src/features/pro/ProMembership.tsx",
+      "sha256": "1eb80907ad39e9854e85b2236151de49e2318d01fb2ef0315adb830b03efa55d"
+    },
+    {
+      "path": "src/index.css",
+      "sha256": "d89cd9685cfca4a252a1c9025f4a30bb59c2c0afd4041ce8823d8cbe8830e7e6"
+    },
+    {
+      "path": "src/pages/Analytics.tsx",
+      "sha256": "01abdd785196bf779ff1c8cf1dadeedd900498aab5dc65877b82801e98de3f07"
+    },
+    {
+      "path": "src/pages/Flashcards.tsx",
+      "sha256": "09e596e9c4e1dab73201c06f2cb56eea23922ebf47ee8fa207ef766019022047"
+    },
+    {
+      "path": "src/pages/Focus.tsx",
+      "sha256": "18a1c8a32b0447be652de2e5b1568c0b581e1fca81101d243f97800f2d3b427b"
+    },
+    {
+      "path": "src/pages/Notes.tsx",
+      "sha256": "ed553fcda5a937a60cccb6e6efc2c3cb25f8e44f83a0ad4fef05e204979f651e"
+    },
+    {
+      "path": "src/pages/Tutor.tsx",
+      "sha256": "034472cf466009649bf11b703bbbc3aa434ad7954d00a27e2cd04eaecc79a03e"
+    }
+  ]
+}

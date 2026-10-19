@@ -450,6 +450,7 @@ test('request deadlines settle loading and concurrent retries share one request'
 test('Metrics current and previous weeks use distinct Monday–Sunday windows and real hours', () => {
   class FixedDate extends Date { constructor(...args) { super(...(args.length ? args : ['2026-10-04T12:00:00'])); } }
   const context = { Date: FixedDate, DAY_LABELS: ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'], getLocalDayKey: (value) => { const d = new Date(value); return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`; } };
+  context.activityDay=value=>new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Tashkent',year:'numeric',month:'2-digit',day:'2-digit'}).format(value);
   context.getWeekStart = handler('src/pages/Analytics.tsx', 'getWeekStart', context);
   const build = handler('src/pages/Analytics.tsx', 'buildWeeklyData', context);
   const sessions = [{timestamp:'2026-09-28T12:00:00',duration:3600},{timestamp:'2026-09-21T12:00:00',duration:1800}];
@@ -475,29 +476,24 @@ test('charts wait for positive container dimensions, resize and disconnect their
   cleanup();assert.equal(disconnected,true);
 });
 
-test('card edits preserve due dates and review history, reject blank content and duplicate saves', async () => {
-  const original = {id:'c1',front:'Original',back:'Answer',dueAt:'2026-10-12',interval:8,easeFactor:2.8,repetition:4,lapses:1,reviewCount:9};
-  let resolve;
-  const calls = [];
-  const context = {user:{uid:'isolated'},selectedDeck:{id:'d1'},cardForm:{front:' Revised ',back:' Answer ',imageUrl:''},editingCardId:'c1',cardImageFile:null,isReadOnlyAudit:false,saveRequestRef:{current:false},state:{d1:[original]},deckCards:()=>context.state.d1,setIsSaving(){},setStatus(){},setCardsByDeck(update){context.state=update(context.state);},isLocalId:()=>false,writeDocWithQueue(operation){calls.push(operation); return calls.length===1 ? new Promise(done=>{resolve=done;}) : Promise.resolve('synced');},resetCardForm(){},setCloudSyncBlocked(){},getAppErrorMessage:String,console};
-  const save = handler('src/pages/Flashcards.tsx','handleSaveCard',context);
-  context.cardForm.front=' '; await save(); assert.equal(calls.length,0);
-  context.cardForm.front=' Revised '; const first=save(); await save(); assert.equal(calls.length,1);
-  for(const field of ['dueAt','interval','easeFactor','repetition','lapses','reviewCount']) assert.equal(context.state.d1[0][field],original[field]);
-  assert.equal(context.state.d1[0].front,'Revised');
-  assert.equal(calls[0].data.reviewCount,undefined);
-  resolve('synced'); await first; assert.equal(context.saveRequestRef.current,false);
-  context.isReadOnlyAudit=true; await save(); assert.equal(calls.length,2);
+// Flashcards v2 replaces the monolithic handlers with validated content and an idempotent attempt engine.
+const flashcardsModel = load('src/features/flashcards/model.ts');
+test('card normalization preserves legacy review metadata and rejects blank content', () => {
+  const original={front:'Original',back:'Answer',dueAt:'2026-10-12',interval:8,easeFactor:2.8,repetition:4,lapses:1,reviewCount:9};
+  const card=flashcardsModel.normalizeCard(original,'c1','d1');
+  for(const field of ['dueAt','interval','easeFactor','repetition','lapses','reviewCount']) assert.equal(card[field],original[field]);
+  assert.equal(flashcardsModel.cardValid({...card,front:' '}),false);
+  const review=flashcardsModel.normalizeReview(undefined,card);
+  assert.equal(review.reviewCount,9);assert.equal(review.interval,8);
 });
-
-test('one deck-review action cannot grade a card or award progress twice', async () => {
-  let resolve, writes=0, awards=0;
-  const card={id:'card',reviewCount:3};
-  const context={user:{uid:'isolated'},selectedDeck:{id:'deck'},currentPracticeCard:card,gradeRequestRef:{current:false},lastGradedCardRef:{current:null},isReadOnlyAudit:false,setIsGrading(){},nextSchedule:()=>({interval:2}),state:{deck:[card]},setCardsByDeck(update){context.state=update(context.state);},writeDocWithQueue(){writes++;return new Promise(done=>{resolve=done;});},setReviewedCount(update){context.reviewed=update(context.reviewed||0);},setIsFlipped(){},updateLocalProfile(){awards++;},buildXpAwardPatch:()=>({}),profile:{},NOVIQ_XP:{memory:{revision:5}},persistXpAwards:async()=>{},trackUserEvent:async()=>{},practiceIndex:0,practiceQueue:[card],window:{setTimeout(){}},setCloudSyncBlocked(){},getAppErrorMessage:String,console};
-  const grade=handler('src/pages/Flashcards.tsx','gradeCurrentCard',context);
-  const first=grade('easy'); await grade('easy'); assert.equal(writes,1);
-  resolve('synced'); await first; await grade('easy');
-  assert.equal(writes,1);assert.equal(awards,1);assert.equal(context.reviewed,1);assert.equal(context.state.deck[0].reviewCount,4);
+test('one deck-review action cannot append duplicate attempts or award fabricated XP', () => {
+  const session={id:'s',deckId:'d',mode:'type',cardIds:['c','next'],index:0,attempts:[],startedAt:'2026-10-14',activeSeconds:0,completed:false};
+  const attempt={cardId:'c',mode:'type',answer:'Saved answer',correct:true,hints:0,rating:'good',at:'2026-10-14',revision:1};
+  const next=flashcardsModel.appendAttempt(session,attempt,12);
+  assert.equal(next.attempts.length,1);assert.equal(next.index,1);assert.equal(next.activeSeconds,12);
+  assert.equal(flashcardsModel.appendAttempt(next,attempt,20),null);
+  assert.equal(flashcardsModel.appendAttempt(next,{...attempt,cardId:'foreign'},20),null);
+  assert.equal(next.xp,undefined);
 });
 
 function plannerContext() {
@@ -604,7 +600,7 @@ test('shared AI errors classify failures and localize without exposing diagnosti
 
 test('Tutor renders successful and failed AI responses in isolation and retry does not duplicate the user message', async () => {
   const noop = () => {};
-  const context = { Date, user: { uid: 'test-only' }, activePro: true, tutorUsage: 0, tutorLimit: 5, aiRequestRef: { current: false }, voiceLanguage: 'en-US', profile: {}, persistedMessages: [], dayKey: '2026-10-04',
+  const context = { proTutorMode:'standard', explanationDepth:'standard',shareProContext:false, Date, user: { uid: 'test-only' }, activePro: true, tutorUsage: 0, tutorLimit: 5, aiRequestRef: { current: false }, voiceLanguage: 'en-US', profile: {}, persistedMessages: [], dayKey: '2026-10-04',
     setUpgradeOpen: noop, setInput: noop, setAttachedFiles: noop, setUploadError: noop, setLastRequest: noop, setTutorUsage: noop, saveLocalDailyUsage: noop, speak: noop,
     buildStudentTutorContext: () => '', buildTutorRequestContext: load('src/features/tutor/tutorRequest.ts').buildTutorRequestContext, trackUserEvent: async () => {}, persistMessage: async () => {}, getAppErrorMessage: error => error.message,
     classifyAiFailure: load('src/lib/aiFailure.ts').classifyAiFailure,
@@ -633,7 +629,7 @@ test('Tutor rejects obsolete answers/errors and preserves a newer request lock',
   for (const reason of ['account', 'unmount', 'same-account-generation']) for (const failed of [false, true]) {
     let resolve, reject;
     const noop = () => {};
-    const context = { user:{uid:'original'}, ownerRef:{current:'original'}, aiGenerationRef:{current:1}, aiRequestRef:{current:false}, activePro:true,
+    const context = { proTutorMode:'standard', explanationDepth:'standard',shareProContext:false, user:{uid:'original'}, ownerRef:{current:'original'}, aiGenerationRef:{current:1}, aiRequestRef:{current:false}, activePro:true,
       profile:{}, persistedMessages:[], voiceLanguage:'en-US', tutorUsage:0, tutorLimit:5,
       setInput:noop,setAttachedFiles:noop,setUploadError:noop,setLastRequest:noop,setTutorUsage:noop,setUpgradeOpen:noop,
       setAiError:value=>{context.error=value;},setIsTyping:value=>{context.loading=value;},

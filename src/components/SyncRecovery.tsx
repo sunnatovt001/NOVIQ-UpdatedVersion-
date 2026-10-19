@@ -23,6 +23,7 @@ export const SyncRecovery = ({ alwaysVisible = false }: {alwaysVisible?: boolean
   const [status, setStatus] = useState("");
   const [busy, setBusy] = useState(false);
   const [expanded, setExpanded] = useState(false);
+  const [pendingVisible, setPendingVisible] = useState(false);
   const ownerRef = useRef(user?.uid); ownerRef.current = user?.uid;
   const fileRef = useRef<HTMLInputElement>(null);
   const refresh = useCallback(() => {
@@ -41,7 +42,15 @@ export const SyncRecovery = ({ alwaysVisible = false }: {alwaysVisible?: boolean
     window.addEventListener("storage", storage);
     return () => { window.clearInterval(timer); window.removeEventListener("noviq:offline-sync", refresh); window.removeEventListener("storage", storage); };
   }, [refresh]);
-  if (!user || (!alwaysVisible && !pending && !error)) return null;
+  const hasPending = pending > 0;
+  useEffect(() => {
+    // Ordinary writes often settle immediately; do not flash a warning for them.
+    setPendingVisible(false);
+    if (!hasPending) return;
+    const timer = window.setTimeout(() => setPendingVisible(true), 3000);
+    return () => window.clearTimeout(timer);
+  }, [hasPending, user?.uid]);
+  if (!user || (!alwaysVisible && !(hasPending && pendingVisible) && !error)) return null;
   const buttonClass = "rounded-xl border border-slate-300 px-3 py-2 text-sm font-semibold disabled:opacity-50";
   const contents = <>
     <p className="font-semibold">{error ? copy.attention : pending ? formatCopy(copy.waiting, { count: pending }) : copy.none}</p>
@@ -78,7 +87,10 @@ export const SyncRecovery = ({ alwaysVisible = false }: {alwaysVisible?: boolean
       </>}
     </div>
   </>;
-  if (alwaysVisible) return <section className="sync-recovery-card mb-5 rounded-2xl border border-amber-300 bg-amber-50 p-4 text-slate-900" aria-label={copy.region}>{contents}</section>;
+  if (alwaysVisible) return <details className="sync-recovery-card mb-5 rounded-2xl border p-4" style={{borderColor:"var(--noviq-border)",background:"var(--noviq-card)",color:"var(--noviq-text)"}}>
+    <summary className="flex min-h-11 cursor-pointer items-center gap-3"><CloudUpload size={18} aria-hidden="true"/><span className="flex-1 font-semibold">{copy.region}</span><span className="text-xs" style={{color:"var(--noviq-muted)"}}>{error ? copy.attention : pending ? formatCopy(copy.waiting,{count:pending}) : copy.none}</span></summary>
+    <div className="mt-4 border-t pt-4" style={{borderColor:"var(--noviq-border)"}}>{contents}</div>
+  </details>;
   return <section className="relative z-40 mb-2 shrink-0 text-slate-900" aria-label={copy.region}>
     <details open={expanded} onKeyDown={event => { if (event.key === "Escape") { setExpanded(false); (event.currentTarget.querySelector("summary") as HTMLElement)?.focus(); } }}>
       <summary onClick={event => { event.preventDefault(); setExpanded(value => !value); }} className="flex min-h-10 cursor-pointer list-none items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium [&::-webkit-details-marker]:hidden">

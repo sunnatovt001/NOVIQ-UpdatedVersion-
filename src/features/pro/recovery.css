@@ -1,0 +1,124 @@
+/* Reference 01–08 corrections. Every rule requires the authorized PRO root. */
+.noviq-app.pro-environment[data-pro-theme] {
+  --pro-space: 18px;
+  --pro-radius: 22px;
+  --pro-motion: 160ms;
+  font-variant-numeric: tabular-nums;
+  font-family: Inter, Arial, sans-serif;
+}
+.noviq-app.pro-environment[data-pro-theme] .ascend-hub-heading { padding: 8px 0 12px; }
+.noviq-app.pro-environment[data-pro-theme] .ascend-tabs { margin: 8px 0 14px; }
+.noviq-app.pro-environment[data-pro-theme] .ascend-hub { display: flex; flex-direction: column; }
+.noviq-app.pro-environment[data-pro-theme] .ascend-hub>.ascend-hub-heading { order: -3; }
+.noviq-app.pro-environment[data-pro-theme] .ascend-hub>.pro-reference-overview { order: -2; }
+.noviq-app.pro-environment[data-pro-theme] .ascend-hub>.ascend-tabs { order: -1; }
+.noviq-app.pro-environment[data-pro-theme] .pro-reference-overview { margin-top: 14px; gap: var(--pro-space); }
+.noviq-app.pro-environment[data-pro-theme] .pro-summary-card { min-height: 165px; padding: 22px; }
+.noviq-app.pro-environment[data-pro-theme] .pro-summary-icon { margin-bottom: 18px; }
+.noviq-app.pro-environment[data-pro-theme] .pro-trend-card { min-height: 275px; padding: 24px; }
+.noviq-app.pro-environment[data-pro-theme] .pro-trend-body { margin-top: 20px; }
+.noviq-app.pro-environment[data-pro-theme] .pro-pill-chart { height: 170px; }
+.noviq-app.pro-environment[data-pro-theme] .pro-balance-card { justify-content: flex-start; gap: 22px; padding-top: 32px; }
+.noviq-app.pro-environment[data-pro-theme] .pro-timer-card,
+.noviq-app.pro-environment[data-pro-theme] .pro-reminder-card,
+.noviq-app.pro-environment[data-pro-theme] .pro-insight-card { min-height: 235px; }
+.noviq-app.pro-environment[data-pro-theme] .pro-timer-arc { height: 110px; margin-top: 18px; }
+
+/* 02: use the saved assignments as the narrow list, giving the week first priority. */
+.noviq-app.pro-environment[data-pro-theme] .sp-header { padding: 16px 22px; }
+.noviq-app.pro-environment[data-pro-theme] .sp-day-brief { padding: 10px 22px; }
+.noviq-app.pro-environment[data-pro-theme] .sp-calendar-workspace { grid-template-columns: 270px minmax(0,1fr); }
+.noviq-app.pro-environment[data-pro-theme] .sp-calendar-toolbar { padding: 16px 20px; }
+.noviq-app.pro-environment[data-pro-theme] .sp-calendar-head>button { min-height: 70px; }
+.noviq-app.pro-environment[data-pro-theme] .sp-event { background: color-mix(in srgb,var(--noviq-accent) 16%,var(--noviq-card)); border-color: color-mix(in srgb,var(--noviq-accent) 35%,var(--noviq-border)); }
+
+/* 03: bring the deck and dominant preview together; preserve the library disclosure. */
+.noviq-app.pro-environment[data-pro-theme] .fc-header { margin-bottom: 12px; }
+.noviq-app.pro-environment[data-pro-theme] .fc-study-launch { padding-top: 18px; column-gap: 32px; }
+.noviq-app.pro-environment[data-pro-theme] .pro-preview-face { min-height: 285px; aspect-ratio: 1.85; border-radius: 18px; }
+.noviq-app.pro-environment[data-pro-theme].dark .pro-preview-face { background: var(--pro-soft); }
+.noviq-app.pro-environment[data-pro-theme] .pro-preview-controls { padding: 8px; }
+.noviq-app.pro-environment[data-pro-theme] .fc-card-row { padding: 20px; }
+.noviq-app.pro-environment[data-pro-theme] .fc-deck-detail { display: flex; flex-direction: column; }
+.noviq-app.pro-environment[data-pro-theme] .fc-deck-detail>* { order: 3; }
+.noviq-app.pro-environment[data-pro-theme] .fc-deck-detail>.fc-deck-header { order: -1; }
+.noviq-app.pro-environment[data-pro-theme] .fc-deck-detail>.fc-study-launch { order: 0; }
+.noviq-app.pro-environment[data-pro-theme] .fc-deck-detail>.fc-deck-stats { order: 1; }
+.noviq-app.pro-environment[data-pro-theme] .fc-deck-detail>.fc-import { order: 2; }
+
+/* 04: botanical atmosphere belongs behind the dial, not behind opaque dashboard cards. */
+.noviq-app.pro-environment[data-pro-theme] .pro-focus-workspace::before { inset: 0 25% 0 0; opacity: .24; }
+.noviq-app.pro-environment[data-pro-theme] .pro-focus-dial>div { background: color-mix(in srgb,var(--noviq-card) 52%,transparent)!important; }
+.noviq-app.pro-environment[data-pro-theme] .pro-focus-context { gap: 16px; }
+.noviq-app.pro-environment[data-pro-theme] .pro-focus-context>section { border-radius: 16px; }
+.noviq-app.pro-environment[data-pro-theme] .pro-focus-dial { margin-top: 24px; }
+.noviq-app.pro-environment[data-pro-theme] .pro-focus-dial { position: relative; background: none!important; }
+.noviq-app.pro-environment[data-pro-theme] .pro-focus-dial::before { content: ''; position: absolute; inset: 0; border-radius: 50%; background: repeating-conic-gradient(var(--pro-muted) 0deg 1deg,transparent 1deg 4deg); mask: radial-gradient(farthest-side,transparent calc(100% - 12px),#000 0); opacity: .55; pointer-events: none; }
+.noviq-app.pro-environment[data-pro-theme] .pro-focus-dial>div { background: transparent!important; }
+
+/* 05: quiet document/editor panes and a distinct source context pane. */
+.noviq-app.pro-environment[data-pro-theme] .pro-notebook-workspace { gap: 8px; }
+.noviq-app.pro-environment[data-pro-theme] .pro-notebook-workspace>.glass { border-radius: 10px; }
+.noviq-app.pro-environment[data-pro-theme] .pro-notebook-workspace textarea { line-height: 1.8; padding: 28px; }
+
+/* 06: compact history, centered welcome and a composer aligned immediately beneath. */
+.noviq-app.pro-environment[data-pro-theme] .tutor-workspace>aside { width: 210px; }
+.noviq-app.pro-environment[data-pro-theme] .tutor-workspace[data-welcome=true] .tutor-messages { padding-bottom: 8px; gap: 16px; }
+.noviq-app.pro-environment[data-pro-theme] .tutor-workspace[data-welcome=true] .pro-tutor-composer-wrap { padding-bottom: clamp(50px,22vh,240px); }
+.noviq-app.pro-environment[data-pro-theme] .tutor-workspace[data-welcome=true] .tutor-messages>div:not(.pro-tutor-orb) { max-width: 560px; }
+.noviq-app.pro-environment[data-pro-theme] .tutor-composer { max-width: 720px; border-radius: 20px; }
+
+/* 07: preserve the broad matrix, two by two metrics and calendar/activity rail. */
+.noviq-app.pro-environment[data-pro-theme] .pro-analytics-workspace { gap: 18px; }
+.noviq-app.pro-environment[data-pro-theme] .pro-engagement-heatmap { padding: 24px; }
+.noviq-app.pro-environment[data-pro-theme] .pro-engagement-heatmap [role=img] { aspect-ratio: 2.4; }
+.noviq-app.pro-environment[data-pro-theme] .pro-analytics-metrics { gap: 16px; }
+.noviq-app.pro-environment[data-pro-theme] .pro-analytics-metrics article { min-height: 165px; padding: 24px; }
+.noviq-app.pro-environment[data-pro-theme] .pro-activity-rail { min-height: 650px; }
+
+/* 08: pricing comes before membership administration, with aligned benefit rows. */
+.noviq-app.pro-environment[data-pro-theme] .ascend-membership { display: flex; flex-direction: column; }
+.noviq-app.pro-environment[data-pro-theme] .ascend-membership-hero { order: 0; }
+.noviq-app.pro-environment[data-pro-theme] .pro-pricing-reference { order: 1; }
+.noviq-app.pro-environment[data-pro-theme] .ascend-membership>.ascend-status { order: 2; }
+.noviq-app.pro-environment[data-pro-theme] .ascend-membership>.ascend-notice { order: 2; }
+.noviq-app.pro-environment[data-pro-theme] .ascend-membership>.ascend-faq { order: 3; }
+.noviq-app.pro-environment[data-pro-theme] .ascend-membership>.ascend-cancel { order: 4; }
+.noviq-app.pro-environment[data-pro-theme] .ascend-membership>.ascend-expired { order: 1; }
+.noviq-app.pro-environment[data-pro-theme] .pro-plan-card dl>div { min-height: 66px; padding: 14px 0; }
+.noviq-app.pro-environment[data-pro-theme] .pro-plan-card header { min-height: 68px; }
+.noviq-app.pro-environment[data-pro-theme] .pro-plan-cards { max-width: 920px; margin: 0 auto; }
+
+@media(min-width:1024px) {
+ .noviq-app.pro-environment[data-pro-theme] [data-pro-shell-header] { height: 64px; }
+ .noviq-app.pro-environment[data-pro-theme] .fc-heading { margin-bottom: 6px; }
+ .noviq-app.pro-environment[data-pro-theme] .fc-heading>div:first-child>p { display: none; }
+ .noviq-app.pro-environment[data-pro-theme] .pro-deck-library { padding: 0; }
+ .noviq-app.pro-environment[data-pro-theme] .fc-deck-detail { padding-top: 10px; }
+ .noviq-app.pro-environment[data-pro-theme] .pro-preview-face { height: 300px; min-height: 0; max-height: none; aspect-ratio: auto; }
+ .noviq-app.pro-environment[data-pro-theme] .fc-mode { min-height: 36px; padding: 8px 12px; }
+ .noviq-app.pro-environment[data-pro-theme] .fc-mode-grid { gap: 4px; }
+ .noviq-app.pro-environment[data-pro-theme] .fc-session-limit { grid-column: 2; font-size: 11px; margin: 6px 0 0; }
+ .noviq-app.pro-environment[data-pro-theme] .fc-study-launch { margin-bottom: 8px; }
+ .noviq-app.pro-environment[data-pro-theme] .app-sidebar:not(.lg\:w-24) { width: 232px; flex-shrink: 0; }
+ .noviq-app.pro-environment[data-pro-theme] .app-sidebar>div:first-child { padding: 28px 24px; }
+ .noviq-app.pro-environment[data-pro-theme] .app-sidebar>div:first-child>button:first-child { gap: 10px; }
+ .noviq-app.pro-environment[data-pro-theme] .app-sidebar>div:first-child img { width: 42px; height: 42px; }
+ .noviq-app.pro-environment[data-pro-theme] .app-sidebar>div:first-child h1 { font-size: 26px; }
+ .noviq-app.pro-environment[data-pro-theme][data-pro-page=dashboard] .pro-reference-overview { grid-template-columns: repeat(4,minmax(0,1fr)) minmax(240px,1.2fr); }
+}
+@media(max-width:1000px) {
+ .noviq-app.pro-environment[data-pro-theme] .sp-calendar-workspace { grid-template-columns: 1fr; }
+}
+@media(max-width:700px) {
+ .noviq-app.pro-environment[data-pro-theme] .pro-summary-card { min-height: 145px; padding: 18px; }
+ .noviq-app.pro-environment[data-pro-theme] .pro-pill-chart { height: 150px; }
+ .noviq-app.pro-environment[data-pro-theme] .pro-trend-card { padding: 20px; }
+ .noviq-app.pro-environment[data-pro-theme] .pro-preview-face { min-height: 230px; }
+ .noviq-app.pro-environment[data-pro-theme] .pro-notebook-workspace textarea { padding: 16px; }
+ .noviq-app.pro-environment[data-pro-theme] .tutor-workspace[data-welcome=true] .pro-tutor-composer-wrap { padding-bottom: 28px; }
+ .noviq-app.pro-environment[data-pro-theme] .pro-activity-rail { min-height: 440px; }
+}
+@media(prefers-reduced-motion:reduce) {
+ .noviq-app.pro-environment[data-pro-theme] { --pro-motion: 0ms; }
+}

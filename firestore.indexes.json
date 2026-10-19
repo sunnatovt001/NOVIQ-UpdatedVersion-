@@ -1,24 +1,190 @@
 {
   "indexes": [
-    {"collectionGroup":"analyticsEvents","queryScope":"COLLECTION","fields":[{"fieldPath":"eventType","order":"ASCENDING"},{"fieldPath":"createdAt","order":"DESCENDING"}]},
-    {"collectionGroup":"metricRecords","queryScope":"COLLECTION","fields":[{"fieldPath":"kind","order":"ASCENDING"},{"fieldPath":"createdMillis","order":"ASCENDING"}]},
-    {"collectionGroup":"metricRecords","queryScope":"COLLECTION","fields":[{"fieldPath":"kind","order":"ASCENDING"},{"fieldPath":"focusSeconds","order":"ASCENDING"},{"fieldPath":"xp","order":"ASCENDING"}]},
-    {"collectionGroup":"metricRecords","queryScope":"COLLECTION","fields":[{"fieldPath":"kind","order":"ASCENDING"},{"fieldPath":"createdMillis","order":"ASCENDING"},{"fieldPath":"focusSeconds","order":"ASCENDING"},{"fieldPath":"xp","order":"ASCENDING"}]},
-    {"collectionGroup":"metricRecords","queryScope":"COLLECTION","fields":[{"fieldPath":"kind","order":"ASCENDING"},{"fieldPath":"roleUser","order":"ASCENDING"},{"fieldPath":"createdMillis","order":"ASCENDING"}]},
-    {"collectionGroup":"metricRecords","queryScope":"COLLECTION","fields":[{"fieldPath":"kind","order":"ASCENDING"},{"fieldPath":"dueMillis","order":"ASCENDING"}]},
-    {"collectionGroup":"metricRecords","queryScope":"COLLECTION","fields":[{"fieldPath":"kind","order":"ASCENDING"},{"fieldPath":"reviewed","order":"ASCENDING"}]},
-    {"collectionGroup":"metricRecords","queryScope":"COLLECTION","fields":[{"fieldPath":"kind","order":"ASCENDING"},{"fieldPath":"completed","order":"ASCENDING"},{"fieldPath":"completedMillis","order":"ASCENDING"}]},
     {
-      "collectionGroup": "studySessions", "queryScope": "COLLECTION",
-      "fields": [{"fieldPath":"verified","order":"ASCENDING"},{"fieldPath":"timestamp","order":"ASCENDING"}]
+      "collectionGroup": "analyticsEvents",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "eventType",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "DESCENDING"
+        }
+      ]
     },
     {
-      "collectionGroup": "studySessions", "queryScope": "COLLECTION",
-      "fields": [{"fieldPath":"verified","order":"ASCENDING"},{"fieldPath":"category","order":"ASCENDING"},{"fieldPath":"duration","order":"ASCENDING"}]
+      "collectionGroup": "metricRecords",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "kind",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdMillis",
+          "order": "ASCENDING"
+        }
+      ]
     },
     {
-      "collectionGroup": "studySessions", "queryScope": "COLLECTION",
-      "fields": [{"fieldPath":"verified","order":"ASCENDING"},{"fieldPath":"category","order":"ASCENDING"},{"fieldPath":"timestamp","order":"ASCENDING"},{"fieldPath":"duration","order":"ASCENDING"}]
+      "collectionGroup": "metricRecords",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "kind",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "focusSeconds",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "xp",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "metricRecords",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "kind",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdMillis",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "focusSeconds",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "xp",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "metricRecords",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "kind",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "roleUser",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdMillis",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "metricRecords",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "kind",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "dueMillis",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "metricRecords",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "kind",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "reviewed",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "metricRecords",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "kind",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "completed",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "completedMillis",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "studySessions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "verified",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "timestamp",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "studySessions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "verified",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "category",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "duration",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "studySessions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "verified",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "category",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "timestamp",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "duration",
+          "order": "ASCENDING"
+        }
+      ]
     },
     {
       "collectionGroup": "notebookMessages",
@@ -147,6 +313,20 @@
         {
           "fieldPath": "createdAt",
           "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "users",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "subscription.status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "subscription.currentPeriodEnd",
+          "order": "ASCENDING"
         }
       ]
     }

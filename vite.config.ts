@@ -12,6 +12,9 @@ export default defineConfig(({mode}) => ({
     apply: 'serve',
     configureServer(server) {
       if (mode === 'audit' || mode === 'test') return;
+      const membershipPath = require.resolve('./server/local-membership.cjs');
+      delete require.cache[membershipPath];
+      server.middlewares.use(require(membershipPath)({ firebaseConfig }));
       const env = loadEnv(mode, path.resolve(__dirname, 'functions'), 'GEMINI_');
       // A Vite restart must load the current middleware, not a cached model setup.
       const middlewarePath = require.resolve('./server/local-ai.cjs');
