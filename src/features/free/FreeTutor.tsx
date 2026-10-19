@@ -1,3 +1,4 @@
+import { createTutorRecognition, getTutorSpeechSynthesis, stopTutorRecognition, cancelTutorSpeech } from "@/src/features/tutor/browserSpeech";
 import {TutorProControls,useTutorModes} from '@/src/features/pro/TutorProControls';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "@/src/contexts/AuthContext";
@@ -134,7 +135,7 @@ export const Tutor = ({ setActiveTab }: { setActiveTab: (tab: string) => void })
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const recognitionRef = useRef<any>(null);
-  const synthesisRef = useRef<SpeechSynthesis | null>(typeof window !== "undefined" ? window.speechSynthesis : null);
+  const synthesisRef = useRef<SpeechSynthesis | null>(getTutorSpeechSynthesis());
   const speechUtteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
 
   const persistedMessages = useMemo(() => messages.filter((message) => message.id !== "intro"), [messages]);
@@ -156,12 +157,8 @@ export const Tutor = ({ setActiveTab }: { setActiveTab: (tab: string) => void })
   }, [messages, isTyping, attachedFiles, aiError, historyError, chat.saveError]);
 
   useEffect(() => {
-    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (SpeechRecognition) {
-      recognitionRef.current = new SpeechRecognition();
-      recognitionRef.current.lang = voiceLanguage;
-      recognitionRef.current.continuous = false;
-      recognitionRef.current.interimResults = false;
+    recognitionRef.current = createTutorRecognition(voiceLanguage);
+    if (recognitionRef.current) {
       recognitionRef.current.onresult = (event: any) => {
         setInput(event.results[0][0].transcript);
         setIsListening(false);
@@ -171,7 +168,7 @@ export const Tutor = ({ setActiveTab }: { setActiveTab: (tab: string) => void })
     }
 
     return () => {
-      recognitionRef.current?.stop?.();
+      stopTutorRecognition(recognitionRef.current);
     };
   }, [voiceLanguage]);
 
@@ -180,14 +177,14 @@ export const Tutor = ({ setActiveTab }: { setActiveTab: (tab: string) => void })
       attachedFiles.forEach((file) => {
         if (file.previewUrl?.startsWith("blob:")) URL.revokeObjectURL(file.previewUrl);
       });
-      synthesisRef.current?.cancel();
-      recognitionRef.current?.stop?.();
+      cancelTutorSpeech(synthesisRef.current);
+      stopTutorRecognition(recognitionRef.current);
     };
   }, [attachedFiles]);
 
   const speak = (text: string) => {
     if (!autoSpeak || !synthesisRef.current) return;
-    synthesisRef.current.cancel();
+    cancelTutorSpeech(synthesisRef.current);
     const utterance = new SpeechSynthesisUtterance(text.replace(/[#*`_]/g, ""));
     utterance.lang = voiceLanguage;
     utterance.rate = 1;
@@ -200,7 +197,7 @@ export const Tutor = ({ setActiveTab }: { setActiveTab: (tab: string) => void })
   };
 
   const stopSpeaking = () => {
-    synthesisRef.current?.cancel();
+    cancelTutorSpeech(synthesisRef.current);
     speechUtteranceRef.current = null;
     setIsSpeaking(false);
   };
@@ -212,7 +209,7 @@ export const Tutor = ({ setActiveTab }: { setActiveTab: (tab: string) => void })
     }
 
     if (isListening) {
-      recognitionRef.current.stop();
+      stopTutorRecognition(recognitionRef.current);
       setIsListening(false);
       return;
     }

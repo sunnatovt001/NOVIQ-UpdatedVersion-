@@ -80,7 +80,14 @@ export function MembershipProvider({ children }: { children: React.ReactNode }) 
   }, [uid]);
   useEffect(() => {
     void refresh();
-    const visible = () => { if (!document.hidden) { setSnapshot(null); void refresh(); } };
+    const visible = () => {
+      if (document.hidden) return;
+      // Revalidate in the background. Clearing a verified same-account snapshot
+      // unmounts AppContent, dropping Tutor drafts and in-flight AI replies.
+      // Expiry still advances immediately; every premium API checks entitlement.
+      setTick(anchor.current ? anchor.current.server + performance.now() - anchor.current.mono : Date.now());
+      void refresh();
+    };
     const reconnect = () => { void refresh(); };
     document.addEventListener('visibilitychange', visible);
     window.addEventListener('online', reconnect);
