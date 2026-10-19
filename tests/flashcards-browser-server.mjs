@@ -60,7 +60,7 @@ const server = await createServer({
  plugins:[{
    name:'isolated-browser-fixtures', enforce:'pre',
    resolveId(id) { if(id === 'firebase/firestore') return '\0fixture-firestore'; if(id === 'firebase/functions') return '\0fixture-functions'; },
-   load(id) { if(id === '\0fixture-firestore') return mockFirestore; if(id === '\0fixture-functions') return `export const getFunctions=()=>({}); export const httpsCallable=()=>async()=>{throw Object.assign(new Error('Isolated test service unavailable'),{code:'functions/unavailable'})};`; },
+   load(id) { if(id === '\0fixture-firestore') return mockFirestore; if(id === '\0fixture-functions') return `export const getFunctions=()=>({});export const httpsCallableFromURL=()=>{throw new Error('Production backend forbidden in isolated fixture')}; export const httpsCallable=()=>async()=>{throw Object.assign(new Error('Isolated test service unavailable'),{code:'functions/unavailable'})};`; },
    transform(code,id) {
      if(id.replaceAll('\\','/').endsWith('/src/lib/auditMode.ts'))return code.replace('export const isReadOnlyAudit = ["audit", "local-ai"].includes(import.meta.env.MODE);','export const isReadOnlyAudit = !new URLSearchParams(location.search).has("testFlashcards");');
      if(id.replaceAll('\\','/').endsWith('/src/lib/gemini.ts'))return code.replace('export async function generateDefinitionSuggestions(', 'async function actualDefinitionSuggestions(')+`
