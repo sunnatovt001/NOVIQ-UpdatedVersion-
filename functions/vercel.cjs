@@ -7,6 +7,9 @@ function loadHandlers() {
   const raw = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
   if (!raw) throw new Error('BACKEND_NOT_CONFIGURED');
   const account = JSON.parse(raw);
+  if (account.private_key && typeof account.private_key === 'string' && account.private_key.includes('\\n')) {
+    account.private_key = account.private_key.replace(/\\n/g, '\n');
+  }
   if (account.project_id !== firebaseConfig.projectId) throw new Error('FIREBASE_PROJECT_MISMATCH');
   if (!admin.apps.length) admin.initializeApp({ credential: admin.credential.cert(account), projectId: account.project_id });
   handlers = require('./index.js');
@@ -44,4 +47,4 @@ function createHandler(getHandlers = loadHandlers) {
   };
 }
 
-module.exports = { createHandler };
+module.exports = { createHandler, loadHandlers };

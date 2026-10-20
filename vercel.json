@@ -4,7 +4,16 @@
   "installCommand": "npm ci && npm ci --prefix functions",
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
-  "functions": { "api/rpc.js": { "maxDuration": 120 } },
+  "functions": {
+    "api/rpc.js": { "maxDuration": 120 },
+    "api/telegram.js": { "maxDuration": 60 }
+  },
+  "crons": [
+    {
+      "path": "/api/telegram?cron=1",
+      "schedule": "0 16 * * *"
+    }
+  ],
   "headers": [
     { "source": "/api/(.*)", "headers": [{ "key": "Cache-Control", "value": "no-store" }] },
     { "source": "/(.*)", "headers": [{ "key": "X-Content-Type-Options", "value": "nosniff" }] }

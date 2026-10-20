@@ -61,7 +61,9 @@ function harness(env = {}, overrides = {}) {
   const merge = (base, patch) => {
     const result = { ...base };
     for (const [key, value] of Object.entries(patch)) {
-      if (value?.increment !== undefined)
+      if (value?.deleteField)
+        delete result[key];
+      else if (value?.increment !== undefined)
         result[key] = (Number(result[key]) || 0) + value.increment;
       else if (
         value &&
@@ -96,17 +98,23 @@ function harness(env = {}, overrides = {}) {
       return sorted;
     },
     count: () => ({ get: async () => ({ data: () => ({ count: [...records.keys()].filter((key) => key.startsWith(`${path}/`) && key.split("/").length === path.split("/").length + 1).length }) }) }),
-    where: (field, operator, value) => ({
-      limit: (count) => ({
-        get: async () => {
-          const docs = [...records.entries()]
-            .filter(([key, data]) => key.startsWith(`${path}/`) && key.split("/").length === path.split("/").length + 1 && operator === "==" && data[field] === value)
-            .slice(0, count)
-            .map(([key, data]) => ({ id: key.split("/").at(-1), data: () => data }));
-          return { docs, empty: !docs.length };
-        },
-      }),
-    }),
+    where: (field, operator, value) => {
+      const exec = async (count) => {
+        let docs = [...records.entries()]
+          .filter(([key, data]) => key.startsWith(`${path}/`) && key.split("/").length === path.split("/").length + 1 && operator === "==" && data[field] === value);
+        if (count !== undefined) docs = docs.slice(0, count);
+        const mapped = docs.map(([key, data]) => ({ id: key.split("/").at(-1), data: () => data, ref: ref(key) }));
+        return { docs: mapped, empty: !mapped.length };
+      };
+      return {
+        queryPath: path,
+        get: async () => exec(),
+        limit: (count) => ({
+          queryPath: path,
+          get: async () => exec(count),
+        }),
+      };
+    },
     doc: (id = crypto.randomBytes(8).toString("hex")) => ref(`${path}/${id}`),
     limit: (count) => ({ queryPath: path, get: async () => ({ docs: [...records.entries()].filter(([key]) => key.startsWith(`${path}/`) && key.split("/").length === path.split("/").length + 1).slice(0, count).map(([key, data]) => ({ id: key.split("/").at(-1), data: () => data })) }) }),
   });
@@ -121,18 +129,30 @@ function harness(env = {}, overrides = {}) {
   const db = {
     doc: ref,
     collection,
+    batch: () => {
+      const ops = [];
+      return {
+        set: (target, data, opts) => ops.push(() => write(target.path, data, opts)),
+        delete: (target) => ops.push(() => records.delete(target.path)),
+        commit: async () => { ops.forEach((op) => op()); },
+      };
+    },
     runTransaction: (fn) => {
       const run = tail.then(async () => {
         const pending = [];
         const tx = {
-          get: async (target) =>
-            target.queryPath
-              ? {
-                  empty: ![...records.keys()].some((key) =>
-                    key.startsWith(`${target.queryPath}/`),
-                  ),
-                }
-              : snapshot(target.path),
+          get: async (target) => {
+            if (typeof target.get === "function") {
+              return await target.get();
+            }
+            if (target.queryPath) {
+              const docs = [...records.entries()]
+                .filter(([key]) => key.startsWith(`${target.queryPath}/`) && key.split("/").length === target.queryPath.split("/").length + 1)
+                .map(([key, data]) => ({ id: key.split("/").at(-1), data: () => data, ref: ref(key) }));
+              return { docs, empty: !docs.length };
+            }
+            return snapshot(target.path);
+          },
           set: (target, data, opts) =>
             pending.push(() => write(target.path, data, opts)),
           create: (target, data) => {
@@ -166,6 +186,7 @@ function harness(env = {}, overrides = {}) {
       FieldValue: {
         increment: (increment) => ({ increment }),
         serverTimestamp: () => stamp(Date.now()),
+        delete: () => ({ deleteField: true }),
       },
       Timestamp: {
         fromDate: stamp,
@@ -188,6 +209,7 @@ function harness(env = {}, overrides = {}) {
     "./policy": require("./policy"),
     "./community": require("./community"),
     "./metrics": require("./metrics"),
+    "./appUrl": require("./appUrl"),
   };
   const context = {
     exports: {},
@@ -494,6 +516,180 @@ test("Telegram planner and metrics require a linked private account", async () =
       body: { message: { text: command, chat: { id: 123456, type: "group" } } } }, group);
     assert.equal(group.body.ignored, true);
   }
+});
+
+test("Cross-account Telegram data isolation, switching confirmation and task ownership (Phase 5)", async () => {
+  const sentMessages = [];
+  const h = harness({}, {
+    fetch: async (url, options) => {
+      if (url.includes("sendMessage")) {
+        const payload = JSON.parse(options.body || "{}");
+        sentMessages.push(payload);
+        return { ok: true, json: async () => ({ ok: true, result: { message_id: 101 } }) };
+      }
+      return { ok: true, json: async () => ({ ok: true, result: { username: "noviqq_bot" } }) };
+    },
+  });
+
+  // Setup Account A
+  h.records.set("users/test-user-A", {
+    uid: "test-user-A",
+    displayName: "User A",
+    xp: 100,
+    streak: 3,
+    dailyTargetMinutes: 30,
+    subscription: { plan: "free", status: "active" },
+  });
+  h.records.set("users/test-user-A/planner/smart-v2", {
+    tasks: [{ id: "task-A", title: "Task A", completed: false }],
+  });
+
+  // Setup Account B
+  h.records.set("users/test-user-B", {
+    uid: "test-user-B",
+    displayName: "User B",
+    xp: 900,
+    streak: 12,
+    dailyTargetMinutes: 45,
+    subscription: { plan: "pro", status: "active" },
+  });
+  h.records.set("users/test-user-B/planner/smart-v2", {
+    tasks: [{ id: "task-B", title: "Task B", completed: false }],
+  });
+
+  const chatId = 777888;
+  const sendCmd = async (text) => {
+    const res = h.response();
+    await h.functions.telegramWebhook(
+      {
+        method: "POST",
+        get: () => "telegram-secret",
+        body: { message: { text, chat: { id: chatId, type: "private" }, from: {} } },
+      },
+      res,
+    );
+    return res;
+  };
+
+  const sendCallback = async (data) => {
+    const res = h.response();
+    await h.functions.telegramWebhook(
+      {
+        method: "POST",
+        get: () => "telegram-secret",
+        body: {
+          callback_query: {
+            id: "cb_1",
+            data,
+            message: { chat: { id: chatId } },
+            from: { username: "student" },
+          },
+        },
+      },
+      res,
+    );
+    return res;
+  };
+
+  // 1. Link T to Account A
+  const tokenA = (await h.functions.createTelegramLink({ auth: { uid: "test-user-A" } })).token;
+  const linkResA = await sendCmd(`/start link_${tokenA}`);
+  assert.equal(linkResA.body.linked, true);
+  assert.equal(h.records.get("users/test-user-A").telegramId, String(chatId));
+
+  // 2. Verify /metrics and /planner display ONLY A's data
+  sentMessages.length = 0;
+  await sendCmd("/metrics");
+  const metricsA = sentMessages.at(-1)?.text || "";
+  assert.ok(metricsA.includes("100"), "Must display A's XP (100)");
+  assert.ok(metricsA.includes("3"), "Must display A's Streak (3)");
+  assert.ok(!metricsA.includes("900"), "Must NOT display B's XP (900)");
+  assert.ok(!metricsA.includes("12"), "Must NOT display B's Streak (12)");
+
+  sentMessages.length = 0;
+  await sendCmd("/planner");
+  const plannerA = sentMessages.at(-1)?.text || "";
+  assert.ok(plannerA.includes("Task A"), "Must display A's task (Task A)");
+  assert.ok(!plannerA.includes("Task B"), "Must NOT display B's task (Task B)");
+
+  // 3 & 4. Attempt to link T to Account B -> Requires switching confirmation!
+  const tokenB = (await h.functions.createTelegramLink({ auth: { uid: "test-user-B" } })).token;
+  const linkResB = await sendCmd(`/start link_${tokenB}`);
+  assert.equal(linkResB.body.switchConfirmationRequired, true);
+  assert.equal(linkResB.body.previousUid, "test-user-A");
+  assert.equal(linkResB.body.targetUid, "test-user-B");
+  assert.ok(linkResB.body.actionId, "Must return short actionId");
+
+  // Verify that EVERY inline button callback_data is <= 64 bytes!
+  const switchMsg = sentMessages.at(-1);
+  const switchButtons = switchMsg?.reply_markup?.inline_keyboard?.flat() || [];
+  assert.ok(switchButtons.length >= 2, "Must send at least confirm and cancel buttons");
+  for (const btn of switchButtons) {
+    if (btn.callback_data) {
+      const byteLen = Buffer.byteLength(btn.callback_data, "utf8");
+      assert.ok(byteLen <= 64, `Button callback_data "${btn.callback_data}" exceeds 64 bytes (${byteLen} bytes)`);
+    }
+  }
+
+  // Account A is STILL linked at this point
+  assert.equal(h.records.get("users/test-user-A").telegramId, String(chatId));
+  assert.equal(h.records.get("users/test-user-B").telegramId, undefined);
+
+  // 5. Complete switch to Account B via switch_confirm callback using actionId
+  const switchRes = await sendCallback(`switch_confirm:${linkResB.body.actionId}`);
+  assert.equal(switchRes.body.switched, true);
+  assert.equal(switchRes.body.targetUid, "test-user-B");
+
+  // Replaying switch_confirm must fail (single-use protection)
+  const replayCallbackRes = await sendCallback(`switch_confirm:${linkResB.body.actionId}`);
+  assert.equal(replayCallbackRes.body.switched, false);
+
+  // 6. Verify /metrics and /planner display ONLY B's data
+  sentMessages.length = 0;
+  await sendCmd("/metrics");
+  const metricsB = sentMessages.at(-1)?.text || "";
+  assert.ok(metricsB.includes("900"), "Must display B's XP (900)");
+  assert.ok(metricsB.includes("12"), "Must display B's Streak (12)");
+  assert.ok(!metricsB.includes("100"), "Must NOT display A's XP (100)");
+  assert.ok(!metricsB.includes("3"), "Must NOT display A's Streak (3)");
+
+  sentMessages.length = 0;
+  await sendCmd("/planner");
+  const plannerB = sentMessages.at(-1)?.text || "";
+  assert.ok(plannerB.includes("Task B"), "Must display B's task (Task B)");
+  assert.ok(!plannerB.includes("Task A"), "Must NOT display A's task (Task A)");
+
+  // 7 & 8. Verify Account A is no longer linked, and Account A's study data is unchanged
+  assert.equal(h.records.get("users/test-user-A").telegramId, undefined, "Account A must be unlinked");
+  assert.equal(h.records.get("users/test-user-A").xp, 100, "Account A XP must be untouched");
+  assert.equal(h.records.get("users/test-user-A").streak, 3, "Account A streak must be untouched");
+  assert.equal(h.records.get("users/test-user-A/planner/smart-v2").tasks[0].completed, false, "Account A tasks must be untouched");
+
+  // 9. Verify old inline callbacks (for Task A) cannot modify Account A or award XP to Account B
+  const taskDoneOld = await sendCallback("task_done:task-A");
+  assert.equal(taskDoneOld.body.taskCompleted, false);
+  assert.equal(taskDoneOld.body.error, "TASK_NOT_OWNED");
+  assert.equal(h.records.get("users/test-user-A/planner/smart-v2").tasks[0].completed, false);
+  assert.equal(h.records.get("users/test-user-A").xp, 100);
+  assert.equal(h.records.get("users/test-user-B").xp, 900); // No unearned XP awarded
+
+  // Task B completion works for Account B
+  const taskDoneB = await sendCallback("task_done:task-B");
+  assert.equal(taskDoneB.body.taskCompleted, "task-B");
+  assert.equal(h.records.get("users/test-user-B/planner/smart-v2").tasks[0].completed, true);
+  assert.equal(h.records.get("users/test-user-B").xp, 920, "Account B must receive +20 XP");
+
+  // 10. Verify unlinking B does NOT restore Account A
+  const unlinkRes = await sendCallback("unlink_confirm");
+  assert.equal(unlinkRes.body.unlinked, true);
+  assert.equal(h.records.get("users/test-user-B").telegramId, undefined);
+  assert.equal(h.records.get("users/test-user-A").telegramId, undefined, "Account A must NOT be restored");
+  const postUnlink = await sendCmd("/metrics");
+  assert.equal(postUnlink.body.linked, false);
+
+  // 11. Test parallel linking requests and replayed tokens
+  const replayRes = await sendCmd(`/start link_${tokenB}`);
+  assert.equal(replayRes.body.linked, false, "Consumed token must be rejected");
 });
 
 test("independent study contexts resume and survive another task starting", async () => {

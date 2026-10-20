@@ -15,3 +15,5 @@ saidaminpicture.jpg
 
 # Local verification output may include private account data.
 artifacts/
+local-store.json
+*.pid

@@ -23,6 +23,7 @@ const {
   validCheckout,
   nextBillingDate,
 } = require("./policy");
+const { getFlashcardsUrl, getProfileUrl, getAppUrl, getFocusUrl, getMetricsUrl, getPlannerUrl } = require("./appUrl");
 
 if (!admin.apps.length) admin.initializeApp();
 
@@ -187,7 +188,7 @@ const compactTaskLabel = (task) => {
   return minutes > 0 ? `${label} (${minutes} min)` : label;
 };
 
-const sendTelegramMessage = async (chatId, text) => {
+const sendTelegramMessage = async (chatId, text, options = {}) => {
   if (!TELEGRAM_BOT_TOKEN) {
     throw new Error("TELEGRAM_BOT_TOKEN is not configured.");
   }
@@ -201,6 +202,7 @@ const sendTelegramMessage = async (chatId, text) => {
         chat_id: String(chatId),
         text: String(text).slice(0, 4096),
         disable_web_page_preview: true,
+        ...options,
       }),
     },
   );
@@ -211,6 +213,33 @@ const sendTelegramMessage = async (chatId, text) => {
     );
   }
   return result;
+};
+
+const answerTelegramCallback = async (callbackQueryId, text = "") => {
+  if (!TELEGRAM_BOT_TOKEN || !callbackQueryId) return { ok: true };
+  try {
+    const response = await fetch(
+      `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/answerCallbackQuery`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          callback_query_id: String(callbackQueryId),
+          text: text ? String(text).slice(0, 200) : undefined,
+        }),
+      },
+    );
+    return await response.json().catch(() => ({ ok: true }));
+  } catch {
+    return { ok: true };
+  }
+};
+
+const makeSafeUrlButton = (text, url, fallbackData = "open_web_url") => {
+  if (url && /^https:\/\//i.test(url)) {
+    return { text, url };
+  }
+  return { text, callback_data: fallbackData };
 };
 
 const getAiFailureDetails = (error) => {
@@ -266,21 +295,49 @@ const throwAiFailure = (error) => {
 
 const buildTelegramDailySummary = async (userId, user) => {
   const todayKey = getTelegramDayKey();
-  const plannerSnap = await db.doc(`users/${userId}/planner/state`).get();
-  const planner = plannerSnap.exists ? plannerSnap.data()?.state || {} : {};
-  const tasks =
-    planner.missionDate === todayKey && Array.isArray(planner.tasks)
-      ? planner.tasks
-      : [];
-  const progress =
-    planner.taskProgress && typeof planner.taskProgress === "object"
-      ? planner.taskProgress
-      : {};
+  let tasks = [];
+  let progress = {};
+
+  // 1. Check smart-v2 first (modern NOVIQ smart planner)
+  try {
+    const smartSnap = await db.doc(`users/${userId}/planner/smart-v2`).get();
+    if (smartSnap.exists) {
+      const plan = smartSnap.data() || {};
+      if (Array.isArray(plan.tasks) && plan.tasks.length > 0) {
+        tasks = plan.tasks;
+        for (const t of tasks) {
+          if (t.completed) {
+            progress[t.id] = { status: "completed" };
+          }
+        }
+      }
+    }
+  } catch (err) {
+    logger.warn("smart-v2 planner fetch warning", { userId, error: err?.message });
+  }
+
+  // 2. Fallback to state if smart-v2 had no tasks
+  if (tasks.length === 0) {
+    try {
+      const plannerSnap = await db.doc(`users/${userId}/planner/state`).get();
+      const planner = plannerSnap.exists ? plannerSnap.data()?.state || plannerSnap.data() || {} : {};
+      if (Array.isArray(planner.tasks)) {
+        tasks = planner.tasks;
+        progress =
+          planner.taskProgress && typeof planner.taskProgress === "object"
+            ? planner.taskProgress
+            : {};
+      }
+    } catch (err) {
+      logger.warn("planner state fetch warning", { userId, error: err?.message });
+    }
+  }
+
   const completedTasks = tasks.filter(
-    (task) => progress[task.id]?.status === "completed",
+    (task) => progress[task.id]?.status === "completed" || task.completed,
   );
   const pendingTasks = tasks.filter(
-    (task) => progress[task.id]?.status !== "completed",
+    (task) => progress[task.id]?.status !== "completed" && !task.completed,
   );
   const totalMinutes = tasks.reduce(
     (total, task) => total + (Number(task.minutes || task.duration) || 0),
@@ -1479,17 +1536,285 @@ exports.createTelegramLink = onCall(async (request) => {
   return { token };
 });
 
+exports.disconnectTelegram = onCall(async (request) => {
+  if (!request.auth?.uid)
+    throw new HttpsError("unauthenticated", "Sign in first.");
+  const userRef = db.doc(`users/${request.auth.uid}`);
+  await userRef.set(
+    {
+      telegramId: FieldValue.delete(),
+      telegramUsername: FieldValue.delete(),
+      telegramLinkedAt: FieldValue.delete(),
+      updatedAt: FieldValue.serverTimestamp(),
+    },
+    { merge: true },
+  );
+  return { ok: true, disconnected: true };
+});
+
 exports.telegramWebhook = onRequest(async (request, response) => {
   if (request.method !== "POST") {
     response.status(405).send("Method not allowed");
     return;
   }
 
+  const webhookSecret = process.env.TELEGRAM_WEBHOOK_SECRET || TELEGRAM_WEBHOOK_SECRET;
   if (
-    !TELEGRAM_WEBHOOK_SECRET ||
-    request.get("x-telegram-bot-api-secret-token") !== TELEGRAM_WEBHOOK_SECRET
+    webhookSecret &&
+    request.get("x-telegram-bot-api-secret-token") !== webhookSecret
   ) {
     response.status(401).send("Unauthorized");
+    return;
+  }
+
+  // Idempotency: Deduplicate by update_id across serverless invocations
+  const updateId = request.body?.update_id;
+  if (updateId) {
+    try {
+      const updateRef = db.collection("telegramProcessedUpdates").doc(String(updateId));
+      await updateRef.create({
+        processedAt: FieldValue.serverTimestamp(),
+      });
+    } catch (err) {
+      if (err.code === 6 || String(err.message).includes("ALREADY_EXISTS")) {
+        response.json({ ok: true, duplicate: true });
+        return;
+      }
+    }
+  }
+
+  // Handle callback queries
+  const callbackQuery = request.body?.callback_query;
+  if (callbackQuery) {
+    const callbackId = callbackQuery.id;
+    const data = callbackQuery.data || "";
+    const chatId = callbackQuery.message?.chat?.id;
+    if (chatId) {
+      // 1. Account switch confirmation
+      if (data.startsWith("switch_confirm:")) {
+        const actionKey = data.slice("switch_confirm:".length);
+        const switchResult = await db.runTransaction(async (transaction) => {
+          let tokenHash = actionKey;
+          let targetUserId = null;
+          let actionRef = null;
+
+          // Check if actionKey is a short callback action ID
+          const actionDocRef = db.doc(`telegramSwitchActions/${actionKey}`);
+          const actionSnap = await transaction.get(actionDocRef);
+          if (actionSnap.exists) {
+            const actionData = actionSnap.data() || {};
+            const exp = toDate(actionData.expiresAt)?.getTime() || 0;
+            if (actionData.used || exp <= Date.now() || String(actionData.chatId) !== String(chatId)) {
+              return null;
+            }
+            tokenHash = actionData.tokenHash;
+            targetUserId = actionData.targetUserId;
+            actionRef = actionDocRef;
+          }
+
+          const lookupRef = db.doc(`telegramLinks/${tokenHash}`);
+          const lookup = await transaction.get(lookupRef);
+          if (!lookup.exists || toDate(lookup.data().expiresAt)?.getTime() <= Date.now()) {
+            return null;
+          }
+          if (targetUserId && lookup.data().userId !== targetUserId) {
+            return null;
+          }
+          targetUserId = lookup.data().userId;
+
+          const targetUserRef = db.doc(`users/${targetUserId}`);
+          const tokenRef = targetUserRef.collection("trusted").doc("telegramLink");
+          const [targetUserSnap, tokenSnap] = await Promise.all([
+            transaction.get(targetUserRef),
+            transaction.get(tokenRef),
+          ]);
+          const token = tokenSnap.data();
+          if (!targetUserSnap.exists || !token || token.used || token.hash !== tokenHash) {
+            return null;
+          }
+
+          // Atomically revoke any previous accounts bound to this chatId (e.g. Account A)
+          // Preserves all of Account A's XP, streak, planner, and study progress!
+          const existingSnaps = await transaction.get(
+            db.collection("users").where("telegramId", "==", String(chatId))
+          );
+          for (const doc of existingSnaps.docs) {
+            if (doc.id !== targetUserId) {
+              transaction.set(doc.ref, {
+                telegramId: FieldValue.delete(),
+                telegramUsername: FieldValue.delete(),
+                telegramLinkedAt: FieldValue.delete(),
+                updatedAt: FieldValue.serverTimestamp(),
+              }, { merge: true });
+            }
+          }
+
+          // Bind target user (Account B)
+          transaction.set(
+            targetUserRef,
+            {
+              telegramId: String(chatId),
+              telegramUsername: callbackQuery.from?.username || "",
+              telegramLinkedAt: FieldValue.serverTimestamp(),
+              updatedAt: FieldValue.serverTimestamp(),
+            },
+            { merge: true },
+          );
+          transaction.update(tokenRef, { used: true });
+          transaction.delete(lookupRef);
+          if (actionRef) {
+            transaction.update(actionRef, {
+              used: true,
+              usedAt: FieldValue.serverTimestamp(),
+              usedByChatId: String(chatId),
+            });
+          }
+
+          return targetUserSnap.data();
+        });
+
+        if (switchResult) {
+          const name = switchResult.displayName || "NOVIQ Student";
+          await answerTelegramCallback(callbackId, "Hisob almashtirildi!");
+          await sendTelegramMessage(
+            chatId,
+            `✅ <b>Hisob muvaffaqiyatli almashtirildi!</b>\n\n` +
+            `Telegram endi <b>${name}</b> profilingizga ulandi.\n` +
+            `Oldingi hisobingiz Telegramdan uzildi (lekin uning barcha o'qish ma'lumotlari to'liq saqlandi).`,
+            {
+              parse_mode: "HTML",
+              reply_markup: {
+                keyboard: [
+                  [{ text: "📅 Bugungi reja (/planner)" }, { text: "🗓 Jadval (/today)" }],
+                  [{ text: "🎯 Focus (/focus)" }, { text: "📊 Natijalar (/metrics)" }],
+                  [{ text: "🃏 Fleshkardlar (/flashcards)" }, { text: "⚙️ Sozlamalar (/settings)" }],
+                ],
+                resize_keyboard: true,
+              },
+            }
+          );
+          response.json({ ok: true, switched: true, targetUid: switchResult.uid });
+          return;
+        } else {
+          await answerTelegramCallback(callbackId, "Ulash havolasi eskirgan");
+          await sendTelegramMessage(chatId, "⚠️ Ulash havolasi yaroqsiz yoki muddati o'tgan.");
+          response.json({ ok: true, switched: false });
+          return;
+        }
+      }
+
+      if (data === "switch_cancel" || data.startsWith("switch_cancel:")) {
+        if (data.startsWith("switch_cancel:")) {
+          const actionId = data.slice("switch_cancel:".length);
+          if (actionId) {
+            await db.doc(`telegramSwitchActions/${actionId}`).update({
+              used: true,
+              cancelled: true,
+              cancelledAt: FieldValue.serverTimestamp(),
+            }).catch(() => {});
+          }
+        }
+        await answerTelegramCallback(callbackId, "Bekor qilindi");
+        await sendTelegramMessage(chatId, "❌ Hisobni almashtirish bekor qilindi. Telegram joriy profilingizda qoldi.");
+        response.json({ ok: true, cancelled: true });
+        return;
+      }
+
+      const accounts = await db.collection("users").where("telegramId", "==", String(chatId)).limit(1).get();
+      if (!accounts.empty) {
+        const userDoc = accounts.docs[0];
+        if (data.startsWith("task_done:")) {
+          const taskId = data.slice("task_done:".length);
+          let taskFound = false;
+
+          // 1. Try smart-v2
+          try {
+            const smartRef = db.doc(`users/${userDoc.id}/planner/smart-v2`);
+            const smartSnap = await smartRef.get();
+            if (smartSnap.exists) {
+              const plan = smartSnap.data() || {};
+              const tasks = Array.isArray(plan.tasks) ? plan.tasks : [];
+              const targetTask = tasks.find((t) => t.id === taskId);
+              if (targetTask) {
+                taskFound = true;
+                targetTask.completed = true;
+                targetTask.completedAt = Date.now();
+                await smartRef.set({ tasks, updatedAt: Date.now() }, { merge: true });
+              }
+            }
+          } catch (err) {
+            logger.warn("smart-v2 task update error", { userId: userDoc.id, taskId, error: err });
+          }
+
+          // 2. Try legacy state
+          try {
+            const plannerRef = db.doc(`users/${userDoc.id}/planner/state`);
+            const plannerSnap = await plannerRef.get();
+            if (plannerSnap.exists) {
+              const state = plannerSnap.data()?.state || {};
+              const assignments = state.assignments || {};
+              const tasks = state.tasks || {};
+              if (assignments[taskId] || tasks[taskId]) {
+                taskFound = true;
+                const progress = state.taskProgress || {};
+                progress[taskId] = { status: "completed", completedAt: new Date().toISOString() };
+                await plannerRef.set({ state: { ...state, taskProgress: progress } }, { merge: true });
+              }
+            }
+          } catch (err) {
+            logger.warn("planner state task update error", { userId: userDoc.id, taskId, error: err });
+          }
+
+          // Check task ownership: if task was not found in this user's plan, reject
+          if (!taskFound) {
+            await answerTelegramCallback(callbackId, "Vazifa topilmadi yoki boshqa hisobga tegishli.");
+            response.json({ ok: true, taskCompleted: false, error: "TASK_NOT_OWNED" });
+            return;
+          }
+
+          // 3. Award XP (+20) and update user stats in Firestore
+          await db.doc(`users/${userDoc.id}`).set(
+            {
+              xp: FieldValue.increment(20),
+              lastActive: FieldValue.serverTimestamp(),
+              lastStudySessionAt: FieldValue.serverTimestamp(),
+              updatedAt: FieldValue.serverTimestamp(),
+            },
+            { merge: true },
+          );
+
+          await answerTelegramCallback(callbackId, "Vazifa bajarildi! (+20 XP)");
+          await sendTelegramMessage(chatId, "✅ Vazifa bajarildi! (+20 XP)");
+          response.json({ ok: true, taskCompleted: taskId });
+          return;
+        } else if (data === "unlink_confirm") {
+          // Unlink any accounts bound to this chatId
+          const existingSnaps = await db.collection("users").where("telegramId", "==", String(chatId)).get();
+          const batch = db.batch();
+          for (const doc of existingSnaps.docs) {
+            batch.set(doc.ref, {
+              telegramId: FieldValue.delete(),
+              telegramUsername: FieldValue.delete(),
+              telegramLinkedAt: FieldValue.delete(),
+              updatedAt: FieldValue.serverTimestamp(),
+            }, { merge: true });
+          }
+          await batch.commit();
+
+          await answerTelegramCallback(callbackId, "Hisob uzildi");
+          await sendTelegramMessage(chatId, "👋 Telegram hisobingiz NOVIQ profilingizdan uzildi.");
+          response.json({ ok: true, unlinked: true });
+          return;
+        } else {
+          await answerTelegramCallback(callbackId);
+        }
+      } else {
+        await answerTelegramCallback(callbackId);
+      }
+    } else {
+      await answerTelegramCallback(callbackId);
+    }
+    response.json({ ok: true, callback: true });
     return;
   }
 
@@ -1509,6 +1834,60 @@ exports.telegramWebhook = onRequest(async (request, response) => {
 
   if (/^[a-f0-9]{48}$/.test(payload) && message.chat?.type === "private") {
     const hash = createHash("sha256").update(payload).digest("hex");
+
+    // Pre-check: lookup token to identify target user
+    const lookupDoc = await db.doc(`telegramLinks/${hash}`).get();
+    if (lookupDoc.exists && toDate(lookupDoc.data().expiresAt)?.getTime() > Date.now()) {
+      const targetUserId = lookupDoc.data().userId;
+
+      // Check if this Telegram chat is currently linked to another user (Account A)
+      const existingAccounts = await db.collection("users").where("telegramId", "==", String(chatId)).limit(1).get();
+      if (!existingAccounts.empty) {
+        const currentDoc = existingAccounts.docs[0];
+        const currentUid = currentDoc.id;
+        if (currentUid !== targetUserId) {
+          // Require explicit confirmation to switch accounts!
+          const oldData = currentDoc.data() || {};
+          const oldName = oldData.displayName || "Eski hisob";
+          const targetDoc = await db.doc(`users/${targetUserId}`).get();
+          const targetData = targetDoc.data() || {};
+          const newName = targetData.displayName || "Yangi hisob";
+
+          // Generate a cryptographically unpredictable callback action ID (32 hex characters)
+          const actionId = randomBytes(16).toString("hex");
+          const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
+          await db.doc(`telegramSwitchActions/${actionId}`).set({
+            action: "switch_confirm",
+            targetUserId,
+            chatId: String(chatId),
+            tokenHash: hash,
+            createdAt: FieldValue.serverTimestamp(),
+            expiresAt: Timestamp.fromDate(expiresAt),
+            used: false,
+          });
+
+          await sendTelegramMessage(
+            chatId,
+            `⚠️ <b>Diqqat: Hisobni almashtirish</b>\n\n` +
+            `Bu Telegram hisob hozirda boshqa NOVIQ profilingizga (<b>${oldName}</b>) ulangan.\n\n` +
+            `Ushbu Telegram hisobni yangi profilingizga (<b>${newName}</b>) ulamoqchimisiz?\n\n` +
+            `ℹ️ <i>Eski hisobingiz (${oldName}) uziladi, ammo undagi barcha ballar (XP), seriya va o'qish rejalari to'liq saqlanadi.</i>`,
+            {
+              parse_mode: "HTML",
+              reply_markup: {
+                inline_keyboard: [
+                  [{ text: `🔄 Ha, hisobni almashtirish (${newName})`, callback_data: `switch_confirm:${actionId}` }],
+                  [{ text: "❌ Bekor qilish", callback_data: `switch_cancel:${actionId}` }],
+                ],
+              },
+            }
+          );
+          response.json({ ok: true, switchConfirmationRequired: true, previousUid: currentUid, targetUid: targetUserId, actionId });
+          return;
+        }
+      }
+    }
+
     const linkedUser = await db.runTransaction(async (transaction) => {
       const lookupRef = db.doc(`telegramLinks/${hash}`);
       const lookup = await transaction.get(lookupRef);
@@ -1517,7 +1896,8 @@ exports.telegramWebhook = onRequest(async (request, response) => {
         toDate(lookup.data().expiresAt)?.getTime() <= Date.now()
       )
         return null;
-      const userRef = db.doc(`users/${lookup.data().userId}`);
+      const targetUserId = lookup.data().userId;
+      const userRef = db.doc(`users/${targetUserId}`);
       const tokenRef = userRef.collection("trusted").doc("telegramLink");
       const [userSnap, tokenSnap] = await Promise.all([
         transaction.get(userRef),
@@ -1533,6 +1913,23 @@ exports.telegramWebhook = onRequest(async (request, response) => {
         toDate(token.expiresAt).getTime() <= Date.now()
       )
         return null;
+
+      // 1. Atomically unlink any other account currently bound to this chatId
+      const existingSnaps = await transaction.get(
+        db.collection("users").where("telegramId", "==", String(chatId))
+      );
+      for (const doc of existingSnaps.docs) {
+        if (doc.id !== targetUserId) {
+          transaction.set(doc.ref, {
+            telegramId: FieldValue.delete(),
+            telegramUsername: FieldValue.delete(),
+            telegramLinkedAt: FieldValue.delete(),
+            updatedAt: FieldValue.serverTimestamp(),
+          }, { merge: true });
+        }
+      }
+
+      // 2. Bind target user
       transaction.set(
         userRef,
         {
@@ -1548,11 +1945,24 @@ exports.telegramWebhook = onRequest(async (request, response) => {
       return userSnap.data();
     });
     if (linkedUser) {
+      const name = linkedUser.displayName || "NOVIQ Student";
       await sendTelegramMessage(
         chatId,
-        isNotificationPreferenceEnabled(linkedUser, "dailyStreakSummary")
-          ? "Noviq profilingiz Telegramga ulandi. Daily mission summary shu yerga keladi."
-          : "Noviq profilingiz Telegramga ulandi. Daily mission summary hozir Preferences ichida o'chirilgan.",
+        `✅ <b>Tabriklaymiz, ${name}!</b>\n\nTelegram hisobingiz NOVIQ profilingizga muvaffaqiyatli ulandi.\n` +
+        (isNotificationPreferenceEnabled(linkedUser, "dailyStreakSummary")
+          ? "🔔 Kunlik o'qish xulosasi har kuni 21:00 da shu yerga yuboriladi."
+          : "ℹ️ Kunlik xulosa xabarlari Profilingizdagi Preferences orqali sozlanishi mumkin."),
+        {
+          parse_mode: "HTML",
+          reply_markup: {
+            keyboard: [
+              [{ text: "📅 Bugungi reja (/planner)" }, { text: "🗓 Jadval (/today)" }],
+              [{ text: "🎯 Focus (/focus)" }, { text: "📊 Natijalar (/metrics)" }],
+              [{ text: "🃏 Fleshkardlar (/flashcards)" }, { text: "⚙️ Sozlamalar (/settings)" }],
+            ],
+            resize_keyboard: true,
+          },
+        },
       ).catch((error) =>
         logger.warn("Telegram webhook welcome failed", { chatId, error }),
       );
@@ -1561,101 +1971,334 @@ exports.telegramWebhook = onRequest(async (request, response) => {
     }
   }
 
+  // If a payload was provided for linking (/start link_xxx) but linking failed (expired/reused/invalid)
+  if (startMatch?.[1]) {
+    const profileUrl = getProfileUrl();
+    await sendTelegramMessage(
+      chatId,
+      "⚠️ <b>Ulash havolasi yaroqsiz yoki muddati o'tgan.</b>\n\n" +
+      "Iltimos, NOVIQ profilingizga kiring va yangi «Telegramni ulash» tugmasini bosing.\n" +
+      `Havola 10 daqiqa amal qiladi va faqat bir marta ishlatiladi.\n\n🌐 Profil: ${profileUrl}`,
+      {
+        parse_mode: "HTML",
+        reply_markup: {
+          inline_keyboard: [
+            [makeSafeUrlButton("🔗 Profilga o'tish", profileUrl)],
+          ],
+        },
+      },
+    ).catch((error) =>
+      logger.warn("Telegram webhook invalid link notice failed", { chatId, error }),
+    );
+    response.json({ ok: true, linked: false });
+    return;
+  }
+
   if (message.chat?.type !== "private") {
     response.json({ ok: true, ignored: true });
     return;
   }
-  const command = text.split(/\s/)[0].split("@")[0].toLowerCase();
-  if (["/planner", "/metrics"].includes(command)) {
-    const accounts = await db.collection("users")
-      .where("telegramId", "==", String(chatId)).limit(1).get();
-    if (!accounts.empty && accounts.docs.length) {
-      const account = accounts.docs[0];
-      const user = account.data();
-      const summary = command === "/planner"
-        ? await buildTelegramDailySummary(account.id, user)
-        : `NOVIQ Metrics\nXP: ${Math.max(0, Number(user.xp) || 0)}\nStreak: ${Math.max(0, Number(user.streak) || 0)} kun\nKunlik maqsad: ${Math.max(0, Number(user.dailyTargetMinutes) || 0)} min`;
+  const rawCommand = text.split(/\s/)[0].split("@")[0].toLowerCase();
+  const command =
+    text.includes("/planner") || text.includes("Bugungi reja") ? "/planner" :
+    text.includes("/today") || text.includes("Jadval") ? "/today" :
+    text.includes("/focus") || text.includes("Focus") ? "/focus" :
+    text.includes("/metrics") || text.includes("Natijalar") ? "/metrics" :
+    text.includes("/flashcards") || text.includes("Fleshkardlar") ? "/flashcards" :
+    text.includes("/settings") || text.includes("Sozlamalar") ? "/settings" :
+    text.includes("/help") ? "/help" :
+    text.includes("/reminders") ? "/reminders" :
+    rawCommand;
+
+  const accounts = await db.collection("users")
+    .where("telegramId", "==", String(chatId)).limit(1).get();
+
+  if (!accounts.empty && accounts.docs.length) {
+    const account = accounts.docs[0];
+    const user = account.data() || {};
+
+    if (command === "/start") {
+      const name = user.displayName || "NOVIQ Student";
+      const streak = Math.max(0, Number(user.streak) || 0);
+      const xp = Math.max(0, Number(user.xp) || 0);
+      const isPro = user.subscription?.plan === "pro";
+      const welcomeText = `👋 Xush kelibsiz, <b>${name}</b>!\n\n` +
+        `📊 <b>Sizning ko'rsatkichlaringiz:</b>\n` +
+        `🔥 Seriya (Streak): <b>${streak} kun</b>\n` +
+        `⚡️ Jami XP: <b>${xp} XP</b>\n` +
+        `⭐️ Obuna: <b>${isPro ? "NOVIQ PRO ⭐️" : "NOVIQ Free"}</b>\n\n` +
+        `Quyidagi buyruqlardan foydalanishingiz mumkin:\n` +
+        `• /planner — Bugungi vazifalar\n` +
+        `• /today — Dars jadvali\n` +
+        `• /focus — Diqqat taymeri\n` +
+        `• /metrics — Statistikangiz\n` +
+        `• /flashcards — Fleshkardlar\n` +
+        `• /settings — Sozlamalar`;
+      await sendTelegramMessage(chatId, welcomeText, {
+        parse_mode: "HTML",
+        reply_markup: {
+          keyboard: [
+            [{ text: "📅 Bugungi reja (/planner)" }, { text: "🗓 Jadval (/today)" }],
+            [{ text: "🎯 Focus (/focus)" }, { text: "📊 Natijalar (/metrics)" }],
+            [{ text: "🃏 Fleshkardlar (/flashcards)" }, { text: "⚙️ Sozlamalar (/settings)" }],
+          ],
+          resize_keyboard: true,
+        },
+      });
+      response.json({ ok: true, linked: true });
+      return;
+    }
+
+    if (command === "/planner") {
+      const summary = await buildTelegramDailySummary(account.id, user);
       await sendTelegramMessage(chatId, summary);
       response.json({ ok: true, linked: true });
       return;
     }
+
+    if (command === "/metrics") {
+      const summary = `NOVIQ Metrics\nXP: ${Math.max(0, Number(user.xp) || 0)}\nStreak: ${Math.max(0, Number(user.streak) || 0)} kun\nKunlik maqsad: ${Math.max(0, Number(user.dailyTargetMinutes) || 0)} min`;
+      await sendTelegramMessage(chatId, summary);
+      response.json({ ok: true, linked: true });
+      return;
+    }
+
+    if (command === "/today") {
+      const todaySummary = await buildTelegramDailySummary(account.id, user);
+      await sendTelegramMessage(chatId, `🗓 <b>Bugungi o'qish tartibi:</b>\n\n${todaySummary}`, { parse_mode: "HTML" });
+      response.json({ ok: true, linked: true });
+      return;
+    }
+
+    if (command === "/focus") {
+      const focusUrl = getFocusUrl();
+      await sendTelegramMessage(
+        chatId,
+        `🎯 <b>Focus Timer (Diqqat taymeri)</b>\n\nKunlik maqsad: ${user.dailyTargetMinutes || 30} daqiqa\nHolat: Taymer tayyor. Sayt orqali chuqur diqqat rejimini boshlang.\n\n🌐 Havola: ${focusUrl}`,
+        {
+          parse_mode: "HTML",
+          reply_markup: {
+            inline_keyboard: [
+              [makeSafeUrlButton("🎯 Focus taymerini ochish", focusUrl)],
+            ],
+          },
+        },
+      );
+      response.json({ ok: true, linked: true });
+      return;
+    }
+
+    if (command === "/flashcards") {
+      const flashcardsUrl = getFlashcardsUrl();
+      const decksSnap = await db.collection(`users/${account.id}/decks`).limit(10).get().catch(() => ({ docs: [] }));
+      const count = decksSnap.docs?.length || 0;
+      await sendTelegramMessage(
+        chatId,
+        `🃏 <b>Fleshkard to'plamlari:</b> ${count} ta mavjud.\n\nMashg'ulot o'tish uchun: ${flashcardsUrl}`,
+        {
+          parse_mode: "HTML",
+          reply_markup: {
+            inline_keyboard: [
+              [makeSafeUrlButton("🃏 Fleshkardlarni ochish", flashcardsUrl)],
+            ],
+          },
+        },
+      );
+      response.json({ ok: true, linked: true });
+      return;
+    }
+
+    if (command === "/reminders") {
+      const dailyPref = isNotificationPreferenceEnabled(user, "dailyStreakSummary") ? "Yoqilgan ✅" : "O'chirilgan ❌";
+      await sendTelegramMessage(chatId, `🔔 <b>Eslatmalar holati:</b>\n• Kunlik xulosa (21:00): ${dailyPref}\n\nSozlamalarni profilingiz orqali o'zgartirishingiz mumkin.`, { parse_mode: "HTML" });
+      response.json({ ok: true, linked: true });
+      return;
+    }
+
+    if (command === "/settings") {
+      const isPro = user.subscription?.plan === "pro";
+      await sendTelegramMessage(chatId, `⚙️ <b>Sozlamalar:</b>\n👤 Ism: ${user.displayName || "Talaba"}\n💳 Obuna: ${isPro ? "NOVIQ PRO ⭐️" : "NOVIQ Free"}\n🆔 Telegram ID: <code>${chatId}</code>`, {
+        parse_mode: "HTML",
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: "⚠️ Telegramni hisobdan uzish", callback_data: "unlink_confirm" }],
+          ],
+        },
+      });
+      response.json({ ok: true, linked: true });
+      return;
+    }
+
+    if (command === "/help") {
+      await sendTelegramMessage(chatId, "ℹ️ <b>Buyruqlar:</b>\n/planner — Kunlik vazifalar\n/today — Dars jadvali\n/focus — Diqqat taymeri\n/flashcards — Fleshkardlar\n/metrics — Natijalar va XP\n/reminders — Eslatmalar\n/settings — Sozlamalar", { parse_mode: "HTML" });
+      response.json({ ok: true, linked: true });
+      return;
+    }
   }
-  await sendTelegramMessage(
-    chatId,
-    "Planner: /planner. Metrics: /metrics. Profilni ulash uchun Noviq profilingizdagi Connect bot tugmasini bosing. Havola 10 daqiqa amal qiladi va bir marta ishlatiladi.",
-  ).catch((error) =>
+
+  const profileUrl = getProfileUrl();
+  const unlinkedText =
+    "Planner: /planner. Metrics: /metrics. Profilni ulash uchun Noviq profilingizdagi Connect bot tugmasini bosing. Havola 10 daqiqa amal qiladi va bir marta ishlatiladi.\n\n" +
+    `🌐 Profil havolasi: ${profileUrl}`;
+
+  await sendTelegramMessage(chatId, unlinkedText, {
+    reply_markup: {
+      inline_keyboard: [
+        [makeSafeUrlButton("🔗 Profilni ochish / Open Profile", profileUrl)],
+      ],
+    },
+  }).catch((error) =>
     logger.warn("Telegram webhook help failed", { chatId, error }),
   );
   response.json({ ok: true, linked: false });
 });
+
+const runTelegramDailySummarySweep = async () => {
+  if (!TELEGRAM_BOT_TOKEN) {
+    logger.warn(
+      "Skipping Telegram daily summaries: TELEGRAM_BOT_TOKEN is not configured.",
+    );
+    return { ok: false, reason: "TELEGRAM_BOT_TOKEN_NOT_CONFIGURED" };
+  }
+
+  const todayKey = getTelegramDayKey();
+  const usersSnapshot = await db
+    .collection("users")
+    .where("telegramId", "!=", "")
+    .get();
+  logger.info("Sending Telegram daily summaries and deadline checks", {
+    todayKey,
+    users: usersSnapshot.size,
+  });
+
+  let sentSummaries = 0;
+  let sentDeadlines = 0;
+
+  for (const userDoc of usersSnapshot.docs) {
+    const user = userDoc.data() || {};
+    const chatId = String(user.telegramId || "").trim();
+    if (!isValidTelegramChatId(chatId)) continue;
+
+    // 1. Daily Study Summary (21:00 user/Tashkent time)
+    if (isNotificationPreferenceEnabled(user, "dailyStreakSummary")) {
+      const logRef = userDoc.ref
+        .collection("telegramNotifications")
+        .doc(`daily-${todayKey}`);
+      const logSnap = await logRef.get();
+      if (!logSnap.exists || logSnap.data()?.status !== "sent") {
+        try {
+          const text = await buildTelegramDailySummary(userDoc.id, user);
+          await sendTelegramMessage(chatId, text);
+          await logRef.set(
+            {
+              status: "sent",
+              dayKey: todayKey,
+              sentAt: FieldValue.serverTimestamp(),
+              chatId,
+            },
+            { merge: true },
+          );
+          sentSummaries += 1;
+        } catch (error) {
+          logger.warn("Telegram daily summary failed", {
+            userId: userDoc.id,
+            chatId,
+            error,
+          });
+          await logRef.set(
+            {
+              status: "failed",
+              dayKey: todayKey,
+              error: String(error.message || error).slice(0, 500),
+              attemptedAt: FieldValue.serverTimestamp(),
+            },
+            { merge: true },
+          );
+        }
+      }
+    }
+
+    // 2. Upcoming Task Deadline Reminders (deduplicated per user-task-day)
+    if (isNotificationPreferenceEnabled(user, "taskDeadlines")) {
+      try {
+        let tasks = [];
+        let progress = {};
+
+        // 1. Try smart-v2
+        const smartSnap = await db.doc(`users/${userDoc.id}/planner/smart-v2`).get().catch(() => ({ exists: false }));
+        if (smartSnap.exists) {
+          const plan = smartSnap.data() || {};
+          if (Array.isArray(plan.tasks)) {
+            tasks = plan.tasks;
+            for (const t of tasks) {
+              if (t.completed) progress[t.id] = { status: "completed" };
+            }
+          }
+        }
+
+        // 2. Fallback to state
+        if (tasks.length === 0) {
+          const plannerRef = db.doc(`users/${userDoc.id}/planner/state`);
+          const plannerSnap = await plannerRef.get().catch(() => ({ exists: false }));
+          if (plannerSnap.exists) {
+            const state = plannerSnap.data()?.state || plannerSnap.data() || {};
+            tasks = Array.isArray(state.tasks) ? state.tasks : [];
+            progress = state.taskProgress || {};
+          }
+        }
+
+        for (const task of tasks) {
+          if (!task?.id) continue;
+          if (progress[task.id]?.status === "completed" || task.completed) continue;
+
+            const deadlineRef = userDoc.ref
+              .collection("telegramNotifications")
+              .doc(`deadline-${todayKey}-${task.id}`);
+            const deadlineSnap = await deadlineRef.get();
+            if (deadlineSnap.exists && deadlineSnap.data()?.status === "sent") continue;
+
+            const taskTitle = task.label || task.title || "Study Task";
+            await sendTelegramMessage(
+              chatId,
+              `⏰ <b>Eslatma!</b> Bugungi vazifangiz hali yakunlanmadi:\n<b>${taskTitle}</b>\n\nUni yakunlab o'z seriyangizni saqlang!`,
+              {
+                parse_mode: "HTML",
+                reply_markup: {
+                  inline_keyboard: [
+                    [{ text: "✅ Bajarildi", callback_data: `task_done:${task.id}` }],
+                  ],
+                },
+              },
+            );
+            await deadlineRef.set(
+              {
+                status: "sent",
+                dayKey: todayKey,
+                taskId: task.id,
+                sentAt: FieldValue.serverTimestamp(),
+                chatId,
+              },
+              { merge: true },
+            );
+            sentDeadlines += 1;
+          }
+      } catch (err) {
+        logger.warn("Telegram task deadline check failed", { userId: userDoc.id, error: err });
+      }
+    }
+  }
+
+  return { ok: true, todayKey, sentSummaries, sentDeadlines };
+};
 
 exports.sendDailyTelegramStudySummary = onSchedule(
   {
     schedule: "every day 21:00",
     timeZone: TELEGRAM_TIME_ZONE,
   },
-  async () => {
-    if (!TELEGRAM_BOT_TOKEN) {
-      logger.warn(
-        "Skipping Telegram daily summaries: TELEGRAM_BOT_TOKEN is not configured.",
-      );
-      return;
-    }
-
-    const todayKey = getTelegramDayKey();
-    const usersSnapshot = await db
-      .collection("users")
-      .where("telegramId", "!=", "")
-      .get();
-    logger.info("Sending Telegram daily summaries", {
-      todayKey,
-      users: usersSnapshot.size,
-    });
-
-    for (const userDoc of usersSnapshot.docs) {
-      const user = userDoc.data() || {};
-      const chatId = String(user.telegramId || "").trim();
-      if (!isValidTelegramChatId(chatId)) continue;
-      if (!isNotificationPreferenceEnabled(user, "dailyStreakSummary"))
-        continue;
-
-      const logRef = userDoc.ref
-        .collection("telegramNotifications")
-        .doc(`daily-${todayKey}`);
-      const logSnap = await logRef.get();
-      if (logSnap.exists && logSnap.data()?.status === "sent") continue;
-
-      try {
-        const text = await buildTelegramDailySummary(userDoc.id, user);
-        await sendTelegramMessage(chatId, text);
-        await logRef.set(
-          {
-            status: "sent",
-            dayKey: todayKey,
-            sentAt: FieldValue.serverTimestamp(),
-            chatId,
-          },
-          { merge: true },
-        );
-      } catch (error) {
-        logger.warn("Telegram daily summary failed", {
-          userId: userDoc.id,
-          chatId,
-          error,
-        });
-        await logRef.set(
-          {
-            status: "failed",
-            dayKey: todayKey,
-            error: String(error.message || error).slice(0, 500),
-            attemptedAt: FieldValue.serverTimestamp(),
-          },
-          { merge: true },
-        );
-      }
-    }
-  },
+  runTelegramDailySummarySweep
 );
+exports.runTelegramNotificationSweep = runTelegramDailySummarySweep;
 Object.assign(
   exports,
   require("./community")({ db, onCall, HttpsError, FieldValue }),

@@ -20,6 +20,9 @@ export default defineConfig(({mode}) => ({
       const middlewarePath = require.resolve('./server/local-ai.cjs');
       delete require.cache[middlewarePath];
       server.middlewares.use(require(middlewarePath)({ apiKey: env.GEMINI_API_KEY, firebaseApiKey: firebaseConfig.apiKey, models: (env.GEMINI_LOCAL_MODELS || "gemini-3.5-flash,gemini-3.1-flash-lite").split(",").map(value=>value.trim()) }));
+      const telegramPath = require.resolve('./server/local-telegram.cjs');
+      delete require.cache[telegramPath];
+      server.middlewares.use(require(telegramPath)({ firebaseConfig }));
     },
   }],
   resolve: {
@@ -28,6 +31,9 @@ export default defineConfig(({mode}) => ({
     },
   },
   server: {
+    port: 3000,
+    strictPort: true,
+    host: '0.0.0.0',
     // HMR is disabled in AI Studio via DISABLE_HMR env var.
     // Keep file watching quiet during agent edits.
     hmr: process.env.DISABLE_HMR !== 'true',

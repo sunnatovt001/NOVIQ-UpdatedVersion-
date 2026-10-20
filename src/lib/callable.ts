@@ -12,7 +12,10 @@ export function httpsCallable<Request = unknown, Response = unknown>(
   name: string,
   options?: HttpsCallableOptions,
 ) {
-  if (import.meta.env.MODE === 'production') {
+  if (
+    import.meta.env.MODE === 'production' ||
+    ['createTelegramLink', 'disconnectTelegram', 'sendTelegramTestMessage'].includes(name)
+  ) {
     const url = new URL('/api/rpc', window.location.origin);
     url.searchParams.set('name', name);
     return httpsCallableFromURL<Request, Response>(functions, url.href, options);

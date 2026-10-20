@@ -79,18 +79,71 @@ export const Profile = () => {
   const [isAvatarSaving, setIsAvatarSaving] = useState(false);
   const [avatarError, setAvatarError] = useState("");
   const [telegramLinking, setTelegramLinking] = useState(false);
+  const [telegramDisconnecting, setTelegramDisconnecting] = useState(false);
   const handleTelegramConnect = async () => {
     if (isReadOnlyAudit) { setStatus(copy.auditBotDisabled); return; }
     if (!user || !TELEGRAM_BOT_USERNAME || telegramLinking) return;
     setTelegramLinking(true);
     try {
-      const createLink = httpsCallable<void, { token: string }>(functions, "createTelegramLink");
-      const result = await createLink();
-      window.location.assign(`https://t.me/${TELEGRAM_BOT_USERNAME}?start=link_${result.data.token}`);
+      let token = "";
+      try {
+        const createLink = httpsCallable<void, { token: string }>(functions, "createTelegramLink");
+        const result = await createLink();
+        token = result.data.token;
+      } catch {
+        // Fallback to local API
+        const idToken = await user.getIdToken().catch(() => "");
+        const resp = await fetch("/api/telegram/link-token", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+          },
+        });
+        if (resp.ok) {
+          const data = await resp.json();
+          token = data.token;
+        }
+      }
+      if (token) {
+        window.location.assign(`https://t.me/${TELEGRAM_BOT_USERNAME}?start=link_${token}`);
+      } else {
+        setStatus(copy.telegramFailed);
+      }
     } catch (error) {
       setStatus(getAppErrorMessage(error));
     } finally {
       setTelegramLinking(false);
+    }
+  };
+
+  const handleTelegramDisconnect = async () => {
+    if (isReadOnlyAudit) { setStatus(copy.auditBotDisabled); return; }
+    if (!user || telegramDisconnecting) return;
+    setTelegramDisconnecting(true);
+    setStatus("");
+    try {
+      try {
+        const disconnect = httpsCallable<void, { ok: boolean }>(functions, "disconnectTelegram");
+        await disconnect();
+      } catch {
+        const idToken = await user.getIdToken().catch(() => "");
+        await fetch("/api/telegram/disconnect", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+          },
+        }).catch(() => {});
+      }
+      await writeDocWithQueue({ userId: user.uid, path: ["users", user.uid], kind: "update", data: { telegramId: "" } }).catch(() => {});
+      setFormData((current) => ({ ...current, telegramId: "" }));
+      updateLocalProfile({ telegramId: "" });
+      setStatus(copy.telegramDisconnected);
+    } catch (error) {
+      setStatus(getAppErrorMessage(error));
+    } finally {
+      setTelegramDisconnecting(false);
     }
   };
 
@@ -431,26 +484,40 @@ export const Profile = () => {
                 {copy.telegramHelp}
               </p>
               <div className="mt-4 flex flex-wrap gap-2">
-                {TELEGRAM_BOT_USERNAME && (
-                  <button
-                    type="button"
-                    onClick={handleTelegramConnect}
-                    disabled={telegramLinking}
-                    className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 text-xs font-black text-white transition-colors hover:bg-blue-700"
-                  >
-                    <ExternalLink size={14} />
-                    {telegramLinking ? copy.preparingLink : copy.connectBot}
-                  </button>
+                {formData.telegramId ? (
+                  <>
+                    <button
+                      type="button"
+                      onClick={handleTelegramDisconnect}
+                      disabled={telegramDisconnecting}
+                      className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 text-xs font-black text-red-600 transition-colors hover:bg-red-100 disabled:opacity-40 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-400"
+                    >
+                      {telegramDisconnecting ? <Loader2 size={14} className="animate-spin" /> : <X size={14} />}
+                      {telegramDisconnecting ? copy.disconnectingBot : copy.disconnectBot}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleTelegramTest}
+                      disabled={!profile?.telegramId?.trim() || telegramTesting}
+                      className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-4 text-xs font-black text-slate-700 transition-colors hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200"
+                    >
+                      {telegramTesting ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
+                      {copy.sendTest}
+                    </button>
+                  </>
+                ) : (
+                  TELEGRAM_BOT_USERNAME && (
+                    <button
+                      type="button"
+                      onClick={handleTelegramConnect}
+                      disabled={telegramLinking}
+                      className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 text-xs font-black text-white transition-colors hover:bg-blue-700"
+                    >
+                      <ExternalLink size={14} />
+                      {telegramLinking ? copy.preparingLink : copy.connectBot}
+                    </button>
+                  )
                 )}
-                <button
-                  type="button"
-                  onClick={handleTelegramTest}
-                  disabled={!profile?.telegramId?.trim() || telegramTesting}
-                  className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-4 text-xs font-black text-slate-700 transition-colors hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200"
-                >
-                  {telegramTesting ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
-                  {copy.sendTest}
-                </button>
               </div>
             </div>
           </section>
