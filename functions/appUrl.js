@@ -2,7 +2,7 @@
  * NOVIQ Dynamic Environment-Aware URL Routing Utility for Cloud Functions
  */
 
-const VERIFIED_PRODUCTION_FALLBACK = 'https://noviq-delta.vercel.app';
+const VERIFIED_PRODUCTION_FALLBACK = 'https://noviqupdated.vercel.app';
 const DEFAULT_LOCAL_URL = 'http://localhost:3000';
 const UNVERIFIED_DOMAINS = new Set(['noviqq.uz']);
 
@@ -65,6 +65,7 @@ function getAppUrl(env = process.env) {
     if (!raw) continue;
     const normalized = normalizeUrl(raw, isProd ? 'https:' : 'http:');
     if (!normalized) continue;
+    if (isProd && new URL(normalized).protocol !== 'https:') continue;
 
     if (isLocalUrl(normalized)) {
       if (isProd) {

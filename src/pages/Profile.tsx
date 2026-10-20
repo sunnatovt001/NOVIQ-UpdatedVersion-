@@ -38,7 +38,7 @@ import { useDialogFocus } from "@/src/lib/useDialogFocus";
 import { getProfileCopy } from "@/src/features/profile/profileCopy";
 
 const AVATAR_SIZE = 512;
-const TELEGRAM_BOT_USERNAME = import.meta.env.VITE_TELEGRAM_BOT_USERNAME || "noviqq_bot";
+const TELEGRAM_BOT_USERNAME = (import.meta.env.VITE_TELEGRAM_BOT_USERNAME || "noviqq_bot").trim().replace(/^@/, "");
 
 const blobToDataUrl = (blob: Blob) =>
   new Promise<string>((resolve, reject) => {
@@ -90,8 +90,9 @@ export const Profile = () => {
         const createLink = httpsCallable<void, { token: string }>(functions, "createTelegramLink");
         const result = await createLink();
         token = result.data.token;
-      } catch {
-        // Fallback to local API
+      } catch (error) {
+        if (!import.meta.env.DEV) throw error;
+        // The Vite middleware exists only in local development.
         const idToken = await user.getIdToken().catch(() => "");
         const resp = await fetch("/api/telegram/link-token", {
           method: "POST",
@@ -103,9 +104,9 @@ export const Profile = () => {
         if (resp.ok) {
           const data = await resp.json();
           token = data.token;
-        }
+        } else throw new Error(copy.telegramFailed);
       }
-      if (token) {
+      if (/^[a-f0-9]{48}$/.test(token) && /^[A-Za-z0-9_]{5,32}$/.test(TELEGRAM_BOT_USERNAME)) {
         window.location.assign(`https://t.me/${TELEGRAM_BOT_USERNAME}?start=link_${token}`);
       } else {
         setStatus(copy.telegramFailed);
@@ -126,17 +127,18 @@ export const Profile = () => {
       try {
         const disconnect = httpsCallable<void, { ok: boolean }>(functions, "disconnectTelegram");
         await disconnect();
-      } catch {
+      } catch (error) {
+        if (!import.meta.env.DEV) throw error;
         const idToken = await user.getIdToken().catch(() => "");
-        await fetch("/api/telegram/disconnect", {
+        const response = await fetch("/api/telegram/disconnect", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
             ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
           },
-        }).catch(() => {});
+        });
+        if (!response.ok) throw new Error(copy.telegramFailed);
       }
-      await writeDocWithQueue({ userId: user.uid, path: ["users", user.uid], kind: "update", data: { telegramId: "" } }).catch(() => {});
       setFormData((current) => ({ ...current, telegramId: "" }));
       updateLocalProfile({ telegramId: "" });
       setStatus(copy.telegramDisconnected);

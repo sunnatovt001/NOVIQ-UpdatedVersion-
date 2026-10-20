@@ -1,19 +1,54 @@
 const admin = require('firebase-admin');
 const firebaseConfig = require('../firebase-applet-config.json');
 
-let handlers;
-function loadHandlers() {
+const configurationError = code => Object.assign(new Error(code), { code });
+
+function createLoader(env = process.env, firebaseAdmin = admin, requireHandlers = () => require('./index.js')) {
+ let handlers;
+ return function loadHandlers() {
   if (handlers) return handlers;
-  const raw = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
-  if (!raw) throw new Error('BACKEND_NOT_CONFIGURED');
-  const account = JSON.parse(raw);
+  const raw = env.FIREBASE_SERVICE_ACCOUNT_JSON;
+  if (!raw?.trim()) throw configurationError('BACKEND_NOT_CONFIGURED');
+  let account;
+  try { account = JSON.parse(raw); } catch { throw configurationError('FIREBASE_CREDENTIAL_JSON_INVALID'); }
+  if (!account || typeof account !== 'object' ||
+      !['project_id', 'client_email', 'private_key'].every(key => typeof account[key] === 'string' && account[key].trim())) {
+    throw configurationError('FIREBASE_CREDENTIAL_FIELDS_MISSING');
+  }
   if (account.private_key && typeof account.private_key === 'string' && account.private_key.includes('\\n')) {
     account.private_key = account.private_key.replace(/\\n/g, '\n');
   }
-  if (account.project_id !== firebaseConfig.projectId) throw new Error('FIREBASE_PROJECT_MISMATCH');
-  if (!admin.apps.length) admin.initializeApp({ credential: admin.credential.cert(account), projectId: account.project_id });
-  handlers = require('./index.js');
+  if (account.project_id !== firebaseConfig.projectId) throw configurationError('FIREBASE_PROJECT_MISMATCH');
+  if (env.FIRESTORE_DATABASE && env.FIRESTORE_DATABASE !== firebaseConfig.firestoreDatabaseId) throw configurationError('FIRESTORE_DATABASE_MISMATCH');
+  if (!firebaseAdmin.apps.length) {
+    let credential;
+    try { credential = firebaseAdmin.credential.cert(account); } catch { throw configurationError('FIREBASE_PRIVATE_KEY_INVALID'); }
+    firebaseAdmin.initializeApp({ credential, projectId: account.project_id });
+  }
+  handlers = requireHandlers();
   return handlers;
+ };
+}
+const loadHandlers = createLoader();
+
+const diagnostics = {
+  BACKEND_NOT_CONFIGURED: 'Set FIREBASE_SERVICE_ACCOUNT_JSON in Vercel Production and redeploy.',
+  FIREBASE_CREDENTIAL_JSON_INVALID: 'FIREBASE_SERVICE_ACCOUNT_JSON must be a JSON object, without outer shell quotes.',
+  FIREBASE_CREDENTIAL_FIELDS_MISSING: 'Service account must contain project_id, client_email and private_key.',
+  FIREBASE_PROJECT_MISMATCH: 'Use a service account for the frontend Firebase project.',
+  FIRESTORE_DATABASE_MISMATCH: 'FIRESTORE_DATABASE must match firebase-applet-config.json firestoreDatabaseId.',
+  FIREBASE_PRIVATE_KEY_INVALID: 'Use a valid PEM private_key from the Firebase service account JSON.',
+};
+function logBackendError(error, phase = 'rpc') {
+  // Never log raw provider messages/stacks: they can contain keys, URLs or request data.
+  const known = Object.hasOwn(diagnostics, error?.code);
+  const code = known ? error.code : error?.code === 'MODULE_NOT_FOUND' ? 'BACKEND_MODULE_MISSING' : 'BACKEND_RUNTIME_FAILURE';
+  console.error('NOVIQ backend failure', {
+    phase, code,
+    action: known ? diagnostics[code] : code === 'BACKEND_MODULE_MISSING'
+      ? 'Verify npm ci --prefix functions and the function dependency bundle.'
+      : 'Inspect the failing handler and provider configuration; no request data was logged.',
+  });
 }
 
 function createHandler(getHandlers = loadHandlers) {
@@ -40,11 +75,11 @@ function createHandler(getHandlers = loadHandlers) {
       // Invoke the original Firebase HTTPS wrapper, which verifies the Firebase
       // ID token and decodes the callable protocol before the existing guards.
       return await fn(req, res);
-    } catch {
-      console.error('NOVIQ backend initialization failed.');
+    } catch (error) {
+      logBackendError(error);
       return sendError(503, 'UNAVAILABLE', 'Backend temporarily unavailable.');
     }
   };
 }
 
-module.exports = { createHandler, loadHandlers };
+module.exports = { createHandler, loadHandlers, createLoader, logBackendError };

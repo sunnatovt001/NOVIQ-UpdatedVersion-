@@ -261,6 +261,25 @@ function harness(env = {}, overrides = {}) {
 }
 const auth = { uid: "u1", token: {} };
 
+test('Telegram webhook requires configuration and secret, validates update IDs and deduplicates zero', async () => {
+  for (const env of [{ TELEGRAM_WEBHOOK_SECRET: '' }, { TELEGRAM_BOT_TOKEN: '' }]) {
+    const h = harness(env), res = h.response();
+    await h.functions.telegramWebhook({ method: 'POST', get: () => 'telegram-secret', body: {} }, res);
+    assert.equal(res.code, 503);
+  }
+  const h = harness(), denied = h.response();
+  await h.functions.telegramWebhook({ method: 'POST', get: () => 'forged', body: {} }, denied);
+  assert.equal(denied.code, 401);
+  const invalid = h.response();
+  await h.functions.telegramWebhook({ method: 'POST', get: () => 'telegram-secret', body: { update_id: '../bad' } }, invalid);
+  assert.equal(invalid.code, 400);
+  const first = h.response(), duplicate = h.response();
+  const request = { method: 'POST', get: () => 'telegram-secret', body: { update_id: 0 } };
+  await h.functions.telegramWebhook(request, first);
+  await h.functions.telegramWebhook(request, duplicate);
+  assert.equal(duplicate.body.duplicate, true);
+});
+
 test("community counts are read-only and available only to actual group members", async () => {
   const h = harness();
   h.records.set("communities/g1/members/u1", { uid: "u1" });

@@ -1,35 +1,34 @@
 import backend from '../functions/vercel.cjs';
 
-export default async function handler(req, res) {
+export function createTelegramHandler(getHandlers = backend.loadHandlers, env = process.env) {
+ return async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store');
   res.setHeader('X-Content-Type-Options', 'nosniff');
 
-  const isCron = req.query?.cron === '1' || req.query?.cron === 'true' || Boolean(req.headers['x-vercel-cron']);
+  const isCron = req.query?.cron === '1' || req.query?.cron === 'true';
 
   // 1. Cron / Scheduled Notification Sweep (Vercel Cron or external scheduler)
   if (isCron) {
-    const cronSecret = process.env.CRON_SECRET || process.env.TELEGRAM_WEBHOOK_SECRET || '';
+    const cronSecret = env.CRON_SECRET || '';
     const authHeader = req.headers['authorization'] || '';
-    const isVercelCron = Boolean(req.headers['x-vercel-cron']);
     const isBearerValid = cronSecret && authHeader === `Bearer ${cronSecret}`;
-    const isSecretTokenValid = cronSecret && req.headers['x-telegram-bot-api-secret-token'] === cronSecret;
-
-    if (cronSecret && !isVercelCron && !isBearerValid && !isSecretTokenValid) {
+    if (!cronSecret) return res.status(503).json({ error: 'Cron service is not configured.' });
+    if (!isBearerValid) {
       res.status(401).json({ error: 'Unauthorized cron invocation.' });
       return;
     }
 
     try {
-      const handlers = backend.loadHandlers();
+      const handlers = getHandlers();
       if (typeof handlers.runTelegramNotificationSweep === 'function') {
         const result = await handlers.runTelegramNotificationSweep();
         res.status(200).json({ ok: true, cron: true, ...result });
         return;
       }
-      res.status(200).json({ ok: true, cron: true, message: 'Notification sweep completed.' });
+      res.status(503).json({ error: 'Notification sweep is unavailable.' });
       return;
     } catch (error) {
-      console.error('[telegram-cron-error]', error);
+      backend.logBackendError(error, 'telegram-cron');
       res.status(500).json({ error: 'Cron execution failed.' });
       return;
     }
@@ -41,7 +40,10 @@ export default async function handler(req, res) {
     return;
   }
 
-  const webhookSecret = process.env.TELEGRAM_WEBHOOK_SECRET || '';
+  const webhookSecret = env.TELEGRAM_WEBHOOK_SECRET || '';
+  if (!webhookSecret || !env.TELEGRAM_BOT_TOKEN) {
+    return res.status(503).json({ error: 'Telegram service is not configured.' });
+  }
   if (webhookSecret) {
     const receivedSecret = req.headers['x-telegram-bot-api-secret-token'];
     if (receivedSecret !== webhookSecret) {
@@ -64,11 +66,14 @@ export default async function handler(req, res) {
   req.get = req.get || ((key) => req.headers[key.toLowerCase()]);
 
   try {
-    const handlers = backend.loadHandlers();
+    const handlers = getHandlers();
     return await handlers.telegramWebhook(req, res);
   } catch (error) {
-    console.error('[telegram-vercel-webhook-error]', error);
+    backend.logBackendError(error, 'telegram-webhook');
     res.status(503).json({ error: 'Telegram webhook service temporarily unavailable.' });
   }
+ };
 }
+
+export default createTelegramHandler();
 

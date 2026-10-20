@@ -1559,17 +1559,22 @@ exports.telegramWebhook = onRequest(async (request, response) => {
   }
 
   const webhookSecret = process.env.TELEGRAM_WEBHOOK_SECRET || TELEGRAM_WEBHOOK_SECRET;
-  if (
-    webhookSecret &&
-    request.get("x-telegram-bot-api-secret-token") !== webhookSecret
-  ) {
+  if (!webhookSecret || !TELEGRAM_BOT_TOKEN) {
+    response.status(503).send("Telegram is not configured");
+    return;
+  }
+  if (request.get("x-telegram-bot-api-secret-token") !== webhookSecret) {
     response.status(401).send("Unauthorized");
     return;
   }
 
   // Idempotency: Deduplicate by update_id across serverless invocations
   const updateId = request.body?.update_id;
-  if (updateId) {
+  if (updateId !== undefined) {
+    if (!Number.isSafeInteger(updateId) || updateId < 0) {
+      response.status(400).send("Invalid update ID");
+      return;
+    }
     try {
       const updateRef = db.collection("telegramProcessedUpdates").doc(String(updateId));
       await updateRef.create({
@@ -1580,6 +1585,9 @@ exports.telegramWebhook = onRequest(async (request, response) => {
         response.json({ ok: true, duplicate: true });
         return;
       }
+      logger.error("Telegram update deduplication unavailable");
+      response.status(503).send("Telegram update storage unavailable");
+      return;
     }
   }
 
@@ -1629,7 +1637,8 @@ exports.telegramWebhook = onRequest(async (request, response) => {
             transaction.get(tokenRef),
           ]);
           const token = tokenSnap.data();
-          if (!targetUserSnap.exists || !token || token.used || token.hash !== tokenHash) {
+          if (!targetUserSnap.exists || !token || token.used || token.hash !== tokenHash ||
+              !toDate(token.expiresAt) || toDate(token.expiresAt).getTime() <= Date.now()) {
             return null;
           }
 
