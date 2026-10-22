@@ -198,7 +198,8 @@ const sendTelegramMessage = async (chatId, text, options = {}) => {
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
+      signal: AbortSignal.timeout(8000),
+        body: JSON.stringify({
         chat_id: String(chatId),
         text: String(text).slice(0, 4096),
         disable_web_page_preview: true,
@@ -208,9 +209,7 @@ const sendTelegramMessage = async (chatId, text, options = {}) => {
   );
   const result = await response.json().catch(() => ({}));
   if (!response.ok || result.ok === false) {
-    throw new Error(
-      result.description || `Telegram send failed with ${response.status}`,
-    );
+    throw Object.assign(new Error('Telegram delivery rejected.'), { deliveryRejected: true });
   }
   return result;
 };
@@ -2162,150 +2161,21 @@ exports.telegramWebhook = onRequest(async (request, response) => {
   response.json({ ok: true, linked: false });
 });
 
-const runTelegramDailySummarySweep = async () => {
-  if (!TELEGRAM_BOT_TOKEN) {
-    logger.warn(
-      "Skipping Telegram daily summaries: TELEGRAM_BOT_TOKEN is not configured.",
-    );
-    return { ok: false, reason: "TELEGRAM_BOT_TOKEN_NOT_CONFIGURED" };
-  }
-
-  const todayKey = getTelegramDayKey();
-  const usersSnapshot = await db
-    .collection("users")
-    .where("telegramId", "!=", "")
-    .get();
-  logger.info("Sending Telegram daily summaries and deadline checks", {
-    todayKey,
-    users: usersSnapshot.size,
-  });
-
-  let sentSummaries = 0;
-  let sentDeadlines = 0;
-
-  for (const userDoc of usersSnapshot.docs) {
-    const user = userDoc.data() || {};
-    const chatId = String(user.telegramId || "").trim();
-    if (!isValidTelegramChatId(chatId)) continue;
-
-    // 1. Daily Study Summary (21:00 user/Tashkent time)
-    if (isNotificationPreferenceEnabled(user, "dailyStreakSummary")) {
-      const logRef = userDoc.ref
-        .collection("telegramNotifications")
-        .doc(`daily-${todayKey}`);
-      const logSnap = await logRef.get();
-      if (!logSnap.exists || logSnap.data()?.status !== "sent") {
-        try {
-          const text = await buildTelegramDailySummary(userDoc.id, user);
-          await sendTelegramMessage(chatId, text);
-          await logRef.set(
-            {
-              status: "sent",
-              dayKey: todayKey,
-              sentAt: FieldValue.serverTimestamp(),
-              chatId,
-            },
-            { merge: true },
-          );
-          sentSummaries += 1;
-        } catch (error) {
-          logger.warn("Telegram daily summary failed", {
-            userId: userDoc.id,
-            chatId,
-            error,
-          });
-          await logRef.set(
-            {
-              status: "failed",
-              dayKey: todayKey,
-              error: String(error.message || error).slice(0, 500),
-              attemptedAt: FieldValue.serverTimestamp(),
-            },
-            { merge: true },
-          );
-        }
-      }
-    }
-
-    // 2. Upcoming Task Deadline Reminders (deduplicated per user-task-day)
-    if (isNotificationPreferenceEnabled(user, "taskDeadlines")) {
-      try {
-        let tasks = [];
-        let progress = {};
-
-        // 1. Try smart-v2
-        const smartSnap = await db.doc(`users/${userDoc.id}/planner/smart-v2`).get().catch(() => ({ exists: false }));
-        if (smartSnap.exists) {
-          const plan = smartSnap.data() || {};
-          if (Array.isArray(plan.tasks)) {
-            tasks = plan.tasks;
-            for (const t of tasks) {
-              if (t.completed) progress[t.id] = { status: "completed" };
-            }
-          }
-        }
-
-        // 2. Fallback to state
-        if (tasks.length === 0) {
-          const plannerRef = db.doc(`users/${userDoc.id}/planner/state`);
-          const plannerSnap = await plannerRef.get().catch(() => ({ exists: false }));
-          if (plannerSnap.exists) {
-            const state = plannerSnap.data()?.state || plannerSnap.data() || {};
-            tasks = Array.isArray(state.tasks) ? state.tasks : [];
-            progress = state.taskProgress || {};
-          }
-        }
-
-        for (const task of tasks) {
-          if (!task?.id) continue;
-          if (progress[task.id]?.status === "completed" || task.completed) continue;
-
-            const deadlineRef = userDoc.ref
-              .collection("telegramNotifications")
-              .doc(`deadline-${todayKey}-${task.id}`);
-            const deadlineSnap = await deadlineRef.get();
-            if (deadlineSnap.exists && deadlineSnap.data()?.status === "sent") continue;
-
-            const taskTitle = task.label || task.title || "Study Task";
-            await sendTelegramMessage(
-              chatId,
-              `⏰ <b>Eslatma!</b> Bugungi vazifangiz hali yakunlanmadi:\n<b>${taskTitle}</b>\n\nUni yakunlab o'z seriyangizni saqlang!`,
-              {
-                parse_mode: "HTML",
-                reply_markup: {
-                  inline_keyboard: [
-                    [{ text: "✅ Bajarildi", callback_data: `task_done:${task.id}` }],
-                  ],
-                },
-              },
-            );
-            await deadlineRef.set(
-              {
-                status: "sent",
-                dayKey: todayKey,
-                taskId: task.id,
-                sentAt: FieldValue.serverTimestamp(),
-                chatId,
-              },
-              { merge: true },
-            );
-            sentDeadlines += 1;
-          }
-      } catch (err) {
-        logger.warn("Telegram task deadline check failed", { userId: userDoc.id, error: err });
-      }
-    }
-  }
-
-  return { ok: true, todayKey, sentSummaries, sentDeadlines };
-};
-
+// Firebase is the active backend; MongoDB remains separate migration staging.
+const { createNotificationSweep } = require('./telegramNotifications');
+const telegramSweep = createNotificationSweep({
+  db, send: sendTelegramMessage, summary: buildTelegramDailySummary,
+  timestamp: () => FieldValue.serverTimestamp(),
+  enabled: isNotificationPreferenceEnabled, validChat: isValidTelegramChatId,
+});
+const runTelegramDailySummarySweep = () => TELEGRAM_BOT_TOKEN
+  ? telegramSweep()
+  : Promise.resolve({ ok: false, reason: 'TELEGRAM_BOT_TOKEN_NOT_CONFIGURED' });
+// Firebase scheduler handles timed reminders when deployed. Vercel's free
+// daily cron stays a fallback and cannot deliver exact-time reminders.
 exports.sendDailyTelegramStudySummary = onSchedule(
-  {
-    schedule: "every day 21:00",
-    timeZone: TELEGRAM_TIME_ZONE,
-  },
-  runTelegramDailySummarySweep
+  { schedule: "every 5 minutes", timeZone: TELEGRAM_TIME_ZONE, timeoutSeconds: 120, maxInstances: 1 },
+  runTelegramDailySummarySweep,
 );
 exports.runTelegramNotificationSweep = runTelegramDailySummarySweep;
 Object.assign(

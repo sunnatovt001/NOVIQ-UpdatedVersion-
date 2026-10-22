@@ -21,9 +21,8 @@ import {
 import { cn } from "@/src/lib/utils";
 import { doc, updateDoc } from "firebase/firestore";
 import { httpsCallable } from "@/src/lib/callable";
-import { db, functions, storage } from "@/src/lib/firebase";
-import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
-import { updateProfile } from "firebase/auth";
+import { db, functions } from "@/src/lib/firebase";
+import { updateProfile } from 'firebase/auth';
 import { motion, AnimatePresence } from "motion/react";
 import { createPortal } from "react-dom";
 import { getAppErrorMessage } from "@/src/lib/errors";
@@ -36,6 +35,8 @@ import { SyncRecovery } from "@/src/components/SyncRecovery";
 import { useLocale } from "@/src/contexts/LocaleContext";
 import { useDialogFocus } from "@/src/lib/useDialogFocus";
 import { getProfileCopy } from "@/src/features/profile/profileCopy";
+import { avatarOptions, getProfileAvatar } from '@/src/lib/profileAvatar';
+import { isPro } from '@/src/lib/subscription';
 
 const AVATAR_SIZE = 512;
 const TELEGRAM_BOT_USERNAME = (import.meta.env.VITE_TELEGRAM_BOT_USERNAME || "noviqq_bot").trim().replace(/^@/, "");
@@ -68,6 +69,7 @@ export const Profile = () => {
   });
 
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
+  const [selectedPreset, setSelectedPreset] = useState('');
   const [avatarPreview, setAvatarPreview] = useState("");
   const [showAvatarModal, setShowAvatarModal] = useState(false);
   useBodyScrollLock(showAvatarModal);
@@ -258,6 +260,7 @@ export const Profile = () => {
   };
 
   const handleAvatarFile = (file: File) => {
+    setSelectedPreset('');
     if (!file.type.startsWith("image/")) {
       setAvatarError(copy.chooseImage);
       return;
@@ -316,6 +319,18 @@ export const Profile = () => {
 
   const handleSaveAvatar = async () => {
     if (isReadOnlyAudit) { setStatus(copy.auditAvatarDisabled); return; }
+    if (user && selectedPreset && avatarOptions(isPro(profile)).includes(selectedPreset)) {
+      setIsAvatarSaving(true);
+      setAvatarError('');
+      try {
+        updateLocalProfile({ photoURL: selectedPreset });
+        const syncStatus = await writeDocWithQueue({ userId: user.uid, path: ['users', user.uid], kind: 'update', data: { photoURL: selectedPreset } });
+        setStatus(syncStatus === 'synced' ? copy.avatarUpdated : copy.avatarCloudPending);
+        setShowAvatarModal(false);
+      } catch (error) { setAvatarError(getAppErrorMessage(error)); }
+      finally { setIsAvatarSaving(false); }
+      return;
+    }
     if (!user || !avatarFile) return;
     setIsAvatarSaving(true);
     setAvatarError("");
@@ -327,24 +342,14 @@ export const Profile = () => {
       const localPhotoURL = await blobToDataUrl(blob);
 
       updateLocalProfile({ photoURL: localPhotoURL });
+      const localSyncStatus = await writeDocWithQueue({ userId: user.uid, path: ['users', user.uid], kind: 'update', data: { photoURL: localPhotoURL } });
       savedLocally = true;
       setShowAvatarModal(false);
       setAvatarFile(null);
       if (avatarPreview) URL.revokeObjectURL(avatarPreview);
       setAvatarPreview("");
-      setStatus(copy.avatarSavedLocal);
+      setStatus(localSyncStatus === 'synced' ? copy.avatarUpdated : copy.avatarCloudPending);
 
-      const avatarRef = ref(storage, `users/${user.uid}/avatars/avatar-${Date.now()}.jpg`);
-      await uploadBytes(avatarRef, blob, { contentType: "image/jpeg" });
-      const photoURL = await getDownloadURL(avatarRef);
-
-      updateLocalProfile({ photoURL });
-      await updateProfile(user, { photoURL }).catch((error) => {
-        console.warn("Firebase Auth avatar update failed", error);
-      });
-      const syncStatus = await writeDocWithQueue({ userId: user.uid, path: ["users", user.uid], kind: "update", data: {photoURL} });
-
-      setStatus(syncStatus === "synced" ? copy.avatarUpdated : copy.avatarCloudPending);
     } catch (error) {
       console.warn("Cloud avatar sync failed", error);
       if (savedLocally) {
@@ -358,11 +363,14 @@ export const Profile = () => {
     }
   };
 
-  const avatarSrc =
-    profile?.photoURL ||
-    `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(
-      profile?.displayName || profile?.email || "student"
-    )}&hairColor=2c1b18&skinColor=f8d25c`;
+  const avatarSrc = getProfileAvatar(profile);
+  const openAvatarPicker = () => {
+    setSelectedPreset(avatarSrc.startsWith('/avatars/') ? avatarSrc : '');
+    setAvatarFile(null);
+    setAvatarPreview('');
+    setAvatarError('');
+    setShowAvatarModal(true);
+  };
 
   return (
     <div className="mx-auto max-w-6xl space-y-8 pb-24 text-slate-950 dark:text-slate-50">
@@ -420,7 +428,7 @@ export const Profile = () => {
               </div>
               <button
                 type="button"
-                onClick={() => fileInputRef.current?.click()}
+                onClick={openAvatarPicker}
                 className="absolute bottom-2 right-2 flex h-12 w-12 items-center justify-center rounded-2xl border-4 border-white bg-blue-600 text-white transition-colors hover:bg-blue-700 dark:border-slate-900"
                 aria-label={copy.changeAvatar}
               >
@@ -434,7 +442,7 @@ export const Profile = () => {
               {formData.showActionButtons && (
                 <button
                   type="button"
-                  onClick={() => fileInputRef.current?.click()}
+                  onClick={openAvatarPicker}
                   className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 transition-colors hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
                 >
                   <Upload size={16} />
@@ -682,8 +690,8 @@ export const Profile = () => {
             >
               <div className="mb-6 flex items-start justify-between">
                 <div>
-                  <p className="section-label">{copy.avatarCrop}</p>
-                  <h3 id="avatar-editor-title" className="text-3xl font-bold text-slate-950 dark:text-white">{copy.previewAvatar}</h3>
+                  <p className="section-label">NOVIQ {isPro(profile) ? 'PRO' : 'FREE'}</p>
+                  <h3 id="avatar-editor-title" className="text-3xl font-bold text-slate-950 dark:text-white">{copy.changeAvatar}</h3>
                 </div>
                 <button
                   type="button"
@@ -695,7 +703,18 @@ export const Profile = () => {
                 </button>
               </div>
 
-              <div className="mx-auto h-[min(18rem,68vw)] w-[min(18rem,68vw)] overflow-hidden rounded-[3rem] border-8 border-slate-100 bg-slate-100 dark:border-slate-800 dark:bg-slate-950">
+              <div className="mb-6 grid grid-cols-4 gap-3" aria-label="NOVIQ avatars">
+                {avatarOptions(isPro(profile)).map((src, index) => (
+                  <button key={src} type="button" disabled={isAvatarSaving} aria-label={`NOVIQ ${isPro(profile) ? 'Pro' : 'Free'} avatar ${index + 1}`} aria-pressed={selectedPreset === src}
+                    onClick={() => { setSelectedPreset(src); setAvatarFile(null); setAvatarPreview(''); setAvatarError(''); }}
+                    className={cn('relative aspect-square overflow-hidden rounded-full border-4 transition hover:scale-105 focus-visible:outline-2 focus-visible:outline-blue-500', selectedPreset === src ? 'border-blue-500 ring-4 ring-blue-500/15' : 'border-transparent')}>
+                    <img src={src} alt="" className="h-full w-full object-cover" />
+                    {selectedPreset === src && <span className="absolute bottom-0 right-0 rounded-full bg-blue-600 p-1 text-white"><Check size={16} /></span>}
+                  </button>
+                ))}
+              </div>
+              <div className="mx-auto h-[min(18rem,68vw)] w-[min(18rem,68vw)] overflow-hidden rounded-full border-8 border-slate-100 bg-slate-100 dark:border-slate-800 dark:bg-slate-950">
+                {!avatarPreview && <img src={selectedPreset || avatarSrc} alt={copy.avatarPreviewAlt} className="h-full w-full object-cover" />}
                 {avatarPreview && (
                   <img
                     src={avatarPreview}
@@ -708,7 +727,7 @@ export const Profile = () => {
                 )}
               </div>
 
-              <div className="mt-6 grid gap-4">
+              {avatarPreview && (<div className="mt-6 grid gap-4">
                 <label className="space-y-2">
                   <span className="text-xs font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400">{copy.zoom}</span>
                   <input
@@ -745,8 +764,7 @@ export const Profile = () => {
                     />
                   </label>
                 </div>
-              </div>
-
+              </div>)}
               {avatarError && (
                 <div role="alert" className="mt-5 rounded-2xl border border-red-300 bg-red-50 px-4 py-3 text-sm font-semibold text-red-800 dark:border-red-500/30 dark:bg-red-950/30 dark:text-red-200">
                   {avatarError}
@@ -764,7 +782,7 @@ export const Profile = () => {
                 <button
                   type="button"
                   onClick={handleSaveAvatar}
-                  disabled={isAvatarSaving}
+                  disabled={isAvatarSaving || (!avatarFile && !selectedPreset)}
                   className="premium-action flex min-h-12 flex-1 items-center justify-center gap-2"
                 >
                   {isAvatarSaving ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />}

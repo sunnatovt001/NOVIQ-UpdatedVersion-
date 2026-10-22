@@ -55,6 +55,7 @@ export function createTelegramApi(db, sessions, options = {}) {
       // Verified via secret token header sent by Telegram servers
       if (path === '/api/telegram/webhook' || path === '/api/telegram') {
         if (request.method !== 'POST') return send(405, { error: 'Method not allowed. Use POST.' });
+        if (!token || !webhookSecret) return send(503, { error: 'Telegram webhook is not configured.' });
 
         if (webhookSecret) {
           const secretHeader = request.headers['x-telegram-bot-api-secret-token'];
@@ -73,6 +74,7 @@ export function createTelegramApi(db, sessions, options = {}) {
       // 2. Automated Notification Trigger (for Render / Vercel Cron or background worker)
       if (path === '/api/telegram/cron' && request.method === 'POST') {
         const cronSecret = process.env.CRON_SECRET || webhookSecret;
+        if (!token || !cronSecret) return send(503, { error: 'Telegram cron is not configured.' });
         if (cronSecret && request.headers['authorization'] !== `Bearer ${cronSecret}`) {
           return send(401, { error: 'Unauthorized cron invocation.' });
         }
@@ -127,9 +129,9 @@ export function createTelegramApi(db, sessions, options = {}) {
 
       return send(404, { error: 'Endpoint not found.' });
     } catch (error) {
-      const status = error.status || 500;
-      console.warn('[telegram-api-error]', error.message);
-      return send(status, { error: error.message || 'Telegram service error.' });
+      const status = [400, 413].includes(error.status) ? error.status : 503;
+      console.warn('[telegram-api-error]', { status });
+      return send(status, { error: status === 503 ? 'Telegram service unavailable.' : 'Invalid Telegram request.' });
     }
   };
 }

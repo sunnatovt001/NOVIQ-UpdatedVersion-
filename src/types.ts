@@ -6,6 +6,9 @@ export interface UserProfile {
   createdAt?: string;
   isAdmin?: boolean;
   onboarded: boolean;
+  onboardingCompleted?: boolean;
+  onboarding?: { goal: string; profile: string; challenge: string };
+  onboardingCompletedAt?: unknown;
   onboardingAnswers?: {
     mainGoal?: string;
     userType?: string;

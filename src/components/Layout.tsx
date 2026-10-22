@@ -1,3 +1,4 @@
+import { getProfileAvatar } from '@/src/lib/profileAvatar';
 import '@/src/features/pro/brand.css';
 import '@/src/features/pro/reference.css';
 import '@/src/features/pro/recovery.css';
@@ -776,7 +777,7 @@ export const Layout: React.FC<{
                  onClick={() => setActiveTab('profile')}
                  className="group relative h-14 w-14 overflow-hidden rounded-[1.25rem] border border-[#E5E7EB] bg-white transition-colors hover:border-[var(--noviq-accent)]"
                >
-                 <img src={profile?.photoURL || "/profile-placeholder.svg"} alt="" onError={event => { if (!event.currentTarget.src.endsWith("/profile-placeholder.svg")) event.currentTarget.src = "/profile-placeholder.svg"; }} className="w-full h-full object-cover" />
+                 <img src={getProfileAvatar(profile)} alt="" onError={event => { if (!event.currentTarget.src.endsWith("/profile-placeholder.svg")) event.currentTarget.src = "/profile-placeholder.svg"; }} className="w-full h-full object-cover" />
                  <div className="absolute inset-0 bg-[var(--noviq-accent)]/0 transition-colors group-hover:bg-[var(--noviq-accent)]/10" />
                </button>
             </div>

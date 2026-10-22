@@ -1,3 +1,4 @@
+import { getProfileAvatar } from '@/src/lib/profileAvatar';
 import { createTutorRecognition, getTutorSpeechSynthesis, stopTutorRecognition, cancelTutorSpeech } from "@/src/features/tutor/browserSpeech";
 import {TutorProControls,useTutorModes} from '@/src/features/pro/TutorProControls';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -39,60 +40,17 @@ import {
 } from "@/src/features/tutor/tutorAttachments";
 import {
   getTutorIntro,
-  TUTOR_LANGUAGE_OPTIONS,
   type TutorLanguage,
 } from "@/src/features/tutor/tutorCopy";
 import { useLocale } from "@/src/contexts/LocaleContext";
 import { buildTutorRequestContext } from "@/src/features/tutor/tutorRequest";
 
-interface Message {
-  id: string;
-  role: "user" | "assistant";
-  content: string;
-  createdAt?: number;
-  attachments?: (Pick<TutorAttachment, "id" | "name" | "mimeType" | "size" | "previewUrl"> & {
-    text?: string;
-    contentStored?: boolean;
-  })[];
-}
-
-const ASSISTANT_AVATAR =
-  "/saidamin-avatar.jpg";
-
-const INTRO_MESSAGE: Message = {
-  id: "intro",
-  role: "assistant",
-  content: getTutorIntro("en-US"),
-};
-
-const Avatar = ({ src, alt, size = "sm" }: { src: string; alt: string; size?: "sm" | "lg" }) => {
-  const outerSize = size === "lg" ? "h-10 w-10 sm:h-14 sm:w-14" : "h-10 w-10";
-  const dotSize = size === "lg" ? "h-3.5 w-3.5" : "h-3 w-3";
-
-  return (
-    <div
-      className={cn(
-        "relative shrink-0 rounded-full bg-gradient-to-tr from-fuchsia-500 via-amber-300 to-cyan-300 p-[2px] shadow-lg shadow-cyan-500/10",
-        outerSize
-      )}
-    >
-      <div className="h-full w-full rounded-full bg-slate-950 p-[2px]">
-        <img src={src} alt={alt} className="h-full w-full rounded-full object-cover object-top" />
-      </div>
-      <span
-        className={cn(
-          "absolute bottom-0 right-0 rounded-full border-2 border-slate-950 bg-emerald-400 shadow-[0_0_10px_rgba(52,211,153,0.65)]",
-          dotSize
-        )}
-      />
-    </div>
-  );
-};
+import { Avatar, ASSISTANT_AVATAR, INTRO_MESSAGE, type Message } from "@/src/features/tutor/TutorPresentation";
 
 export const Tutor = ({ setActiveTab }: { setActiveTab: (tab: string) => void }) => {
   const { profile, user } = useAuth();
   const tutorModes=useTutorModes(user?.uid),{proTutorMode,explanationDepth,shareProContext}=tutorModes;
-  const { locale, setLocale, t } = useLocale();
+  const { locale, t } = useLocale();
   const chat = useTutorHistory(user?.uid);
   const [historyOpen, setHistoryOpen] = useState(false);
   const closeHistory = useCallback(() => setHistoryOpen(false), []);
@@ -315,11 +273,7 @@ export const Tutor = ({ setActiveTab }: { setActiveTab: (tab: string) => void })
 
   const handleSend = () => submitPrompt(input, attachedFiles);
 
-  const userAvatar =
-    profile?.photoURL ||
-    `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(
-      profile?.displayName || profile?.email || "student"
-    )}&backgroundColor=ffd5dc,c0aede,d1d4f9&radius=50`;
+  const userAvatar = getProfileAvatar(profile);
 
   const selectConversation = (id: string) => { chat.select(id); setAiError(""); setLastRequest(null); };
   const newConversation = () => { chat.newChat(); setAiError(""); setLastRequest(null); };
@@ -392,23 +346,9 @@ export const Tutor = ({ setActiveTab }: { setActiveTab: (tab: string) => void })
           <div className="shrink-0 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-black uppercase tracking-widest text-slate-300">
             {localProvider ? "Saidamin AI" : activePro ? "Pro AI" : t("tutor.freeRemaining").replace("{count}", String(remainingTutorMessages))}
           </div>
-          <select
-            value={voiceLanguage}
-            onChange={(event) => {
-              const language = event.target.value as TutorLanguage;
-              setLocale(
-                language === "uz-UZ" ? "uz" : language === "ru-RU" ? "ru" : "en",
-              );
-            }}
-            aria-label={t("tutor.languageLabel")}
-            className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-white outline-none transition hover:border-blue-400 focus:border-blue-400"
-          >
-            {TUTOR_LANGUAGE_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
+          <span className="shrink-0 rounded-xl border border-white/10 px-3 py-2 text-xs text-slate-300" role="status">
+            {locale === 'uz' ? 'Javob tili: avtomatik' : locale === 'ru' ? 'Язык ответа: автоматически' : 'Reply language: automatic'}
+          </span>
           <button
             type="button"
             onClick={() => setAutoSpeak(!autoSpeak)}

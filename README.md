@@ -3,6 +3,37 @@
 React 19 + TypeScript + Vite study platform using Firebase Authentication,
 Firestore, Storage, Gemini tutoring, planner, notes, flashcards and focus sessions.
 
+## Active backend
+
+Firebase Authentication, Firestore and Storage are the production source of truth.
+Vercel serves the frontend and Firebase-backed RPC/Telegram adapters. MongoDB in
+`server/` is migration staging only, not an automatic failover or a synchronized
+backup. Keep its code and configuration, but do not route production writes to it.
+A future cutover requires data verification and an explicit migration decision.
+The `/backend-check` screen is excluded from normal builds; a separate staging
+build must explicitly set `VITE_ENABLE_MONGO_STAGING=true` to enable it.
+
+## Release and notifications
+
+Vercel runs `npm run verify && npm --prefix server test` before accepting a build,
+so TypeScript, backend syntax, unit/HTTP tests and the frontend build must pass.
+GitHub Actions additionally checks Firestore rules and browser workflows.
+
+The Firebase notification scheduler is configured for five-minute sweeps. Daily
+summaries are eligible after 21:00 Asia/Tashkent; scheduled sessions get a 15-minute
+advance window and explicit task deadlines a 30-minute window. Delivery depends on
+the scheduler being deployed and enabled. The existing free Vercel daily cron is
+only a fallback; it cannot provide precise reminders. Do not enable a paid service
+just to change the frequency. Avoid running two independent bot implementations.
+
+Sweeps use pagination, a persisted cursor, a run lease and per-message transaction
+claims. A network timeout has an unknown delivery outcome and is not resent
+automatically, since Telegram provides no sendMessage idempotency key.
+
+Client analytics paginate original Firebase records in bounded pages when server
+metrics are disabled. Keep server metrics opt-in until its projections, triggers,
+indexes and legacy backfill have been verified; MongoDB is not needed for this.
+
 ## Local development
 
 1. Install Node.js and run `npm ci` in this directory.
@@ -30,7 +61,7 @@ requests to the local machine/origin and applies a 10-request/minute limit.
 AI answers are available but chat history, telemetry and progress are not saved.
 This development-only proxy is excluded from production builds. Normal builds
 continue to use authenticated Firebase Functions and their existing quotas.
-The server defaults to `gemini-3.8-flash`; `GEMINI_MODELS` can configure server
+The Tutor defaults to `gemini-3.5-flash-lite`; `GEMINI_MODELS` can configure server
 models. The old 2.5 Flash model returned 404 for the supplied account in live tests.
 
 Nexus member directories use `getCommunityMembers` (50 members per page),

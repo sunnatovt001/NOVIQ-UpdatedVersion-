@@ -17,6 +17,8 @@ import {membershipFailureMessage} from '@/src/features/pro/membershipFailure';
 import { Landing } from "@/src/pages/Landing";
 import { trackSiteVisit } from "@/src/lib/analytics";
 import type { OnboardingAnswers } from "@/src/components/Onboarding";
+import { hasCompletedOnboarding, initialOnboardingAnswers } from '@/src/features/onboarding/onboardingState';
+import { isRegistrationOnboarding, setRegistrationOnboarding } from '@/src/features/onboarding/registrationFlow';
 import { AlertCircle } from "lucide-react";
 const loadMongoBackendCheck = () => import('@/src/features/auth/MongoBackendCheck');
 const loadFreeLayout = () => import('@/src/features/free/FreeLayout');
@@ -24,7 +26,7 @@ const loadLayout = () => import("@/src/components/Layout");
 const loadOnboarding = () => import("@/src/components/Onboarding");
 
 const pageLoaders: Record<string, () => Promise<Record<string, any>>> = {
-  Dashboard: () => import("@/src/pages/Dashboard"), Planner: () => import("@/src/pages/Planner"),
+  Dashboard: () => import("@/src/pages/Dashboard"), Planner: () => import("@/src/features/planner/PlannerRoute"),
   Tutor: () => import("@/src/pages/Tutor"), Notes: () => import("@/src/pages/Notes"),
   Flashcards: () => import("@/src/pages/Flashcards"), Focus: () => import("@/src/pages/Focus"),
   Community: () => import("@/src/pages/Community"), Analytics: () => import("@/src/pages/Analytics"),
@@ -59,13 +61,14 @@ const AppContent = () => {
     "pricing",
     "admin",
     "profile",
+    "onboarding",
   ];
   const readTab = () => {
     const requested = (window.location.hash || window.location.pathname).replace(/^#?\/?/, "").replace(/\/$/, "");
     if (validTabs.includes(requested)) return requested;
     return new URLSearchParams(window.location.search).has("invite")
       ? "community"
-      : "dashboard";
+      : "landing";
   };
   const [activeTab, updateActiveTab] = useState(readTab);
   const setActiveTab = useCallback((tab: string) => {
@@ -85,12 +88,10 @@ const AppContent = () => {
     trackSiteVisit(pageName, user?.uid).catch(() => undefined);
   }, [activeTab, loading, user]);
 
-  const hasCompletedOnboarding = Boolean(
-    profile?.onboarded &&
-      profile.onboardingAnswers?.mainGoal &&
-      profile.onboardingAnswers?.userType &&
-      profile.onboardingAnswers?.struggle,
-  );
+  const needsOnboarding = Boolean(user && !hasCompletedOnboarding(profile) && isRegistrationOnboarding(user.uid, window.location.hash));
+
+  // The public homepage remains reachable even when an account is signed in.
+  if (activeTab === 'landing') return <Landing />;
 
   if (loading) {
     return <AppLoadingScreen />;
@@ -137,11 +138,14 @@ const AppContent = () => {
     return <AppLoadingScreen message={copy.profileLoading} />;
   }
 
-  if (user && !hasCompletedOnboarding) {
+  if (user && needsOnboarding) {
     return (
-      <RoutePage loader={loadOnboarding} name="Onboarding" pageProps={{
+      <RoutePage key={`onboarding:${user.uid}`} loader={loadOnboarding} name="Onboarding" pageProps={{
+        initialAnswers: initialOnboardingAnswers(profile),
         onComplete: async (answers: OnboardingAnswers) => {
           await completeOnboarding(answers);
+          setRegistrationOnboarding(null);
+          if (window.location.hash !== '#/dashboard') setActiveTab('dashboard');
         },
       }} />
     );
@@ -168,7 +172,7 @@ const AppContent = () => {
 };
 
 export default function App() {
-  if (window.location.pathname === '/backend-check') return <RoutePage loader={loadMongoBackendCheck} name="MongoBackendCheck" />;
+  if (import.meta.env.VITE_ENABLE_MONGO_STAGING === 'true' && window.location.pathname === '/backend-check') return <RoutePage loader={loadMongoBackendCheck} name="MongoBackendCheck" />;
   return (
     <AuthProvider>
       <MembershipProvider><AppContent /></MembershipProvider>

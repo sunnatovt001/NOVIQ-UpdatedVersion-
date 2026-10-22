@@ -92,6 +92,7 @@ export const AuthDialog = ({ mode, onClose, onModeChange }: AuthDialogProps) => 
       setErrorMessage("");
       setSuccessMessage("");
       await loginWithSocialProvider(providerId, rememberMe);
+      onClose();
     } catch (error) {
       setErrorMessage(getAuthErrorMessage(error, locale));
       setSocialSubmittingProvider(null);

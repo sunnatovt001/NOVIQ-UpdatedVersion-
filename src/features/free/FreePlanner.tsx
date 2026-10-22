@@ -1,1 +1,1 @@
-export {Planner} from '@/src/pages/Planner';
+export {Planner} from '@/src/features/planner/PlannerRoute';

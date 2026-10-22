@@ -207,6 +207,7 @@ function harness(env = {}, overrides = {}) {
     "firebase-functions/v2/scheduler": { onSchedule: handler },
     "node:crypto": crypto,
     "./policy": require("./policy"),
+    "./telegramNotifications": require("./telegramNotifications"),
     "./community": require("./community"),
     "./metrics": require("./metrics"),
     "./appUrl": require("./appUrl"),

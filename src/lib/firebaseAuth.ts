@@ -4,6 +4,7 @@ import {
   createUserWithEmailAndPassword,
   FacebookAuthProvider,
   getAuth,
+  getAdditionalUserInfo,
   GithubAuthProvider,
   GoogleAuthProvider,
   sendPasswordResetEmail,
@@ -16,6 +17,7 @@ import {
 } from "firebase/auth";
 
 import { app } from "./firebaseApp";
+import { setRegistrationOnboarding } from '@/src/features/onboarding/registrationFlow';
 export const auth = getAuth(app);
 
 export const googleProvider = new GoogleAuthProvider();
@@ -87,6 +89,9 @@ export const loginWithSocialProvider = async (providerId: SocialAuthProviderId, 
   try {
     await applyAuthPersistence(remember);
     const result = await signInWithPopup(auth, createSocialProvider(providerId));
+    const isNew = getAdditionalUserInfo(result)?.isNewUser === true;
+    setRegistrationOnboarding(isNew ? result.user.uid : null);
+    window.location.hash = isNew ? '/onboarding' : '/dashboard';
     return result.user;
   } catch (error) {
     console.error("Social login failed", error);
@@ -99,6 +104,8 @@ export const loginWithGoogle = async (remember = true) => loginWithSocialProvide
 export const loginWithEmail = async (email: string, password: string, remember = true) => {
   await applyAuthPersistence(remember);
   const result = await signInWithEmailAndPassword(auth, email.trim(), password);
+  setRegistrationOnboarding(null);
+  window.location.hash = '/dashboard';
   return result.user;
 };
 
@@ -121,5 +128,7 @@ export const registerWithEmail = async (
 
   // AuthProvider owns initial profile creation; a second full write here raced
   // against its listener and attempted to overwrite protected fields.
+  setRegistrationOnboarding(result.user.uid);
+  window.location.hash = '/onboarding';
   return result.user;
 };

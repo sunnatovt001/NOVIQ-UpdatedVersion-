@@ -105,7 +105,7 @@ const missionIcon = (task: MissionTask) => {
 };
 
 
-const LegacyPlanner = () => {
+export const LegacyPlanner = () => {
   const { locale, t } = useLocale();
   const getValidation = (...args: Parameters<typeof validatePlannerActivity>) => {
     const result = validatePlannerActivity(...args);

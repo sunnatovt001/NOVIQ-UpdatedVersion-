@@ -5,7 +5,6 @@ import {
   Activity,
   AlertCircle,
   ArrowLeft,
-  ArrowUpRight,
   BarChart3,
   Brain,
   CheckCircle2,
@@ -45,414 +44,43 @@ import { cn } from "@/src/lib/utils";
 import { useUserActivityMetrics } from "@/src/lib/useUserActivityMetrics";
 import { ClientErrorMonitor } from "@/src/components/ClientErrorMonitor";
 
-type RangeKey = "today" | "7d" | "30d";
-type PlanFilter = "all" | "free" | "pro";
-type ActivityFilter = "all" | "online" | "active_today" | "inactive_7d";
-
-type DataKey =
-  | "users"
-  | "trusted"
-  | "studySessions"
-  | "progressEvents"
-  | "notebookNotes"
-  | "notebookMessages"
-  | "tutorMessages"
-  | "decks"
-  | "analyticsEvents"
-  | "subscriptionRequests"
-  | "subscriptionCheckouts";
-
-type AdminUser = {
-  id: string;
-  email: string;
-  displayName: string;
-  photoURL?: string;
-  createdAt: Date | null;
-  lastActive: Date | null;
-  currentLevel: string;
-  goals: string[];
-  onboardingAnswers?: Record<string, unknown>;
-  subscription?: Record<string, unknown>;
-  settings?: Record<string, unknown>;
-  raw: Record<string, unknown>;
-};
-
-type AdminRecord = {
-  id: string;
-  userId: string;
-  kind: string;
-  date: Date | null;
-  path: string;
-  data: Record<string, any>;
-};
-
-type TrustedProgress = {
-  xp: number;
-  level: number;
-  levelName: string;
-  streak: number;
-  totalStudySeconds: number;
-  lastActive: Date | null;
-  lastStudySessionAt: Date | null;
-  updatedAt: Date | null;
-};
-
-type UserRow = {
-  id: string;
-  name: string;
-  email: string;
-  goal: string;
-  currentLevel: string;
-  targetLevel: string;
-  plan: "free" | "pro";
-  planStatus: string;
-  lastActive: Date | null;
-  online: boolean;
-  streak: number;
-  totalStudySeconds: number;
-  raw: AdminUser;
-};
-
-const DATA_KEYS: DataKey[] = [
-  "users",
-  "trusted",
-  "studySessions",
-  "progressEvents",
-  "notebookNotes",
-  "notebookMessages",
-  "tutorMessages",
-  "decks",
-  "analyticsEvents",
-  "subscriptionRequests",
-  "subscriptionCheckouts",
-];
-
-const RANGE_OPTIONS: { id: RangeKey; label: string }[] = [
-  { id: "today", label: "Today" },
-  { id: "7d", label: "7 days" },
-  { id: "30d", label: "30 days" },
-];
-
-const MAX_ADMIN_DOCS = 1500;
-const ONLINE_WINDOW_MS = 5 * 60 * 1000;
-
-const makeLoadState = (value: boolean) =>
-  DATA_KEYS.reduce(
-    (state, key) => ({
-      ...state,
-      [key]: value,
-    }),
-    {} as Record<DataKey, boolean>
-  );
-
-const toDate = (value: unknown): Date | null => {
-  if (!value) return null;
-  if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value;
-
-  const candidate = value as { toDate?: () => Date; toMillis?: () => number; seconds?: number };
-  if (typeof candidate.toDate === "function") {
-    const parsed = candidate.toDate();
-    return Number.isNaN(parsed.getTime()) ? null : parsed;
-  }
-  if (typeof candidate.toMillis === "function") {
-    const parsed = new Date(candidate.toMillis());
-    return Number.isNaN(parsed.getTime()) ? null : parsed;
-  }
-  if (typeof candidate.seconds === "number") {
-    const parsed = new Date(candidate.seconds * 1000);
-    return Number.isNaN(parsed.getTime()) ? null : parsed;
-  }
-  if (typeof value === "string" || typeof value === "number") {
-    const parsed = new Date(value);
-    return Number.isNaN(parsed.getTime()) ? null : parsed;
-  }
-  return null;
-};
-
-const pickDate = (data: Record<string, any>, fields: string[]) => {
-  for (const field of fields) {
-    const date = toDate(data[field]);
-    if (date) return date;
-  }
-  return null;
-};
-
-const startOfToday = () => {
-  const date = new Date();
-  date.setHours(0, 0, 0, 0);
-  return date;
-};
-
-const addDays = (date: Date, days: number) => {
-  const next = new Date(date);
-  next.setDate(next.getDate() + days);
-  return next;
-};
-
-const getRangeStart = (range: RangeKey) => {
-  const today = startOfToday();
-  if (range === "today") return today;
-  return addDays(today, range === "7d" ? -6 : -29);
-};
-
-const isSameDay = (a: Date, b: Date) =>
-  a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
-
-const isWithinRange = (date: Date | null, rangeStart: Date) => Boolean(date && date.getTime() >= rangeStart.getTime());
-
-const formatDateTime = (date: Date | null) =>
-  date ? date.toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "Unknown";
-
-const formatDateOnly = (date: Date | null) =>
-  date ? date.toLocaleDateString([], { month: "short", day: "numeric", year: "numeric" }) : "Unknown";
-
-const formatStudyTime = (seconds: number) => {
-  const minutes = Math.round(Math.max(0, seconds) / 60);
-  if (minutes < 60) return `${minutes}m`;
-  const hours = Math.floor(minutes / 60);
-  const rest = minutes % 60;
-  return rest ? `${hours}h ${rest}m` : `${hours}h`;
-};
-
-const formatCompactNumber = (value: number) =>
-  new Intl.NumberFormat(undefined, { notation: "compact", maximumFractionDigits: 1 }).format(value);
-
-const getLocalDateKey = (date: Date) =>
-  `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
-
-const percent = (part: number, total: number) => (total > 0 ? `${Math.round((part / total) * 100)}%` : "N/A");
-
-const getRecordUserId = (document: any, data: Record<string, any>) =>
-  String(data.userId || document.ref.parent.parent?.id || "");
-
-const mapCollectionGroupDocs = (snapshot: any, kind: string, dateFields: string[]) =>
-  snapshot.docs
-    .map((document: any) => {
-      const data = document.data() as Record<string, any>;
-      return {
-        id: document.id,
-        userId: getRecordUserId(document, data),
-        kind,
-        date: pickDate(data, dateFields),
-        path: document.ref.path,
-        data,
-      } as AdminRecord;
-    })
-    .filter((record: AdminRecord) => record.userId);
-
-const getPlan = (user: AdminUser): "free" | "pro" => {
-  const subscription = user.subscription || {};
-  const plan = String(subscription.plan || "free");
-  const status = String(subscription.status || "active");
-  return plan === "pro" && ["active", "trialing"].includes(status) ? "pro" : "free";
-};
-
-const getPlanStatus = (user: AdminUser) => String(user.subscription?.status || "active");
-
-const getGoal = (user: AdminUser) =>
-  user.goals[0] ||
-  String(user.onboardingAnswers?.mainGoal || "") ||
-  "Not set";
-
-const getTargetLevel = (user: AdminUser) =>
-  String(
-    user.settings?.targetLevel ||
-      user.settings?.targetScore ||
-      user.raw.targetLevel ||
-      user.raw.targetScore ||
-      "Not set"
-  );
-
-const getActivityLabel = (record: AdminRecord) => {
-  if (record.kind === "studySessions") {
-    return `Study session: ${record.data.subject || "Study"}`;
-  }
-  if (record.kind === "progressEvents") {
-    return `Progress event: ${record.data.type || record.id}`;
-  }
-  if (record.kind === "analyticsEvents") {
-    return `Analytics: ${record.data.eventType || "event"}`;
-  }
-  if (record.kind === "tutorMessages") {
-    return `Tutor message: ${record.data.role || "message"}`;
-  }
-  if (record.kind === "notebookMessages") {
-    return `Notebook message: ${record.data.role || "message"}`;
-  }
-  if (record.kind === "notebookNotes") {
-    return `Notebook note: ${record.data.title || "Untitled"}`;
-  }
-  if (record.kind === "decks") {
-    return `Deck: ${record.data.title || "Untitled deck"}`;
-  }
-  return record.kind;
-};
-
-const extractWeakTopics = (user: AdminUser, progressEvents: AdminRecord[]) => {
-  const topics = new Set<string>();
-  const addValue = (value: unknown) => {
-    if (!value) return;
-    if (typeof value === "string") {
-      value
-        .split(",")
-        .map((item) => item.trim())
-        .filter(Boolean)
-        .forEach((item) => topics.add(item));
-      return;
-    }
-    if (Array.isArray(value)) {
-      value.forEach(addValue);
-      return;
-    }
-    if (typeof value === "object") {
-      const record = value as Record<string, unknown>;
-      addValue(record.weakTopics);
-      addValue(record.weaknessTag);
-      addValue(record.weakArea);
-      addValue(record.weakAreas);
-      addValue(record.weaknesses);
-      addValue(record.tag);
-      addValue(record.section);
-    }
-  };
-
-  addValue(user.onboardingAnswers?.struggle);
-  addValue(user.settings?.weakTopics);
-  progressEvents.forEach((event) => addValue(event.data));
-  return Array.from(topics).slice(0, 10);
-};
-
-const EmptyState = ({ message }: { message: string }) => (
-  <div className="admin-soft-surface rounded-[1.35rem] border border-dashed p-6 text-sm text-[var(--admin-muted)]">
-    {message}
-  </div>
-);
-
-type MetricTone = "indigo" | "cyan" | "green" | "amber" | "rose";
-
-const metricToneClasses: Record<MetricTone, { icon: string; surface: string }> = {
-  indigo: { icon: "text-indigo-600", surface: "bg-indigo-50 dark:bg-indigo-400/10" },
-  cyan: { icon: "text-cyan-600", surface: "bg-cyan-50 dark:bg-cyan-400/10" },
-  green: { icon: "text-emerald-600", surface: "bg-emerald-50 dark:bg-emerald-400/10" },
-  amber: { icon: "text-amber-600", surface: "bg-amber-50 dark:bg-amber-400/10" },
-  rose: { icon: "text-rose-600", surface: "bg-rose-50 dark:bg-rose-400/10" },
-};
-
-const MetricCard = ({
-  label,
-  value,
-  detail,
-  icon: Icon,
-  accent,
-  bg,
-  tone = "cyan",
-  trend,
-  className,
-  valueClassName,
-}: {
-  label: string;
-  value: string;
-  detail?: string;
-  icon: React.ElementType;
-  accent?: string;
-  bg?: string;
-  tone?: MetricTone;
-  trend?: string;
-  className?: string;
-  valueClassName?: string;
-}) => (
-  <div className={cn("admin-metric-card rounded-[1.45rem] border p-5", className)}>
-    <div className="flex items-start justify-between gap-4">
-      <div className="min-w-0">
-        <p className="text-[10px] font-extrabold uppercase tracking-[0.2em] text-[var(--admin-muted)]">{label}</p>
-        <div className="mt-3 flex flex-wrap items-end gap-2">
-          <p className={cn("font-display text-3xl font-bold tracking-[-0.04em] text-[var(--admin-heading)]", valueClassName)}>{value}</p>
-          {trend && (
-            <span className="mb-1 inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-1 text-[10px] font-extrabold text-emerald-700 dark:bg-emerald-400/10 dark:text-emerald-300">
-              <ArrowUpRight size={11} />
-              {trend}
-            </span>
-          )}
-        </div>
-        {detail && <p className="mt-2 text-xs leading-5 text-[var(--admin-muted)]">{detail}</p>}
-      </div>
-      <div className={cn("rounded-2xl p-3", bg || metricToneClasses[tone].surface)}>
-        <Icon size={21} strokeWidth={2.1} className={accent || metricToneClasses[tone].icon} />
-      </div>
-    </div>
-  </div>
-);
-
-const StatusBadge = ({
-  children,
-  tone = "neutral",
-}: {
-  children: React.ReactNode;
-  tone?: "good" | "warn" | "danger" | "info" | "neutral";
-}) => (
-  <span
-    className={cn(
-      "inline-flex items-center rounded-full border px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-[0.12em]",
-      tone === "good"
-        ? "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-400/20 dark:bg-emerald-400/10 dark:text-emerald-300"
-        : tone === "warn"
-          ? "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-400/20 dark:bg-amber-400/10 dark:text-amber-200"
-          : tone === "danger"
-            ? "border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-400/20 dark:bg-rose-400/10 dark:text-rose-200"
-            : tone === "info"
-              ? "border-indigo-200 bg-indigo-50 text-indigo-700 dark:border-indigo-400/20 dark:bg-indigo-400/10 dark:text-indigo-200"
-              : "border-[var(--admin-border)] bg-[var(--admin-soft)] text-[var(--admin-body)]"
-    )}
-  >
-    {children}
-  </span>
-);
-
-const Section = ({
-  title,
-  eyebrow,
-  children,
-  action,
-  className,
-}: {
-  title: string;
-  eyebrow?: string;
-  children: React.ReactNode;
-  action?: React.ReactNode;
-  className?: string;
-}) => (
-  <section className={cn("admin-panel rounded-[1.75rem] border p-5 sm:p-6", className)}>
-    <div className="mb-5 flex items-start justify-between gap-4">
-      <div>
-        {eyebrow && <p className="text-[10px] font-extrabold uppercase tracking-[0.24em] text-indigo-600 dark:text-indigo-300">{eyebrow}</p>}
-        <h3 className="mt-2 font-display text-2xl font-bold tracking-[-0.035em] text-[var(--admin-heading)]">{title}</h3>
-      </div>
-      {action}
-    </div>
-    {children}
-  </section>
-);
-
-const AdminChartTooltip = ({ active, payload, label }: any) => {
-  if (!active || !payload?.length) return null;
-
-  return (
-    <div className="rounded-2xl border border-slate-200 bg-white/95 px-3 py-2.5 shadow-xl backdrop-blur dark:border-slate-700 dark:bg-slate-900/95">
-      <p className="text-[10px] font-extrabold uppercase tracking-[0.16em] text-slate-500">{label}</p>
-      <div className="mt-2 space-y-1">
-        {payload.map((item: any) => (
-          <div key={item.dataKey} className="flex items-center justify-between gap-5 text-xs">
-            <span className="flex items-center gap-2 text-slate-500 dark:text-slate-300">
-              <span className="h-2 w-2 rounded-full" style={{ backgroundColor: item.color }} />
-              {item.name}
-            </span>
-            <span className="font-bold text-slate-900 dark:text-white">{item.value}</span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-};
+import {
+  type RangeKey,
+  type PlanFilter,
+  type ActivityFilter,
+  type DataKey,
+  type AdminUser,
+  type AdminRecord,
+  type TrustedProgress,
+  type UserRow,
+  DATA_KEYS,
+  RANGE_OPTIONS,
+  MAX_ADMIN_DOCS,
+  ONLINE_WINDOW_MS,
+  makeLoadState,
+  toDate,
+  pickDate,
+  startOfToday,
+  addDays,
+  getRangeStart,
+  isSameDay,
+  isWithinRange,
+  formatDateTime,
+  formatDateOnly,
+  formatStudyTime,
+  formatCompactNumber,
+  getLocalDateKey,
+  percent,
+  getRecordUserId,
+  mapCollectionGroupDocs,
+  getPlan,
+  getPlanStatus,
+  getGoal,
+  getTargetLevel,
+  getActivityLabel,
+  extractWeakTopics,
+} from "@/src/features/admin/adminModel";
+import { EmptyState, MetricCard, StatusBadge, Section, AdminChartTooltip } from "@/src/features/admin/AdminUi";
 
 export const Admin = ({ setActiveTab }: { setActiveTab?: (t: string) => void }) => {
   const { profile, isAdmin } = useAuth();

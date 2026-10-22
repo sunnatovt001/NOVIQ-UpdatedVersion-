@@ -8,7 +8,7 @@ const source = fs.readFileSync("src/contexts/AuthContext.tsx", "utf8");
 const tree = ts.createSourceFile("AuthContext.tsx", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
 let callback;
 function visit(node) {
-  if (ts.isCallExpression(node) && node.expression.getText(tree) === "runTransaction") {
+  if (!callback && ts.isCallExpression(node) && node.expression.getText(tree) === "runTransaction") {
     callback = node.arguments[1].getText(tree);
   }
   ts.forEachChild(node, visit);

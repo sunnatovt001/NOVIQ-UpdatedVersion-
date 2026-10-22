@@ -572,16 +572,17 @@ test('AI callable errors provide auth, quota, timeout and malformed-response gui
   assert.match(gemini.getFriendlyAiError({ message: 'AI_EMPTY_RESPONSE' }), /empty response/);
 });
 
-test('Tutor context preserves language, student evidence and uploaded material names', () => {
+test('Tutor context treats interface language as fallback and preserves evidence and material names', () => {
   const { buildTutorRequestContext } = load('src/features/tutor/tutorRequest.ts');
   for (const [language, expected] of [['en-US', 'English'], ['uz-UZ', 'Uzbek'], ['ru-RU', 'Russian']]) {
     const context = buildTutorRequestContext(language, 'Goal: IELTS 7; weak area: listening', [{ name: 'chapter.pdf' }, { name: 'notes.docx' }]);
-    assert.ok(context.startsWith(`Answer naturally in ${expected}.`));
+    assert.ok(context.startsWith(`Interface language: ${language}.`));
+    assert.ok(context.includes("Match the language of the latest student question"));
     assert.ok(context.includes('Goal: IELTS 7; weak area: listening'));
     assert.ok(context.includes('chapter.pdf, notes.docx'));
     assert.ok(context.includes('Use these materials first'));
   }
-  assert.equal(buildTutorRequestContext('en-US', '', []), 'Answer naturally in English.');
+  assert.ok(buildTutorRequestContext('en-US', '', []).includes('not the interface or uploaded materials'));
 });
 
 test('shared AI errors classify failures and localize without exposing diagnostics', () => {

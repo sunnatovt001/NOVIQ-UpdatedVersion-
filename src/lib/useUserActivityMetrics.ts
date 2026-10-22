@@ -11,6 +11,9 @@ import {
   where,
   or,
   limit,
+  orderBy,
+  documentId,
+  startAfter,
   type Query,
   type DocumentSnapshot,
   type QuerySnapshot,
@@ -305,9 +308,19 @@ export const useUserActivityMetrics = (
     // Legacy dates/statuses require record-level validation. Never silently
     // report totals from a truncated result or fan out unlimited deck reads.
     const readRecords = async (target: Query) => {
-      const snapshot = await getDocsFromServer(query(target, limit(2001)));
-      if (snapshot.docs.length > 2000) throw new Error("Statistics record safety limit exceeded; aggregation migration required");
-      return snapshot;
+      const docs: QuerySnapshot['docs'] = [];
+      const deadline = Date.now() + 15000;
+      let cursor: QuerySnapshot['docs'][number] | undefined;
+      do {
+        if (!active || Date.now() >= deadline) throw new Error('Statistics pagination timed out');
+        const page = await getDocsFromServer(query(target, orderBy(documentId()), ...(cursor ? [startAfter(cursor)] : []), limit(500)));
+        if (page.docs.length > 500) throw new Error('Invalid statistics page');
+        docs.push(...page.docs);
+        if (page.docs.length < 500) return { docs };
+        const last = page.docs.at(-1)!;
+        if (cursor?.id === last.id) throw new Error('Statistics pagination did not advance');
+        cursor = last;
+      } while (true);
     };
     const scoped = (target: Query, field = "createdAt") =>
       dayScope
@@ -362,7 +375,6 @@ export const useUserActivityMetrics = (
           settled("statistics");
           return;
         }
-        if (deckIds.length > 100) throw new Error("Statistics deck safety limit exceeded; aggregation migration required");
         if (dayScope?.isFuture) {
           update({ ...EMPTY_METRICS });
           settled("statistics");

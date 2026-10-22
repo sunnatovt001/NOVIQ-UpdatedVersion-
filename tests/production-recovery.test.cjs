@@ -10,7 +10,7 @@ function metricsHarness(server = false) {
   const react = { useState(initial) { if(typeof initial === 'number' || typeof initial === 'string') return [initial,()=>{}]; metrics=initial; return [metrics, update=>{metrics=typeof update==='function'?update(metrics):update;}]; }, useCallback: fn=>fn, useMemo: fn=>fn(), useEffect: fn=>{effect=fn;} };
   const firestore = {
     collection: (...args)=>({path:args.join('/')}), doc:(...args)=>({path:args.join('/')}),
-    query: target=>target, where:()=>{}, or:()=>{}, sum:()=>{}, limit:()=>{},
+    query: (target,...clauses)=>({...target,clauses}), where:()=>{}, or:()=>{}, sum:()=>{}, limit:n=>({limit:n}), orderBy:()=>{}, documentId:()=>{}, startAfter:cursor=>({cursor}),
     onSnapshot(target,options,next,error) { const item={target,next,error,stopped:false}; listeners.push(item); return ()=>{item.stopped=true;}; },
     getCountFromServer:async()=>({data:()=>({count:0})}), getDocsFromServer:async()=>({docs:[]}),getAggregateFromServer:async()=>({data:()=>({xp:0})}),
   };
@@ -45,7 +45,7 @@ test('verified focus history uses server sums without downloading all session re
   for(const l of h.listeners) l.next(h.snap()); await flush();
   assert.equal(h.state.error,null); assert.equal(h.state.focusMinutes,3); assert.equal(records,0); h.cleanup();
 });
-test('large legacy collections fail explicitly instead of publishing truncated totals',async()=>{
+test('invalid oversized pages fail explicitly instead of publishing truncated totals',async()=>{
   const h=metricsHarness();
   let counts=0;
   h.firestore.getCountFromServer=async()=>({data:()=>({count:++counts===1?2001:0})});
@@ -76,4 +76,18 @@ test('aggregation unavailable clears loading and a subsequent success cannot hid
   h.firestore.getCountFromServer=async()=>({data:()=>({count:0})});
   h.listeners.find(l=>/\/(decks|trusted\/metrics)$/.test(l.target.path)).next(h.snap()); await flush(); assert.match(h.state.error,/temporarily unavailable/);
   h.listeners[2].next(h.snap()); assert.equal(h.state.error,null); h.cleanup();
+});
+
+test('legacy Firebase analytics reads every page beyond 2000 records without truncation',async()=>{
+ const h=metricsHarness();let counts=0,reads=0;
+ const records=Array.from({length:2501},(_,i)=>({id:String(i).padStart(5,'0'),data:()=>({duration:60,category:'focus'})}));
+ h.firestore.getCountFromServer=async()=>({data:()=>({count:++counts===1?2501:0})});
+ h.firestore.getDocsFromServer=async query=>{
+   reads++;const cursor=query.clauses.find(c=>c?.cursor)?.cursor;
+   const start=cursor?records.findIndex(r=>r.id===cursor.id)+1:0;
+   assert.equal(query.clauses.find(c=>c?.limit)?.limit,500);
+   return {docs:records.slice(start,start+500)};
+ };
+ for(const l of h.listeners)l.next(h.snap());await flush();
+ assert.equal(h.state.error,null);assert.equal(h.state.focusMinutes,2501);assert.equal(reads,6);h.cleanup();
 });

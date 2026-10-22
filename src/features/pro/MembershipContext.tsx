@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { useAuth } from '@/src/contexts/AuthContext';
+import { auth } from '@/src/lib/firebaseAuth';
 import { isReadOnlyAudit, useLocalMembership } from '@/src/lib/auditMode';
 import config from '../../../functions/pro-config.json';
 import type { SubscriptionState } from '@/src/types';
@@ -24,7 +25,6 @@ export function displayAccess(s: SubscriptionState | undefined, now = Date.now()
 export async function membershipCall<T = Access>(name: string, data: unknown = {}): Promise<T> {
   if (isReadOnlyAudit) throw new Error('Read-only audit');
   if (useLocalMembership && name === 'getMembershipStatus') {
-    const { auth } = await import('@/src/lib/firebaseAuth');
     const user = auth.currentUser;
     if (!user) throw Object.assign(new Error('Sign in required'),{code:'functions/unauthenticated'});
     const response = await fetch('/__local-membership',{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${await user.getIdToken()}`},body:'{}',signal:AbortSignal.timeout(25000)});

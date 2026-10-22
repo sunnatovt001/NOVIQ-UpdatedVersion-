@@ -1,3 +1,4 @@
+import { getProfileAvatar } from '@/src/lib/profileAvatar';
 import {useProCopy} from '@/src/features/pro/proCopy';
 import {useMembership} from '@/src/features/pro/MembershipContext';
 import {MembershipBadge} from '@/src/features/pro/ProMembership';
@@ -773,7 +774,7 @@ export const Layout: React.FC<{
                  onClick={() => setActiveTab('profile')}
                  className="group relative h-14 w-14 overflow-hidden rounded-[1.25rem] border border-[#E5E7EB] bg-white transition-colors hover:border-[var(--noviq-accent)]"
                >
-                 <img src={profile?.photoURL || "https://api.dicebear.com/7.x/avataaars/svg?seed=Felix&hairColor=2c1b18&skinColor=f8d25c"} alt="" className="w-full h-full object-cover" />
+                 <img src={getProfileAvatar(profile)} alt="" className="w-full h-full object-cover" />
                  <div className="absolute inset-0 bg-[var(--noviq-accent)]/0 transition-colors group-hover:bg-[var(--noviq-accent)]/10" />
                </button>
             </div>

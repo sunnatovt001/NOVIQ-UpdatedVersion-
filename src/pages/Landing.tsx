@@ -43,7 +43,10 @@ export const Landing = () => {
     };
   }, [menuOpen]);
 
-  const openAuth = (mode: AuthMode) => { setMenuOpen(false); setAuthMode(mode); };
+  const openAuth = (mode: AuthMode) => {
+    setMenuOpen(false);
+    setAuthMode(mode);
+  };
   const openFeature = (route: typeof landingFeatureRoutes[number]) => {
     window.location.hash = `/${route}`;
     openAuth("signup");

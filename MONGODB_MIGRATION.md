@@ -1,3 +1,8 @@
+> Current operating decision (2026-10-22): Firebase remains the production backend.
+> MongoDB stays as migration staging for a later cutover. It is not live failover,
+> and new Firebase writes are not automatically copied into the old MongoDB archive.
+> Historical checkpoints below describe preparation, not a completed migration.
+
 # Firebase → MongoDB Atlas migration
 
 Approved 2026-10-12: Atlas, preserve all existing accounts/data, postpone beta.

@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { withDeadline } from "@/src/lib/asyncRequest";
+import { getProfileAvatar } from '@/src/lib/profileAvatar';
 import { isReadOnlyAudit } from "@/src/lib/auditMode";
 import { onAuthStateChanged, User } from "firebase/auth";
 import { auth, authPersistenceReady } from "@/src/lib/firebaseAuth";
@@ -8,6 +9,7 @@ import { getAccountErrorCode } from "@/src/features/auth/accountErrors";
 import { loadLocalData, removeLocalData, saveLocalData } from "@/src/lib/localStore";
 import { calculateLevel, calculateLevelName, createInitialXpState, getCurrentStreak } from "@/src/lib/progressMath";
 import { getDefaultSubscription } from "@/src/lib/subscription";
+import { hasCompletedOnboarding, legacyOnboardingProfilePatch, onboardingProfilePatch, validOnboardingAnswers } from '@/src/features/onboarding/onboardingState';
 import { getQueuedOperation, useOfflineSyncQueue, writeDocWithQueue } from "@/src/lib/offlineSync";
 
 interface AuthContextType {
@@ -31,6 +33,8 @@ const createInitialProfile = (firebaseUser: User): UserProfile => ({
   createdAt: new Date().toISOString(),
   isAdmin: false,
   onboarded: false,
+  // Missing onboardingCompleted also means incomplete. Keep bootstrap compatible
+  // with deployed legacy rules until the new onboarding rules are released.
   goals: [],
   currentLevel: "Beginner",
   dailyTargetMinutes: 30,
@@ -318,6 +322,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const signOut = () => auth.signOut();
 
+  // Migrate missing/legacy defaults once and keep the choice in the profile.
+  // Custom uploads and provider photos are preserved by the resolver.
+  useEffect(() => {
+    if (!profile || !user || isReadOnlyAudit) return;
+    const photoURL = getProfileAvatar(profile);
+    if (photoURL === profile.photoURL) return;
+    updateLocalProfile({ photoURL });
+    void writeDocWithQueue({ userId: user.uid, path: ['users', user.uid], kind: 'update', data: { photoURL } })
+      .catch(error => console.warn('Default avatar sync pending', error));
+  }, [user?.uid, profile?.photoURL, profile?.subscription]);
+
   const updateLocalProfile = (patch: Partial<UserProfile>) => {
     if (!user) return;
 
@@ -327,20 +342,37 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const completeOnboarding = async (answers: { mainGoal: string; userType: string; struggle: string }) => {
-    if (!user) return;
-
-    const onboardingPatch = {
-      onboarded: true,
-      onboardingAnswers: answers,
-      goals: [answers.mainGoal],
-      currentLevel: "Beginner",
-      dailyTargetMinutes: 30,
-    };
-    updateLocalProfile(onboardingPatch);
-
-    const status = await writeDocWithQueue({ userId: user.uid, path: ["users", user.uid], kind: "update", data: onboardingPatch });
-    if (status === "synced") clearLocalProfilePatch(user.uid);
-
+    if (!user || auth.currentUser?.uid !== user.uid) throw new Error('Sign in to finish setup.');
+    if (isReadOnlyAudit) throw new Error('Setup cannot be saved in read-only mode.');
+    if (!validOnboardingAnswers(answers)) throw new Error('Complete every setup question.');
+    const uid = user.uid;
+    const { doc, runTransaction, serverTimestamp } = await import('firebase/firestore');
+    const { db } = await import('@/src/lib/firebase');
+    const ref = doc(db, 'users', uid);
+    // A transaction needs the server. Offline/failed writes must never unlock
+    // the dashboard or be mistaken for completed onboarding in local storage.
+    const persist = (legacy = false) => runTransaction(db, async transaction => {
+      if (auth.currentUser?.uid !== uid) throw new Error('Account changed during setup.');
+      const snapshot = await transaction.get(ref);
+      if (!snapshot.exists()) throw new Error('Profile is unavailable. Please retry.');
+      const current = snapshot.data() as UserProfile;
+      if (hasCompletedOnboarding(current)) return current;
+      // Older deployed rules accept the original profile fields only. Do not
+      // override an explicit completion flag with the legacy schema.
+      if (legacy && current.onboardingCompleted !== undefined) throw new Error('Profile setup rules need updating.');
+      const patch = legacy ? legacyOnboardingProfilePatch(answers) : onboardingProfilePatch(answers, serverTimestamp());
+      transaction.update(ref, patch);
+      return { ...current, ...patch } as UserProfile;
+    });
+    let saved: UserProfile;
+    try { saved = await persist(); }
+    catch (error) {
+      if ((error as { code?: string })?.code !== 'permission-denied') throw error;
+      saved = await persist(true);
+    }
+    if (auth.currentUser?.uid !== uid) return;
+    clearLocalProfilePatch(uid);
+    setProfile(current => current?.uid === uid ? { ...current, ...saved } : current);
   };
 
   return (

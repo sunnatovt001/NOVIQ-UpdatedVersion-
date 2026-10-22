@@ -28,6 +28,9 @@ service cloud.firestore {
         "photoURL",
         "onboarded",
         "onboardingAnswers",
+        "onboardingCompleted",
+        "onboarding",
+        "onboardingCompletedAt",
         "goals",
         "currentLevel",
         "dailyTargetMinutes",
@@ -46,6 +49,9 @@ service cloud.firestore {
         "isAdmin",
         "onboarded",
         "onboardingAnswers",
+        "onboardingCompleted",
+        "onboarding",
+        "onboardingCompletedAt",
         "goals",
         "currentLevel",
         "dailyTargetMinutes",
@@ -77,6 +83,20 @@ service cloud.firestore {
         || request.resource.data.usage.keys().hasOnly([]);
     }
 
+    function validOnboardingState() {
+      return (!("onboardingCompleted" in request.resource.data) || request.resource.data.onboardingCompleted is bool)
+        && (request.resource.data.get("onboardingCompleted", false) != true || (
+          request.resource.data.onboarding is map
+          && request.resource.data.onboarding.keys().hasAll(["goal", "profile", "challenge"])
+          && request.resource.data.onboarding.keys().hasOnly(["goal", "profile", "challenge"])
+          && request.resource.data.onboarding.goal in ["Prepare for IELTS", "Prepare for SAT", "Prepare for HSK", "Reach a CEFR level", "Improve school grades", "Prepare for university entrance", "Stay consistent with exam prep"]
+          && request.resource.data.onboarding.profile in ["High school student", "University student", "IELTS learner", "SAT learner", "HSK learner", "CEFR learner", "University entrance candidate"]
+          && request.resource.data.onboarding.challenge in ["Staying consistent", "Procrastination", "Distractions", "Organizing study materials", "Time management", "Remembering information", "Exam anxiety"]
+          && request.resource.data.onboardingCompletedAt is timestamp
+          && request.resource.data.onboardingCompletedAt <= request.time
+        ));
+    }
+
     function isSafeProfileCreate(userId) {
       return isOwner(userId)
         && request.resource.data.keys().hasOnly(clientProfileCreateKeys())
@@ -90,13 +110,16 @@ service cloud.firestore {
         && (!("xpAwarded" in request.resource.data) || request.resource.data.xpAwarded.keys().hasOnly([]))
         && (!("totalStudySeconds" in request.resource.data) || request.resource.data.totalStudySeconds == 0)
         && isDefaultClientSubscription()
-        && isEmptyClientUsage();
+        && isEmptyClientUsage()
+        && validOnboardingState();
     }
 
     function isSafeProfileUpdate() {
       // The diff includes additions and removals, so protected fields remain
       // immutable even on legacy profiles missing isAdmin/subscription/usage.
-      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(clientProfileMutableKeys());
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(clientProfileMutableKeys())
+        && validOnboardingState()
+        && (resource.data.get("onboardingCompleted", false) != true || request.resource.data.get("onboardingCompleted", false) == true);
     }
 
     function isPendingSubscriptionRequest() {
