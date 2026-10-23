@@ -5,6 +5,7 @@ import { dateKey, localInstant, type SmartPlan } from './smartPlannerModel';
 import type { StudyBlock } from './smartSchedule';
 import type { SmartCopy } from './smartPlannerCopy';
 type Props = {
+    referenceAppearance?: boolean;
     plan: SmartPlan;
     days: string[];
     selected: string;
@@ -16,7 +17,7 @@ type Props = {
     onDrop: (s: StudyBlock, start: number, duration: number) => void;
     onComplete: (id: string) => void;
 };
-export function PlannerCalendar({ plan, days, selected, now, c, locale, onDay, onInspect, onDrop, onComplete }: Props) {
+export function PlannerCalendar({ referenceAppearance = false, plan, days, selected, now, c, locale, onDay, onInspect, onDrop, onComplete }: Props) {
     const grid = useRef<HTMLDivElement>(null), [drag, setDrag] = useState<{
         key: string;
         resize: boolean;
@@ -27,7 +28,7 @@ export function PlannerCalendar({ plan, days, selected, now, c, locale, onDay, o
     const localeName = locale === 'uz' ? 'uz-UZ' : locale === 'ru' ? 'ru-RU' : 'en-GB';
     const time = (instant: number) => new Intl.DateTimeFormat(localeName, { timeZone: plan.timezone, hour: '2-digit', minute: '2-digit' }).format(instant);
     const task = (id: string) => plan.tasks.find(t => t.id === id), today = dateKey(now, plan.timezone);
-    const stamp = (day: string) => new Intl.DateTimeFormat(localeName, { timeZone: plan.timezone, weekday: 'short', day: 'numeric' }).format(localInstant(day, '12:00', plan.timezone));
+    const stamp = (day: string) => { const parts = new Intl.DateTimeFormat(localeName, { timeZone: plan.timezone, weekday: 'short', day: '2-digit' }).formatToParts(localInstant(day, '12:00', plan.timezone)); return `${parts.find(p => p.type === 'weekday')?.value} ${parts.find(p => p.type === 'day')?.value}`; };
     useEffect(() => { if (!grid.current)
         return; const upcoming = plan.sessions.filter(s => s.end > now && days.includes(dateKey(s.start, plan.timezone))).sort((a, b) => a.start - b.start)[0]; const minute = upcoming ? localMinutes(upcoming.start, plan.timezone) : 480; grid.current.scrollTop = Math.max(0, minute - 120); }, [days[0], plan.mode]);
     const beginDrag = (e: React.DragEvent, s: StudyBlock, resize = false) => { if (s.locked || task(s.taskId)?.completed) {
@@ -50,17 +51,19 @@ export function PlannerCalendar({ plan, days, selected, now, c, locale, onDay, o
     } };
     const timeline = plan.mode !== 'list';
     return <>
-    {timeline && <div className="sp-timetable" aria-label={c.calendar}><div className="sp-calendar-head" style={{ gridTemplateColumns: `52px repeat(${days.length},minmax(0,1fr))` }}><span className="sp-zone-label">{c.timezone}</span>{days.map(day => <button key={day} className={day === today ? 'sp-is-today' : ''} aria-pressed={day === selected} onClick={() => onDay(day)}>{stamp(day)}{day === today && <small>{c.todayShort}</small>}</button>)}</div>
-      <div className="sp-time-scroll" ref={grid}><div className="sp-time-body"><div className="sp-time-ruler">{Array.from({ length: 24 }, (_, h) => <span key={h} style={{ top: `${h * 60}px` }}>{String(h).padStart(2, '0')}:00</span>)}</div>
+    {timeline && <div className={`sp-timetable ${days.length === 1 ? 'sp-single-day' : ''}`} aria-label={c.calendar}><div className="sp-calendar-head" style={{ gridTemplateColumns: `52px repeat(${days.length},minmax(0,1fr))` }}><span className="sp-zone-label" title={plan.timezone}>{referenceAppearance ? '' : c.timezone}</span>{days.map(day => <button key={day} className={day === today ? 'sp-is-today' : ''} aria-pressed={day === selected} onClick={() => onDay(day)}>{stamp(day)}{!referenceAppearance && day === today && <small>{c.todayShort}</small>}</button>)}</div>
+      {referenceAppearance && <div className="sp-all-day" style={{ gridTemplateColumns: `52px repeat(${days.length},minmax(0,1fr))` }}><span title={c.deadlines}>{locale === 'uz' ? 'Kun bo‘yi' : locale === 'ru' ? 'Весь день' : 'All day'}</span>{days.map(day => <div key={day}>{plan.tasks.filter(t => t.deadline && dateKey(t.deadline, plan.timezone) === day && !t.completed).map(t => <button key={t.id} onClick={() => onInspect(t.id)}>{t.title}</button>)}</div>)}</div>}
+      <div className="sp-time-scroll" ref={grid}><div className="sp-time-body"><div className="sp-time-ruler">{Array.from({ length: 24 }, (_, h) => <span key={h} style={{ top: `${h * 60}px` }}>{referenceAppearance && locale === 'en' ? (h === 12 ? 'Noon' : `${h % 12 || 12} ${h < 12 ? 'am' : 'pm'}`) : `${String(h).padStart(2, '0')}:00`}</span>)}</div>
       <div className="sp-time-columns" style={{ gridTemplateColumns: `repeat(${days.length},minmax(0,1fr))` }}>{days.map(day => {
                 const range = calendarDay(plan, day);
                 const blocks = plan.sessions.filter(s => dateKey(s.start, plan.timezone) === day);
                 return <section key={day} className={`sp-time-day ${day === today ? 'sp-is-today' : ''}`} aria-label={stamp(day)} onDragOver={e => { if (!drag)
                     return; e.preventDefault(); setPreview({ day, minute: minuteAt(e) }); }} onDrop={e => drop(e, day)}>
+        {referenceAppearance && Array.from({ length: 24 }, (_, h) => <div className="sp-hour-line" style={{ top: h * 60 }} key={h} aria-hidden="true"/>)}
         {range.available.map((r, i) => <div className="sp-available-range" key={i} style={{ top: localMinutes(r.start, plan.timezone), height: (r.end - r.start) / 60000 }} aria-hidden="true"/>)}
         {range.commitments.map((r, i) => <div className="sp-fixed-event" key={i} style={{ top: localMinutes(r.start, plan.timezone), height: Math.max(22, (r.end - r.start) / 60000) }}><LockKeyhole size={12}/><strong>{r.label === 'Sleep' ? c.sleep : r.label}</strong><small>{time(r.start)}–{time(r.end)}</small></div>)}
         {blocks.map(s => { const t = task(s.taskId); if (!t)
-                    return null; const subject = plan.subjects.find(p => p.id === t.subjectId); const conflict = placementConflict(plan, s); return <article key={sessionKey(s)} className={`sp-timed-event ${t.completed ? 'sp-event-complete' : ''} ${s.locked ? 'sp-event-locked' : ''} ${conflict ? 'sp-event-conflict' : ''}`} style={{ top: localMinutes(s.start, plan.timezone), height: Math.max(42, (s.end - s.start) / 60000), '--subject-color': subjectColor(subject?.color) } as React.CSSProperties} draggable={!s.locked && !t.completed} onDragStart={e => beginDrag(e, s)} onDragEnd={() => { setDrag(null); setPreview(null); }}><button className="sp-event-body" title={`${t.title} · ${time(s.start)}–${time(s.end)}`} onClick={() => onInspect(t.id, s)} aria-label={`${t.title} · ${time(s.start)}–${time(s.end)}${s.locked ? ' · ' + c.locked : ''}`}><span>{time(s.start)}–{time(s.end)}{s.locked && <LockKeyhole size={11}/>}</span><strong>{t.title}</strong><small>{subject?.name}{t.completed ? ' · ' + c.done : conflict ? ' · ' + c.conflict : ''}</small></button>{!s.locked && !t.completed && t.flexibility !== 'fixed' && <button className="sp-resize-handle" aria-label={`${c.resize}: ${t.title}`} draggable onDragStart={e => { e.stopPropagation(); beginDrag(e, s, true); }} onClick={() => onInspect(t.id, s)}><MoveVertical size={13}/></button>}</article>; })}
+                    return null; const subject = plan.subjects.find(p => p.id === t.subjectId); const conflict = placementConflict(plan, s); return <article key={sessionKey(s)} className={`sp-timed-event ${t.completed ? 'sp-event-complete' : ''} ${s.locked ? 'sp-event-locked' : ''} ${conflict ? 'sp-event-conflict' : ''}`} style={{ top: localMinutes(s.start, plan.timezone), height: Math.max(42, (s.end - s.start) / 60000), '--subject-color': referenceAppearance ? ['#b482dc', '#78b2df', '#e9a97e', '#d2c351', '#74b99d'][Math.max(0, plan.subjects.findIndex(p => p.id === t.subjectId)) % 5] : subjectColor(subject?.color) } as React.CSSProperties} draggable={!s.locked && !t.completed} onDragStart={e => beginDrag(e, s)} onDragEnd={() => { setDrag(null); setPreview(null); }}><button className="sp-event-body" title={`${t.title} · ${time(s.start)}–${time(s.end)}`} onClick={() => onInspect(t.id, s)} aria-label={`${t.title} · ${time(s.start)}–${time(s.end)}${s.locked ? ' · ' + c.locked : ''}`}><span>{time(s.start)}–{time(s.end)}{s.locked && <LockKeyhole size={11}/>}</span><strong>{t.title}</strong><small>{subject?.name}{t.completed ? ' · ' + c.done : conflict ? ' · ' + c.conflict : ''}</small></button>{referenceAppearance && <button className="sp-event-check" role="checkbox" aria-checked={!!t.completed} aria-label={`${t.completed ? c.undo : c.done}: ${t.title}`} onClick={() => onComplete(t.id)}><Check size={12}/></button>}{!s.locked && !t.completed && t.flexibility !== 'fixed' && <button className="sp-resize-handle" aria-label={`${c.resize}: ${t.title}`} draggable onDragStart={e => { e.stopPropagation(); beginDrag(e, s, true); }} onClick={() => onInspect(t.id, s)}><MoveVertical size={13}/></button>}</article>; })}
         {day === today && <div className="sp-now-line" style={{ top: localMinutes(now, plan.timezone) }}><span>{time(now)}</span></div>}
         {preview?.day === day && <div className="sp-drag-preview" style={{ top: preview.minute }}>{String(Math.floor(preview.minute / 60)).padStart(2, '0')}:{String(preview.minute % 60).padStart(2, '0')}</div>}
       </section>;

@@ -5,7 +5,7 @@ import type { getOnboardingDesignCopy } from './onboardingConfig';
 import './onboarding.css';
 type Copy = ReturnType<typeof getOnboardingDesignCopy>;
 const features = [Target, ChartNoAxesColumnIncreasing, CalendarDays];
-const floatingAssets = [['robot', 'robot.png'], ['cap', 'graduation-cap.png'], ['book', 'book-icon.png'], ['chart', 'chart-icon.png'], ['orb', 'blue-orb.png'], ['planet', 'planet.png']];
+const backgroundPoster = '/onboarding/study-background-poster.webp';
 
 export function OnboardingHero({ copy }: { copy: Copy }) {
   return <section className="ob-hero" aria-labelledby="ob-title">
@@ -20,9 +20,7 @@ export function OnboardingHero({ copy }: { copy: Copy }) {
       })}</ul>
     </div>
     <div className="ob-illustration" aria-hidden="true">
-      <img className="ob-orbit" src="/onboarding/glowing-orbit.png" alt="" />
-      <img className="ob-student" src="/onboarding/student-main.png" alt="" fetchPriority="high" width="550" height="611" />
-      {floatingAssets.map(([name, src]) => <img key={name} className={`ob-float ob-float-${name}`} src={`/onboarding/${src}`} alt="" />)}
+      <img className="ob-video-still" src={backgroundPoster} alt="" width="3840" height="2160" />
     </div>
   </section>;
 }
@@ -49,11 +47,11 @@ export function OnboardingLayout({ children, copy }: { children: ReactNode; copy
   const showVideo = desktop && videoReady && !videoFailed;
   return <main className={`noviq-onboarding${showVideo ? ' ob-has-video' : ''}`}>
     <div className="ob-background" aria-hidden="true">
-      <img className="ob-liquid-scene" src="/onboarding/liquid-scene.png" alt="" fetchPriority="high" width="1536" height="1024" />
-      {desktop && !videoFailed && <div className="ob-video-plane">
-        <video ref={video} className="ob-background-video" src="/onboarding/study-background-loop-4k.mp4" width="3840" height="2160" muted loop playsInline autoPlay={!reduceMotion} preload="auto" tabIndex={-1} disablePictureInPicture onLoadedData={(event) => { event.currentTarget.playbackRate = 0.75; setVideoReady(true); }} onError={() => { setVideoFailed(true); setVideoReady(false); }} />
+      <div className="ob-video-plane">
+        <img className="ob-background-poster" src={backgroundPoster} alt="" loading="eager" fetchPriority="high" width="3840" height="2160" />
+        {desktop && !videoFailed && <video ref={video} className="ob-background-video" src="/onboarding/study-background-loop-4k.mp4" poster={backgroundPoster} width="3840" height="2160" muted loop playsInline autoPlay={!reduceMotion} preload="auto" tabIndex={-1} disablePictureInPicture onLoadedData={(event) => { event.currentTarget.playbackRate = 0.75; setVideoReady(true); }} onError={() => { setVideoFailed(true); setVideoReady(false); }} />}
         <div className="ob-video-copy-mask" />
-      </div>}
+      </div>
     </div>
     <div className="ob-composition"><OnboardingHero copy={copy} /><section className="ob-card" aria-label="NOVIQ onboarding">{children}</section></div>
   </main>;

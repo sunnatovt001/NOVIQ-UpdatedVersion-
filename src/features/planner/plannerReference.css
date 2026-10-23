@@ -1,0 +1,74 @@
+/* Reference calendar: compact todo rail, fine neutral grid, pastel sessions. */
+.smart-planner.sp-v21.sp-reference{--sp-card:#fff;--sp-bg:#fff;--sp-soft:#f7f7f7;--sp-text:#25272b;--sp-muted:#92969b;--sp-border:#ededee;--sp-accent:#c56885;background:var(--sp-card);border:1px solid var(--sp-border);border-radius:10px;overflow:hidden;padding:0;max-width:none}
+.sp-v21.sp-reference .sp-header{padding:15px 20px;margin:0;align-items:center;border-bottom:1px solid var(--sp-border)}
+.sp-v21.sp-reference .sp-header h1{font-size:18px;font-weight:600;letter-spacing:-.4px}
+.sp-v21.sp-reference .sp-header .sp-eyebrow,.sp-v21.sp-reference .sp-header p,.sp-v21.sp-reference .sp-day-brief{display:none}
+.sp-v21.sp-reference .sp-header-actions{gap:8px}
+.sp-v21.sp-reference .sp-button{border-radius:6px;box-shadow:none;font-size:12px;min-height:34px;padding:7px 12px}
+.sp-v21.sp-reference .sp-primary{background:#292b30;border-color:#292b30;color:white}
+.sp-v21.sp-reference .sp-save-strip{padding:6px 20px;margin:0;border:0;min-height:28px;font-size:10px}
+.sp-v21.sp-reference .sp-save-strip p,.sp-v21.sp-reference .sp-save-strip .sp-text{font-size:10px}
+.sp-v21.sp-reference .sp-calendar-workspace{display:grid;grid-template-columns:240px minmax(0,1fr);gap:0;align-items:stretch;border-top:1px solid var(--sp-border)}
+.sp-v21.sp-reference .sp-calendar-surface{border:0;border-radius:0;min-width:0}
+.sp-v21.sp-reference .sp-calendar-toolbar{padding:17px 20px 8px;min-height:60px;flex-direction:row;align-items:center;gap:12px}
+.sp-v21.sp-reference .sp-calendar-toolbar h2{font-size:18px;font-weight:600;letter-spacing:-.45px;text-transform:capitalize}
+.sp-v21.sp-reference .sp-week-number{font-weight:400;color:var(--sp-muted);font-size:14px;white-space:nowrap}
+.sp-v21.sp-reference .sp-single-day .sp-calendar-head,.sp-v21.sp-reference .sp-single-day .sp-time-scroll,.sp-v21.sp-reference .sp-single-day .sp-all-day{min-width:0}
+.sp-v21.sp-reference .sp-calendar-toolbar p{display:none}
+.sp-v21.sp-reference .sp-calendar-toolbar .sp-actions{width:auto;gap:6px}
+.sp-v21.sp-reference .sp-date-picker{width:122px;border:0;background:transparent;color:var(--sp-muted);font-size:11px}
+.sp-v21.sp-reference .sp-calendar-options{padding:3px 20px 8px}
+.sp-v21.sp-reference .sp-segmented{border:0;background:transparent;padding:0}
+.sp-v21.sp-reference .sp-segmented button{padding:4px 10px;min-height:25px;font-size:11px}
+.sp-v21.sp-reference .sp-segmented button[aria-pressed=true]{background:#f2f2f3;box-shadow:none;color:var(--sp-text)}
+.sp-v21.sp-reference .sp-calendar-head{border-top:0;border-bottom:1px solid var(--sp-border)}
+.sp-v21.sp-reference .sp-calendar-head>button{min-height:56px;font-size:12px;font-weight:600;border:0;position:relative;white-space:nowrap;box-shadow:none;background:transparent}
+.sp-v21.sp-reference .sp-calendar-head>button.sp-is-today{color:var(--sp-accent)}
+.sp-v21.sp-reference .sp-calendar-head>button.sp-is-today:before{content:'';position:absolute;top:7px;width:16px;border-top:2px solid var(--sp-accent)}
+.sp-v21.sp-reference .sp-all-day{display:grid;min-height:27px;border-bottom:1px solid var(--sp-border);align-items:stretch}
+.sp-v21.sp-reference .sp-all-day>span{font-size:9px;color:var(--sp-muted);padding:7px 2px;text-align:center;overflow-wrap:anywhere}
+.sp-v21.sp-reference .sp-all-day>div{border-left:1px solid var(--sp-border);padding:2px;min-width:0}
+.sp-v21.sp-reference .sp-all-day button{display:block;width:100%;text-align:left;font-size:10px;background:#e5f0fa;border-radius:4px;padding:3px 5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sp-v21.sp-reference .sp-time-scroll{max-height:calc(100dvh - 270px);min-height:420px;scrollbar-width:thin;scrollbar-color:#e4e4e7 transparent}
+.sp-v21.sp-reference .sp-time-ruler span{font-size:10px;color:#96999d;left:auto;right:9px}
+.sp-v21.sp-reference .sp-time-day{background:none;border-color:var(--sp-border)}
+.sp-v21.sp-reference .sp-time-day.sp-is-today{background:transparent}
+.sp-v21.sp-reference .sp-hour-line{position:absolute;left:0;right:0;border-top:1px solid var(--sp-border);pointer-events:none}
+.sp-v21.sp-reference .sp-available-range{background:transparent}
+.sp-v21.sp-reference .sp-fixed-event{background:#f3f3f4;border:0;color:#a0a0a7;border-radius:5px;left:3px;right:3px}
+.sp-v21.sp-reference .sp-timed-event{left:3px;right:3px;background:color-mix(in srgb,var(--subject-color) 30%,var(--sp-card));border:0;border-radius:6px;box-shadow:none}
+.sp-v21.sp-reference .sp-event-body{padding:7px 6px;gap:4px;cursor:pointer}
+.sp-v21.sp-reference .sp-event-body>strong{order:-1;font-size:12px;font-weight:500;line-height:1.35;padding-right:10px}
+.sp-v21.sp-reference .sp-event-body>span{font-size:9px;color:color-mix(in srgb,var(--subject-color) 65%,#62616d);text-transform:uppercase}
+.sp-v21.sp-reference .sp-event-body>small{display:none}
+.sp-v21.sp-reference .sp-event-check{position:absolute;right:3px;top:4px;width:17px;height:17px;border:1px solid color-mix(in srgb,var(--subject-color) 65%,white);border-radius:4px;background:#ffffff8a;display:grid;place-items:center;opacity:0;color:#685a77}
+.sp-v21.sp-reference .sp-timed-event:hover .sp-event-check,.sp-v21.sp-reference .sp-event-check:focus-visible,.sp-v21.sp-reference .sp-event-check[aria-checked=true]{opacity:1}
+.sp-v21.sp-reference .sp-now-line{border-color:#c86a8c;opacity:.8}
+.sp-v21.sp-reference .sp-now-line span{background:#c86a8c}
+.sp-v21.sp-reference .sp-context{grid-column:1/-1;position:static;border:0;border-top:1px solid var(--sp-border);border-radius:0;max-height:none}
+.sp-v21.sp-reference .sp-links{padding:12px 20px;font-size:10px;gap:18px;border-top:1px solid var(--sp-border)}
+.sp-v21.sp-reference .sp-task-rail{border-right:1px solid var(--sp-border);background:var(--sp-card);display:flex;flex-direction:column;min-width:0}
+.sp-v21.sp-reference .sp-task-rail>header{display:flex;align-items:center;justify-content:space-between;padding:17px 18px;border-bottom:1px solid var(--sp-border);min-height:60px}
+.sp-v21.sp-reference .sp-task-rail h2{font-size:15px;font-weight:600}
+.sp-v21.sp-reference .sp-rail-groups{padding:15px 18px;flex:1;overflow:auto;max-height:calc(100dvh - 340px)}
+.sp-v21.sp-reference .sp-task-group{margin:0 0 20px}
+.sp-v21.sp-reference .sp-task-group summary{display:flex;align-items:center;gap:7px;list-style:none;cursor:pointer;font-size:12px;font-weight:600;padding:5px 0 8px;color:color-mix(in srgb,var(--subject-color) 45%,var(--sp-text))}
+.sp-v21.sp-reference .sp-task-group summary::-webkit-details-marker{display:none}
+.sp-v21.sp-reference .sp-task-group:not([open]) summary svg{transform:rotate(-90deg)}
+.sp-v21.sp-reference .sp-task-group summary small{margin-left:auto;font-size:10px;font-weight:400;color:var(--sp-muted)}
+.sp-v21.sp-reference .sp-rail-task{display:flex;align-items:flex-start;gap:8px;padding:5px 0}
+.sp-v21.sp-reference .sp-task-check{width:14px;height:14px;border:1px solid #bdc5cb;border-radius:3px;flex-shrink:0;margin-top:2px;display:grid;place-items:center;color:#fff}
+.sp-v21.sp-reference .sp-task-check[aria-checked=true]{background:#879d92;border-color:#879d92}
+.sp-v21.sp-reference .sp-rail-task-title{text-align:left;font-size:12px;line-height:1.5;overflow-wrap:anywhere;color:var(--sp-text)}
+.sp-v21.sp-reference .sp-completed .sp-rail-task-title{text-decoration:line-through;color:var(--sp-muted)}
+.sp-v21.sp-reference .sp-rail-add{display:flex;align-items:center;gap:8px;font-size:12px;color:#a1a6ad;margin-top:7px;min-height:28px}
+.sp-v21.sp-reference .sp-rail-empty{color:var(--sp-muted);font-size:12px;line-height:1.6}
+.sp-v21.sp-reference .sp-rail-progress{padding:14px 18px;border-top:1px solid var(--sp-border)}
+.sp-v21.sp-reference .sp-rail-progress>span{display:flex;justify-content:space-between;font-size:10px;color:var(--sp-muted);margin-bottom:7px}
+.sp-v21.sp-reference .sp-rail-progress strong{color:var(--sp-text);font-weight:500}
+.sp-v21.sp-reference .sp-rail-progress progress{display:block;height:3px;width:100%;accent-color:#879d92}
+.dark .smart-planner.sp-v21.sp-reference{--sp-card:#1b1c20;--sp-bg:#1b1c20;--sp-soft:#24252b;--sp-text:#e7e7eb;--sp-muted:#9b9ba8;--sp-border:#303138}
+.dark .sp-v21.sp-reference .sp-segmented button[aria-pressed=true],.dark .sp-v21.sp-reference .sp-fixed-event{background:#292a30}
+@media(max-width:1000px){.sp-v21.sp-reference .sp-calendar-workspace{grid-template-columns:200px minmax(0,1fr)}.sp-v21.sp-reference .sp-timetable{display:block}.sp-v21.sp-reference .sp-calendar-head{display:grid}.sp-v21.sp-reference .sp-mobile-agenda{display:none}.sp-v21.sp-reference .sp-calendar-toolbar{flex-wrap:wrap}.sp-v21.sp-reference .sp-event-body>strong{font-size:10px}}
+@media(max-width:700px){.sp-v21.sp-reference .sp-calendar-workspace{grid-template-columns:1fr}.sp-v21.sp-reference .sp-task-rail{border-right:0;border-bottom:1px solid var(--sp-border)}.sp-v21.sp-reference .sp-rail-groups{max-height:220px;padding:8px 16px}.sp-v21.sp-reference .sp-task-group{margin-bottom:12px}.sp-v21.sp-reference .sp-task-rail>header{min-height:46px;padding:8px 16px}.sp-v21.sp-reference .sp-rail-progress{padding:9px 16px}.sp-v21.sp-reference .sp-header{padding:12px 14px;gap:12px}.sp-v21.sp-reference .sp-header-actions{display:flex;flex-wrap:wrap;gap:6px}.sp-v21.sp-reference .sp-time-scroll{max-height:560px}.sp-v21.sp-reference .sp-timetable{overflow-x:auto}.sp-v21.sp-reference .sp-calendar-head,.sp-v21.sp-reference .sp-time-scroll,.sp-v21.sp-reference .sp-all-day{min-width:650px}.sp-v21.sp-reference .sp-calendar-toolbar{padding:12px 14px 6px}.sp-v21.sp-reference .sp-calendar-options{padding:6px 14px}.sp-v21.sp-reference .sp-event-body>strong{font-size:11px}.sp-v21.sp-reference .sp-calendar-toolbar .sp-actions{flex-wrap:wrap}.sp-v21.sp-reference .sp-event-check{opacity:1}.sp-v21.sp-reference .sp-rail-task{padding:9px 0}.sp-v21.sp-reference .sp-task-check{height:18px;width:18px}.sp-v21.sp-reference .sp-rail-task-title{font-size:13px}}
+@media(prefers-reduced-motion:reduce){.sp-reference *{scroll-behavior:auto!important;transition:none!important}}
