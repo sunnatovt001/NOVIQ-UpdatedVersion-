@@ -3,6 +3,8 @@ import {
   trySaveLocalData as saveLocalData,
 } from "@/src/lib/localStore";
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { useMembership } from "@/src/features/pro/MembershipContext";
+import "@/src/features/community/community-glass.css";
 import {
   ChevronRight,
   CircleUserRound,
@@ -84,6 +86,7 @@ const selectableGroups = (groups: Room[]) => {
 };
 export const Community = () => {
   const { user } = useAuth();
+  const { cinematic } = useMembership();
   const { locale } = useLocale();
   const copy = getCommunityCopy(locale);
   const [rooms, setRooms] = useState<Room[]>([]),
@@ -107,6 +110,7 @@ export const Community = () => {
     [email, setEmail] = useState("");
   const [groupSearch, setGroupSearch] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
+  const [workspaceView, setWorkspaceView] = useState<"groups" | "discover">("groups");
   const [draft, setDraft] = useState(""),
     [messages, setMessages] = useState<Message[]>([]),
     [older, setOlder] = useState<Message[]>([]);
@@ -478,8 +482,8 @@ export const Community = () => {
       </div>
     );
   return (
-    <div className="community-page min-h-[calc(100dvh-9rem)] rounded-[32px] border border-slate-200 bg-[#f8fbff] p-4 text-slate-900 shadow-[0_20px_70px_rgba(15,23,42,0.05)] dark:border-slate-800 dark:bg-slate-950 dark:text-slate-50 sm:p-6">
-      <header className="rounded-[26px] border border-slate-200 bg-white px-5 py-6 shadow-sm dark:border-slate-800 dark:bg-slate-900 sm:px-7">
+    <div className={`${cinematic ? "community-glass " : ""}community-page min-h-[calc(100dvh-9rem)] rounded-[32px] border border-slate-200 bg-[#f8fbff] p-4 text-slate-900 shadow-[0_20px_70px_rgba(15,23,42,0.05)] dark:border-slate-800 dark:bg-slate-950 dark:text-slate-50 sm:p-6`}>
+      <header className="cg-hero rounded-[26px] border border-slate-200 bg-white px-5 py-6 shadow-sm dark:border-slate-800 dark:bg-slate-900 sm:px-7">
         <div className="flex flex-wrap items-center gap-4">
           <div className="grid h-14 w-14 place-items-center rounded-2xl bg-blue-50 text-blue-600 dark:bg-blue-500/10">
             <UsersRound size={30} aria-hidden="true" />
@@ -571,9 +575,14 @@ export const Community = () => {
           </button>
         </section>
       )}
-      <div className="mt-5 grid gap-5 xl:grid-cols-[minmax(250px,0.72fr)_minmax(0,1.6fr)_minmax(270px,0.8fr)]">
-        <aside className="space-y-5">
-          <section className="rounded-[26px] border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+      {cinematic && <nav className="cg-tabs" aria-label={copy.title}>
+        <button type="button" aria-pressed={workspaceView === "groups"} onClick={() => setWorkspaceView("groups")}>{copy.myGroups}</button>
+        <button type="button" aria-pressed={workspaceView === "discover"} onClick={() => setWorkspaceView("discover")}>{copy.discoverGroups}</button>
+        <button type="button" className="cg-create" onClick={() => { setWorkspaceView("groups"); setCreateOpen(true); requestAnimationFrame(() => document.getElementById("community-name")?.focus()); }}><Plus size={17}/>{copy.createGroup}</button>
+      </nav>}
+      <div data-view={workspaceView} className="cg-workspace mt-5 grid gap-5 xl:grid-cols-[minmax(250px,0.72fr)_minmax(0,1.6fr)_minmax(270px,0.8fr)]">
+        <aside className="cg-groups space-y-5">
+          <section className="cg-panel cg-my-groups rounded-[26px] border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
             <div className="flex items-center justify-between gap-3">
               <h2 className="flex items-center gap-2 text-lg font-black">
                 <UsersRound size={22} className="text-blue-600" aria-hidden="true" /> {copy.myGroups}
@@ -683,7 +692,7 @@ export const Community = () => {
                     key={r.id}
                     aria-pressed={active === r.id}
                     onClick={() => selectRoom(r.id)}
-                    className={`flex w-full items-center gap-3 break-words rounded-2xl px-3 py-3 text-left transition-colors ${active === r.id ? "bg-blue-50 font-semibold text-blue-700 dark:bg-blue-500/10 dark:text-blue-300" : "hover:bg-slate-50 dark:hover:bg-slate-800"}`}
+                    className={`cg-room flex w-full items-center gap-3 break-words rounded-2xl px-3 py-3 text-left transition-colors ${active === r.id ? "bg-blue-50 font-semibold text-blue-700 dark:bg-blue-500/10 dark:text-blue-300" : "hover:bg-slate-50 dark:hover:bg-slate-800"}`}
                   >
                     <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-blue-100 text-blue-600 dark:bg-blue-500/15">
                       <GraduationCap size={19} />
@@ -703,7 +712,8 @@ export const Community = () => {
               )}
             </div>
           </section>
-          <section className="rounded-[26px] border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+          {cinematic && <button type="button" className="cg-discover-link" onClick={() => setWorkspaceView(workspaceView === "groups" ? "discover" : "groups")}><Compass size={25}/><span><strong>{workspaceView === "groups" ? copy.discoverGroups : copy.myGroups}</strong><small>{copy.discoverDescription}</small></span><ChevronRight size={18}/></button>}
+          <section className="cg-panel cg-discover rounded-[26px] border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
             <div className="flex items-center gap-2">
               <Compass size={22} className="text-blue-600" />
               <h2 className="text-lg font-black">{copy.discoverGroups}</h2>
@@ -715,7 +725,7 @@ export const Community = () => {
               {discoverableRooms.map((r) => (
                 <div
                   key={r.id}
-                  className="rounded-2xl border border-slate-100 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-800"
+                  className="cg-discovery-card rounded-2xl border border-slate-100 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-800"
                 >
                   <h3 className="break-words font-bold">{r.name}</h3>
                   {r.description && (
@@ -749,8 +759,8 @@ export const Community = () => {
             </div>
           </section>
         </aside>
-        <section className="flex min-h-[560px] min-w-0 flex-col rounded-[26px] border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900 xl:h-[calc(100dvh-16.5rem)]">
-          <header className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-4 dark:border-slate-800 sm:flex-nowrap">
+        <section className="cg-panel cg-chat flex min-h-[560px] min-w-0 flex-col rounded-[26px] border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900 xl:h-[calc(100dvh-16.5rem)]">
+          <header className="cg-chat-header flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-4 dark:border-slate-800 sm:flex-nowrap">
             <div className="flex min-w-0 flex-1 basis-full items-center gap-3 sm:basis-auto">
               <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-blue-50 text-blue-600 dark:bg-blue-500/10">
                 <GraduationCap size={23} />
@@ -807,7 +817,7 @@ export const Community = () => {
             ref={chat}
             role="log"
             aria-label={copy.groupMessages}
-            className="min-h-0 flex-1 space-y-3 overflow-y-auto px-1 py-5"
+            className="cg-messages min-h-0 flex-1 space-y-3 overflow-y-auto px-1 py-5"
           >
             {hasOlder && cursor && (
               <button
@@ -895,7 +905,7 @@ export const Community = () => {
               allMessages.map((m) => (
                 <article
                   key={m.id}
-                  className={`max-w-[88%] rounded-2xl p-3.5 ${m.userId === user.uid ? "chat-user-message ml-auto bg-blue-600 text-white shadow-sm" : "mr-auto bg-slate-50 dark:bg-slate-800"}`}
+                  className={`cg-message max-w-[88%] rounded-2xl p-3.5 ${m.userId === user.uid ? "chat-user-message ml-auto bg-blue-600 text-white shadow-sm" : "mr-auto bg-slate-50 dark:bg-slate-800"}`}
                 >
                   <p
                     className={`text-xs font-semibold ${m.userId === user.uid ? "text-blue-100" : "text-slate-500"}`}
@@ -924,12 +934,12 @@ export const Community = () => {
               e.preventDefault();
               void send();
             }}
-            className="border-t border-slate-100 pt-4 dark:border-slate-800"
+            className="cg-composer border-t border-slate-100 pt-4 dark:border-slate-800"
           >
             <label htmlFor="community-message" className="sr-only">
               {copy.message}
             </label>
-            <div className="flex gap-2 rounded-2xl border border-slate-200 bg-slate-50 p-2 focus-within:border-blue-400 focus-within:bg-white dark:border-slate-700 dark:bg-slate-800">
+            <div className="cg-compose-field flex gap-2 rounded-2xl border border-slate-200 bg-slate-50 p-2 focus-within:border-blue-400 focus-within:bg-white dark:border-slate-700 dark:bg-slate-800">
               <textarea
                 id="community-message"
                 className="min-h-12 flex-1 resize-none bg-transparent px-2 py-2 text-sm outline-none"
@@ -977,9 +987,17 @@ export const Community = () => {
             </span>
           </form>
         </section>
-        <aside className="space-y-5">
+        <aside className="cg-social space-y-5">
+          {cinematic && <section className="cg-panel cg-members">
+            <div className="cg-members-heading"><h2>{copy.groupMembers}</h2><button type="button" aria-label={copy.viewMembers} disabled={!membership} onClick={() => setMembersOpen(true)}><ChevronRight size={19}/></button></div>
+            {directoryLoading && !directory && <p role="status">{copy.loadingDirectory}</p>}
+            {directoryError && <p role="alert">{directoryError} <button type="button" onClick={() => void loadMembers()}>{copy.retry}</button></p>}
+            {directory?.members.slice(0, 3).map(member => <div className="cg-member-row" key={member.uid}><span className="cg-member-avatar">{member.displayName.slice(0, 1).toUpperCase()}{member.online && <i aria-label={copy.online}/>}</span><div><strong>{member.displayName}</strong><small>{member.username ? `@${member.username.replace(/^@/, "")}` : member.role}</small></div></div>)}
+            {!directoryLoading && !directoryError && !directory && <p>{copy.chooseGroup}</p>}
+            {directory && !directory.members.length && <p>{copy.noMembers}</p>}
+          </section>}
           <form
-            className="rounded-[26px] border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900"
+            className="cg-panel cg-invite rounded-[26px] border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900"
             onSubmit={(e) => {
               e.preventDefault();
               void run("invite", async () => {
@@ -1027,7 +1045,7 @@ export const Community = () => {
               {copy.inviteHelp}
             </p>
           </form>
-          <section className="rounded-[26px] border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+          <section className="cg-panel cg-invitations rounded-[26px] border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
             <h2 className="flex items-center gap-2 text-lg font-black">
               <Sparkles className="text-blue-600" size={21} aria-hidden="true" /> {copy.sentInvitations}
             </h2>
@@ -1085,7 +1103,7 @@ export const Community = () => {
               );
             })}
           </section>
-          <section className="rounded-[26px] border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+          <section className="cg-panel cg-friends rounded-[26px] border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
             <h2 className="flex items-center gap-2 text-lg font-black">
               <CircleUserRound className="text-blue-600" size={21} aria-hidden="true" /> {copy.friends}
             </h2>

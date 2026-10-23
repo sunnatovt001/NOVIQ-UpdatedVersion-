@@ -1,0 +1,217 @@
+- generic [ref=e1]:
+  - generic [ref=e3]:
+    - complementary [ref=e4]:
+      - generic [ref=e5]:
+        - button [ref=e617]:
+          - img "Noviq logo" [ref=e7]
+          - text: PRO
+        - button "Expand sidebar" [ref=e618]
+      - navigation "Workspace navigation" [ref=e13]:
+        - button "Dashboard" [ref=e14]
+        - button "Planner" [ref=e23]
+        - button "Tutor" [ref=e30]
+        - button "Library" [ref=e37]
+        - button "Focus" [ref=e44]
+        - button "Flashcards" [ref=e53]
+        - button "Community" [ref=e62]
+        - button "Progress" [ref=e72]
+        - button "Plans" [ref=e79]
+        - button "Profile" [ref=e86]
+      - generic [ref=e94]:
+        - link "Profile" [ref=e95] [cursor=pointer]:
+          - /url: "#/profile"
+        - button "Sign out" [ref=e99]
+    - main "Planner" [active] [ref=e632]:
+      - generic [ref=e633]:
+        - heading "Hi, Tolibjon" [level=2] [ref=e635]
+        - generic [ref=e637]:
+          - button "Language" [ref=e639] [cursor=pointer]:
+            - generic [ref=e643]: English
+          - button "Switch to dark theme" [ref=e645]
+          - button "Notifications" [ref=e649]
+          - button "Open profile" [ref=e653]
+      - generic [ref=e656]:
+        - generic [ref=e657]:
+          - generic [ref=e658]:
+            - heading "Smart Planner" [level=1] [ref=e659]
+            - paragraph [ref=e660]: Your goals. Your schedule. Your way of learning.
+          - generic [ref=e661]:
+            - button "Plan history" [ref=e662] [cursor=pointer]
+            - button "Edit setup" [ref=e667] [cursor=pointer]
+            - button "Add task" [ref=e671] [cursor=pointer]
+        - generic [ref=e673]:
+          - status [ref=e674]: Saved to your account
+          - generic [ref=e676]: Asia/Tashkent
+          - button "Export backup" [ref=e677] [cursor=pointer]
+        - generic [ref=e678]:
+          - generic [ref=e679]:
+            - region "Your assignments" [ref=e680]:
+              - generic [ref=e681]:
+                - heading "Your assignments" [level=2] [ref=e682]
+                - button "Add task" [ref=e683] [cursor=pointer]
+              - generic [ref=e685]:
+                - group [ref=e686]:
+                  - generic "SAT Reading & Writing 0" [ref=e687] [cursor=pointer]:
+                    - generic [ref=e690]: SAT Reading & Writing
+                    - generic [ref=e691]: "0"
+                  - generic [ref=e692]:
+                    - 'checkbox "Undo: Practice transitions" [checked] [ref=e693]'
+                    - button "Practice transitions" [ref=e696]
+                  - button "Add task" [ref=e697]
+                - group [ref=e699]:
+                  - generic "Physics · Kinematics 1" [ref=e700] [cursor=pointer]:
+                    - generic [ref=e703]: Physics · Kinematics
+                    - generic [ref=e704]: "1"
+                  - generic [ref=e705]:
+                    - 'checkbox "Complete: Motion, velocity and acceleration" [ref=e706]'
+                    - button "Motion, velocity and acceleration" [ref=e707]
+                  - button "Add task" [ref=e708]
+                - group [ref=e710]:
+                  - generic "IELTS Speaking 1" [ref=e711] [cursor=pointer]:
+                    - generic [ref=e714]: IELTS Speaking
+                    - generic [ref=e715]: "1"
+                  - generic [ref=e716]:
+                    - 'checkbox "Complete: Part 2 · Sample questions" [ref=e717]'
+                    - button "Part 2 · Sample questions" [ref=e718]
+                  - button "Add task" [ref=e719]
+              - generic [ref=e721]:
+                - generic [ref=e722]:
+                  - text: Complete
+                  - strong [ref=e723]: 1 / 3
+                - progressbar "Complete" [ref=e724]
+            - generic [ref=e725]:
+              - generic [ref=e726]:
+                - heading "October 2026 / W43" [level=2] [ref=e728]:
+                  - text: October 2026
+                  - generic [ref=e729]: / W43
+                - generic [ref=e730]:
+                  - button "Today" [ref=e731] [cursor=pointer]
+                  - button "Previous week" [ref=e732] [cursor=pointer]
+                  - textbox "Choose date" [ref=e735]: 2026-10-23
+                  - button "Next week" [ref=e736] [cursor=pointer]
+              - generic [ref=e739]:
+                - generic "Calendar view" [ref=e740]:
+                  - button "Day" [ref=e741] [cursor=pointer]
+                  - button "Week" [pressed] [ref=e742] [cursor=pointer]
+                - generic [ref=e743]:
+                  - button "Optimize my week" [ref=e744] [cursor=pointer]
+                  - button "Expand side panel" [ref=e745] [cursor=pointer]
+              - generic "Week overview" [ref=e749]:
+                - generic [ref=e750]:
+                  - generic "Asia/Tashkent" [ref=e751]
+                  - button "Mon 19" [ref=e752] [cursor=pointer]
+                  - button "Tue 20" [ref=e753] [cursor=pointer]
+                  - button "Wed 21" [ref=e754] [cursor=pointer]
+                  - button "Thu 22" [ref=e755] [cursor=pointer]
+                  - button "Fri 23" [pressed] [ref=e756] [cursor=pointer]
+                  - button "Sat 24" [ref=e757] [cursor=pointer]
+                  - button "Sun 25" [ref=e758] [cursor=pointer]
+                - generic "Upcoming deadlines" [ref=e760]: All day
+                - generic [ref=e769]:
+                  - generic [ref=e770]:
+                    - generic [ref=e771]: 12 am
+                    - generic [ref=e772]: 1 am
+                    - generic [ref=e773]: 2 am
+                    - generic [ref=e774]: 3 am
+                    - generic [ref=e775]: 4 am
+                    - generic [ref=e776]: 5 am
+                    - generic [ref=e777]: 6 am
+                    - generic [ref=e778]: 7 am
+                    - generic [ref=e779]: 8 am
+                    - generic [ref=e780]: 9 am
+                    - generic [ref=e781]: 10 am
+                    - generic [ref=e782]: 11 am
+                    - generic [ref=e783]: Noon
+                    - generic [ref=e784]: 1 pm
+                    - generic [ref=e785]: 2 pm
+                    - generic [ref=e786]: 3 pm
+                    - generic [ref=e787]: 4 pm
+                    - generic [ref=e788]: 5 pm
+                    - generic [ref=e789]: 6 pm
+                    - generic [ref=e790]: 7 pm
+                    - generic [ref=e791]: 8 pm
+                    - generic [ref=e792]: 9 pm
+                    - generic [ref=e793]: 10 pm
+                    - generic [ref=e794]: 11 pm
+                  - generic [ref=e795]:
+                    - region "Mon 19" [ref=e796]:
+                      - generic [ref=e797]:
+                        - strong [ref=e802]: Sleep
+                        - generic [ref=e803]: 00:00–07:00
+                      - generic [ref=e804]:
+                        - strong [ref=e809]: Sleep
+                        - generic [ref=e810]: 23:00–00:00
+                    - region "Tue 20" [ref=e811]:
+                      - generic [ref=e812]:
+                        - strong [ref=e817]: Sleep
+                        - generic [ref=e818]: 00:00–07:00
+                      - generic [ref=e819]:
+                        - strong [ref=e824]: Sleep
+                        - generic [ref=e825]: 23:00–00:00
+                    - region "Wed 21" [ref=e826]:
+                      - generic [ref=e827]:
+                        - strong [ref=e832]: Sleep
+                        - generic [ref=e833]: 00:00–07:00
+                      - generic [ref=e834]:
+                        - strong [ref=e839]: Sleep
+                        - generic [ref=e840]: 23:00–00:00
+                    - region "Thu 22" [ref=e841]:
+                      - generic [ref=e842]:
+                        - strong [ref=e847]: Sleep
+                        - generic [ref=e848]: 00:00–07:00
+                      - generic [ref=e849]:
+                        - strong [ref=e854]: Sleep
+                        - generic [ref=e855]: 23:00–00:00
+                    - region "Fri 23" [ref=e856]:
+                      - generic [ref=e857]:
+                        - strong [ref=e862]: Sleep
+                        - generic [ref=e863]: 00:00–07:00
+                      - generic [ref=e864]:
+                        - strong [ref=e869]: Sleep
+                        - generic [ref=e870]: 23:00–00:00
+                      - article [ref=e871]:
+                        - button "Practice transitions · 09:00–09:25" [ref=e872] [cursor=pointer]:
+                          - generic [ref=e873]: 09:00–09:25
+                          - strong [ref=e874]: Practice transitions
+                        - 'checkbox "Undo: Practice transitions" [checked] [ref=e875]'
+                      - article [ref=e878]:
+                        - button "Motion, velocity and acceleration · 14:00–14:45" [ref=e879] [cursor=pointer]:
+                          - generic [ref=e880]: 14:00–14:45
+                          - strong [ref=e881]: Motion, velocity and acceleration
+                        - 'checkbox "Complete: Motion, velocity and acceleration" [ref=e882]'
+                        - 'button "Resize session: Motion, velocity and acceleration" [ref=e885]'
+                      - article [ref=e889]:
+                        - button "Part 2 · Sample questions · 17:00–17:30" [ref=e890] [cursor=pointer]:
+                          - generic [ref=e891]: 17:00–17:30
+                          - strong [ref=e892]: Part 2 · Sample questions
+                        - 'checkbox "Complete: Part 2 · Sample questions" [ref=e893]'
+                        - 'button "Resize session: Part 2 · Sample questions" [ref=e896]'
+                      - generic: 10:26
+                    - region "Sat 24" [ref=e900]:
+                      - generic [ref=e901]:
+                        - strong [ref=e906]: Sleep
+                        - generic [ref=e907]: 00:00–07:00
+                      - generic [ref=e908]:
+                        - strong [ref=e913]: Sleep
+                        - generic [ref=e914]: 23:00–00:00
+                    - region "Sun 25" [ref=e915]:
+                      - generic [ref=e916]:
+                        - strong [ref=e921]: Sleep
+                        - generic [ref=e922]: 00:00–07:00
+                      - generic [ref=e923]:
+                        - strong [ref=e928]: Sleep
+                        - generic [ref=e929]: 23:00–00:00
+          - generic [ref=e930]:
+            - button "Exam missions & history" [ref=e931] [cursor=pointer]
+            - link "Notebook" [ref=e932] [cursor=pointer]:
+              - /url: "#/notes"
+            - link "Flashcards" [ref=e933] [cursor=pointer]:
+              - /url: "#/flashcards"
+            - link "Tutor" [ref=e934] [cursor=pointer]:
+              - /url: "#/tutor"
+      - button "Open Saidamin Noviq Tutor" [ref=e605]:
+        - img "Saidamin" [ref=e607]
+        - generic [ref=e608]:
+          - generic [ref=e609]: Saidamin
+          - generic [ref=e613]: Ask Noviq Tutor
+  - generic [aria-hidden] [ref=e616]: "0.25"

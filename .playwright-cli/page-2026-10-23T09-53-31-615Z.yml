@@ -1,0 +1,165 @@
+- generic [ref=e3]:
+  - complementary [ref=e4]:
+    - generic [ref=e5]:
+      - button [ref=e6]:
+        - img "Noviq logo" [ref=e7]
+        - heading "Noviq PRO" [level=1] [ref=e8]
+      - button "Collapse sidebar" [ref=e9]
+    - navigation "Workspace navigation" [ref=e13]:
+      - button "Dashboard" [ref=e14]
+      - button "Planner" [ref=e24]
+      - button "Tutor" [ref=e31]
+      - button "Library" [ref=e38]
+      - button "Focus" [ref=e45]
+      - button "Flashcards" [ref=e54]
+      - button "Community" [ref=e62]
+      - button "Progress" [ref=e72]
+      - button "Plans" [ref=e79]
+      - button "Profile" [ref=e86]
+    - generic [ref=e94]:
+      - link "Profile" [ref=e95] [cursor=pointer]:
+        - /url: "#/profile"
+        - generic [ref=e96]:
+          - strong [ref=e97]: Tolibjon
+          - text: NOVIQ PRO
+      - button "Sign out" [ref=e98]
+  - main "Flashcards" [ref=e103]:
+    - generic [ref=e104]:
+      - heading "Hi, Tolibjon" [level=2] [ref=e106]
+      - generic [ref=e108]:
+        - button "Language" [ref=e110] [cursor=pointer]:
+          - generic [ref=e115]: English
+        - button "Switch to dark theme" [ref=e118]
+        - button "Notifications" [ref=e122]
+        - button "Open profile" [ref=e126]
+    - generic [ref=e130]:
+      - generic [ref=e131]:
+        - generic [ref=e132]:
+          - heading "Flashcards" [level=2] [ref=e133]
+          - paragraph [ref=e134]: Create effortlessly. Learn actively. Remember longer.
+        - generic [ref=e135]:
+          - link "Draft a flashcard deck" [ref=e136] [cursor=pointer]:
+            - /url: "#/dashboard"
+          - button "Backup" [ref=e140] [cursor=pointer]
+          - button "Create deck" [ref=e144] [cursor=pointer]
+      - region "Your flashcard activity" [ref=e146]:
+        - generic [ref=e153]:
+          - strong [ref=e154]: "10"
+          - generic [ref=e155]: Cards in your library
+        - generic [ref=e161]:
+          - strong [ref=e162]: "9"
+          - generic [ref=e163]: Ready to review
+        - generic [ref=e169]:
+          - strong [ref=e170]: "0"
+          - generic [ref=e171]: Sessions completed
+        - paragraph [ref=e172]: A little recall today. A stronger memory tomorrow.
+      - generic [ref=e181]:
+        - group [ref=e182]:
+          - generic "My library · 4" [ref=e183] [cursor=pointer]
+          - complementary [ref=e187]:
+            - textbox "Search decks" [ref=e192]:
+              - /placeholder: Search decks, subjects, tags
+            - generic [ref=e193]:
+              - combobox "Library filter" [ref=e194]:
+                - option "All decks" [selected]
+                - option "Favorites"
+                - option "Archived"
+              - combobox "Sort decks" [ref=e195]:
+                - option "Recent" [selected]
+                - option "Title"
+            - navigation "Deck library" [ref=e196]:
+              - button "Design verification Biology · 1 cards" [ref=e197]:
+                - generic [ref=e203]:
+                  - strong [ref=e204]: Design verification
+                  - generic [ref=e205]: Biology · 1 cards
+              - button "SAT Vocabulary SAT · 4 cards" [ref=e206]:
+                - generic [ref=e212]:
+                  - strong [ref=e213]: SAT Vocabulary
+                  - generic [ref=e214]: SAT · 4 cards
+              - button "Motion & forces Physics · 3 cards" [ref=e217]:
+                - generic [ref=e223]:
+                  - strong [ref=e224]: Motion & forces
+                  - generic [ref=e225]: Physics · 3 cards
+              - button "Everyday expressions IELTS · 2 cards" [ref=e226]:
+                - generic [ref=e232]:
+                  - strong [ref=e233]: Everyday expressions
+                  - generic [ref=e234]: IELTS · 2 cards
+        - main [ref=e235]:
+          - generic [ref=e236]:
+            - generic [ref=e237]:
+              - generic [ref=e238]: Biology
+              - heading "Design verification" [level=3] [ref=e239]
+              - paragraph
+            - generic [ref=e240]:
+              - button "Favorite deck" [ref=e241] [cursor=pointer]
+              - button "Archive deck" [ref=e244] [cursor=pointer]
+          - group [ref=e248]:
+            - generic "Deck details & tags" [ref=e249] [cursor=pointer]
+          - generic [ref=e250]:
+            - generic [ref=e251]:
+              - strong [ref=e252]: "1"
+              - text: cards
+            - generic [ref=e253]:
+              - strong [ref=e254]: "1"
+              - text: due
+            - generic [ref=e255]:
+              - strong [ref=e256]: "0"
+              - text: reviewed at least once
+            - generic [ref=e257]: Cloud loaded
+          - generic [ref=e258]:
+            - generic [ref=e260]:
+              - heading "Learn your way" [level=4] [ref=e261]
+              - paragraph [ref=e262]: Recall first. Reveal when you’re ready.
+            - group "Flashcard preview. Use arrow keys to navigate." [ref=e263]:
+              - button "Flip preview card" [ref=e264] [cursor=pointer]:
+                - generic [ref=e265]:
+                  - generic [ref=e266]:
+                    - generic [ref=e267]: Question
+                    - generic [ref=e271]: Photosynthesis
+                    - generic [ref=e272]: Click to flip
+                  - generic [aria-hidden] [ref=e273]:
+                    - generic [ref=e274]: Answer
+                    - generic [ref=e278]: Plants use light energy to turn water and carbon dioxide into sugars.
+                    - generic [ref=e279]: Click to flip
+              - generic [ref=e280]:
+                - button "Previous preview card" [disabled] [ref=e281]
+                - generic [ref=e284]: 1 / 1
+                - button "Next preview card" [disabled] [ref=e285]
+            - generic [ref=e288]:
+              - button "Flashcards" [pressed] [ref=e289] [cursor=pointer]
+              - button "Match" [ref=e290] [cursor=pointer]
+              - button "Type answer" [ref=e291] [cursor=pointer]
+              - button "Missing letters" [ref=e292] [cursor=pointer]
+              - button "Multiple choice" [ref=e293] [cursor=pointer]
+              - button "Listen & spell" [ref=e294] [cursor=pointer]
+              - button "Smart Learn" [ref=e295] [cursor=pointer]
+            - generic [ref=e296]:
+              - generic [ref=e297]:
+                - checkbox "Shuffle" [checked] [ref=e298]
+                - text: Shuffle
+              - generic [ref=e299]:
+                - checkbox "Vocabulary hints" [checked] [ref=e300]
+                - text: Vocabulary hints
+            - generic [ref=e301]:
+              - button "Start studying" [ref=e302] [cursor=pointer]
+              - button "Review due cards (1)" [ref=e305] [cursor=pointer]
+            - paragraph [ref=e306]: Match uses up to 6 distinct pairs; other sessions use up to 200 cards. Duplicate pairs are excluded from choice activities.
+          - generic [ref=e307]:
+            - heading "Cards" [level=4] [ref=e308]
+            - generic [ref=e309]:
+              - button "Edit & add cards" [ref=e310] [cursor=pointer]
+              - button "Export" [ref=e312] [cursor=pointer]
+              - button "Add to Planner" [ref=e316] [cursor=pointer]
+          - textbox "Search cards" [ref=e323]:
+            - /placeholder: Find a card
+          - article [ref=e325]:
+            - strong [ref=e327]: Photosynthesis
+            - paragraph [ref=e328]: Plants use light energy to turn water and carbon dioxide into sugars.
+            - generic [ref=e329]: Due
+      - group [ref=e330]:
+        - generic "Library insights" [ref=e331] [cursor=pointer]
+    - button "Open Saidamin Noviq Tutor" [ref=e333]:
+      - img "Saidamin" [ref=e335]
+      - generic [ref=e336]:
+        - generic [ref=e337]: Saidamin
+        - generic [ref=e341]: Ask Noviq Tutor

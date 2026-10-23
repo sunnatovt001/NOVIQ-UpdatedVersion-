@@ -328,9 +328,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!profile || !user || isReadOnlyAudit) return;
     const photoURL = getProfileAvatar(profile);
     if (photoURL === profile.photoURL) return;
-    updateLocalProfile({ photoURL });
     void writeDocWithQueue({ userId: user.uid, path: ['users', user.uid], kind: 'update', data: { photoURL } })
-      .catch(error => console.warn('Default avatar sync pending', error));
+      .then(() => updateLocalProfile({ photoURL }))
+      .catch(error => console.warn('Default avatar could not be saved to the server', error));
   }, [user?.uid, profile?.photoURL, profile?.subscription]);
 
   const updateLocalProfile = (patch: Partial<UserProfile>) => {

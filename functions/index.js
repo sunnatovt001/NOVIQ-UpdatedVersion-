@@ -146,6 +146,7 @@ const callGeminiRest = async ({ model, contents, config, feature }) => {
   const normalizedConfig = normalizeGeminiConfig(config, feature === "tutor");
   const body = {
     contents: normalizeGeminiContents(contents),
+    ...(Array.isArray(config?.tools) && config.tools.some(tool => tool && Object.hasOwn(tool, "urlContext")) ? { tools: [{ urlContext: {} }] } : {}),
     ...(normalizedConfig.systemInstruction
       ? {
           systemInstruction: {

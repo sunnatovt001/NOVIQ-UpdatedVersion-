@@ -7,6 +7,8 @@ import firebaseConfig from './firebase-applet-config.json';
 const require = createRequire(import.meta.url);
 
 export default defineConfig(({mode}) => ({
+  // Fixture servers use different module transforms; never share their cache.
+  cacheDir: `node_modules/.vite-noviq-${mode}`,
   plugins: [react(), tailwindcss(), {
     name: 'noviq-local-ai',
     apply: 'serve',
@@ -15,11 +17,14 @@ export default defineConfig(({mode}) => ({
       const membershipPath = require.resolve('./server/local-membership.cjs');
       delete require.cache[membershipPath];
       server.middlewares.use(require(membershipPath)({ firebaseConfig }));
-      const env = loadEnv(mode, path.resolve(__dirname, 'functions'), 'GEMINI_');
+      const env = { ...loadEnv(mode, __dirname, 'GEMINI_'), ...loadEnv(mode, path.resolve(__dirname, 'functions'), 'GEMINI_') };
       // A Vite restart must load the current middleware, not a cached model setup.
       const middlewarePath = require.resolve('./server/local-ai.cjs');
       delete require.cache[middlewarePath];
-      server.middlewares.use(require(middlewarePath)({ apiKey: env.GEMINI_API_KEY, firebaseApiKey: firebaseConfig.apiKey, models: (env.GEMINI_LOCAL_MODELS || "gemini-3.5-flash,gemini-3.1-flash-lite").split(",").map(value=>value.trim()) }));
+      const getApiKey = () => process.env.GEMINI_API_KEY || loadEnv(mode, path.resolve(__dirname, 'functions'), 'GEMINI_').GEMINI_API_KEY || loadEnv(mode, __dirname, 'GEMINI_').GEMINI_API_KEY;
+      const apiKey = getApiKey();
+      if (!apiKey) server.config.logger.warn('NOVIQ AI: set GEMINI_API_KEY in functions/.env.local and restart the development server.');
+      server.middlewares.use(require(middlewarePath)({ getApiKey, firebaseApiKey: firebaseConfig.apiKey, models: (process.env.GEMINI_LOCAL_MODELS || env.GEMINI_LOCAL_MODELS || "gemini-3.5-flash,gemini-3.1-flash-lite").split(",").map(value=>value.trim()) }));
       const telegramPath = require.resolve('./server/local-telegram.cjs');
       delete require.cache[telegramPath];
       server.middlewares.use(require(telegramPath)({ firebaseConfig }));

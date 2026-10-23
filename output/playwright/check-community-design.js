@@ -1,0 +1,38 @@
+async (page) => {
+ await page.getByRole('textbox',{name:'Search loaded group members',exact:true}).fill('Madina');
+ if(await page.getByRole('list',{name:'Group members'}).getByRole('listitem').count()!==1)throw new Error('Member search failed');
+ await page.keyboard.press('Escape');await page.getByRole('dialog').waitFor({state:'hidden'});
+ await page.getByRole('textbox',{name:'Search groups',exact:true}).fill('IELTS');
+ if(await page.locator('.cg-room').count()!==1)throw new Error('Group search failed');
+ await page.locator('.cg-room').click();
+ await page.getByRole('textbox',{name:'Search groups',exact:true}).fill('');
+ await page.waitForFunction(()=>document.querySelector('.cg-chat-header h2').textContent.includes('IELTS'));
+ await page.getByRole('textbox',{name:'Message',exact:true}).fill('A sample message for layout verification.');
+ await page.getByRole('button',{name:'Send message',exact:true}).click();
+ await page.locator('.cg-message').filter({hasText:'A sample message for layout verification.'}).waitFor();
+ if(await page.getByRole('textbox',{name:'Message',exact:true}).inputValue())throw new Error('Message did not clear');
+ await page.locator('.cg-room').filter({hasText:'SAT Study Circle'}).click();
+ await page.waitForFunction(()=>document.querySelector('.cg-chat-header h2').textContent.includes('SAT'));
+ await page.locator('[data-page-scroll]').evaluate(el=>el.scrollTop=0);
+ await page.screenshot({path:'output/playwright/community-ready-desktop.png'});
+ await page.setViewportSize({width:768,height:1024});
+ await page.screenshot({path:'output/playwright/community-ready-tablet.png'});
+ const composerClear=await page.locator('.cg-compose-field>button').evaluate(el=>{const r=el.getBoundingClientRect();return document.elementFromPoint(r.x+r.width/2,r.y+r.height/2)?.closest('button')===el;});
+ await page.setViewportSize({width:390,height:844});await page.locator('[data-page-scroll]').evaluate(el=>el.scrollTop=0);
+ await page.screenshot({path:'output/playwright/community-ready-mobile.png'});
+ const mobile=await page.evaluate(()=>({overflow:document.documentElement.scrollWidth>innerWidth,groups:document.querySelectorAll('.cg-room').length}));
+ await page.setViewportSize({width:1440,height:1000});
+ await page.evaluate(()=>localStorage.setItem('noviq-pro-theme','dark'));await page.reload();await page.locator('.cg-message').first().waitFor();
+ await page.screenshot({path:'output/playwright/community-ready-dark.png'});
+ await page.getByRole('button',{name:'View group members',exact:true}).click();
+ await page.getByRole('dialog').waitFor();
+ await page.screenshot({path:'output/playwright/community-members-dark.png'});
+ await page.keyboard.press('Escape');
+ await page.evaluate(()=>localStorage.setItem('noviq-pro-theme','light'));await page.reload();
+ await page.getByRole('button',{name:'Create group',exact:true}).click();
+ await page.getByRole('textbox',{name:'Group name',exact:true}).fill('Design verification');
+ await page.getByRole('textbox',{name:'Description',exact:true}).fill('An isolated group used to verify the redesigned form.');
+ await page.locator('.cg-my-groups form').getByRole('button',{name:'Create group',exact:true}).click();
+ await page.waitForFunction(()=>document.querySelector('.cg-chat-header h2')?.textContent.includes('Design verification'));
+ return {memberSearch:true,groupSearch:true,localFixtureMessage:true,groupCreated:true,tabletComposerUnobstructed:composerClear,mobile};
+}

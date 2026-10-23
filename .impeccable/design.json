@@ -1,0 +1,30 @@
+{
+  "surface": "entitled-pro-dashboard",
+  "mode": "Operate",
+  "authority": "User-supplied blue glass dashboard image",
+  "scope": ".noviq-app.pro-environment.pro-liquid[data-pro-page=dashboard]",
+  "tokens": {
+    "canvas": "#dfecff",
+    "ink": "#080f3d",
+    "muted": "#50659c",
+    "action": "#1269ff",
+    "panelRadius": "19px",
+    "gridGap": "17px",
+    "sidebar": "242px",
+    "font": "Plus Jakarta Sans"
+  },
+  "breakpoints": {
+    "mobile": 600,
+    "tablet": 1024
+  },
+  "reference": "DESIGN.md",
+  "navigation": {
+    "scope": ".noviq-app.pro-environment.pro-sidebar-unified",
+    "stylesheet": "src/features/pro/pro-sidebar.css",
+    "expandedDesktop": "242px",
+    "compactDesktop": "210px",
+    "collapsed": "84px",
+    "mobile": "270px",
+    "sharedAcross": "all entitled Pro routes"
+  }
+}

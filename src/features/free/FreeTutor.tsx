@@ -1,3 +1,4 @@
+import { useVoiceMessage } from "@/src/features/tutor/useVoiceMessage";
 import { getProfileAvatar } from '@/src/lib/profileAvatar';
 import { createTutorRecognition, getTutorSpeechSynthesis, stopTutorRecognition, cancelTutorSpeech } from "@/src/features/tutor/browserSpeech";
 import {TutorProControls,useTutorModes} from '@/src/features/pro/TutorProControls';
@@ -162,26 +163,11 @@ export const Tutor = ({ setActiveTab }: { setActiveTab: (tab: string) => void })
     setIsSpeaking(false);
   };
 
-  const handleToggleListening = () => {
-    if (!recognitionRef.current) {
-      setAiError({ speech: true });
-      return;
-    }
-
-    if (isListening) {
-      stopTutorRecognition(recognitionRef.current);
-      setIsListening(false);
-      return;
-    }
-
-    try {
-      recognitionRef.current.start();
-      setIsListening(true);
-    } catch (error) {
-      console.warn("Speech recognition failed to start", error);
-      setIsListening(false);
-    }
-  };
+  const voiceMessage = useVoiceMessage(
+    file => setAttachedFiles(current => [...current, file]),
+    message => setUploadError(message),
+  );
+  const handleToggleListening = () => { setUploadError(""); void voiceMessage.toggle(); };
 
   const addFiles = async (files: FileList | File[]) => {
     const fileArray = Array.from(files);
@@ -325,7 +311,7 @@ export const Tutor = ({ setActiveTab }: { setActiveTab: (tab: string) => void })
         type="file"
         multiple
         className="hidden"
-        accept="image/*,.pdf,.docx,.txt,.md,.csv,.json"
+        accept="image/*,audio/*,video/*,.pdf,.docx,.txt,.md,.csv,.json"
         onChange={(event) => {
           if (event.target.files) addFiles(event.target.files);
           event.currentTarget.value = "";
@@ -532,20 +518,23 @@ export const Tutor = ({ setActiveTab }: { setActiveTab: (tab: string) => void })
               <button
                 type="button"
                 onClick={handleToggleListening}
+                disabled={isTyping || voiceMessage.busy}
+                aria-pressed={voiceMessage.recording}
+                aria-label={voiceMessage.recording ? "Stop recording" : t("tutor.voice")}
                 className={cn(
                   "inline-flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-bold transition-all",
-                  isListening ? "bg-red-500 text-white" : "bg-white/5 text-slate-400 hover:text-white"
+                  voiceMessage.recording ? "bg-red-500 text-white" : "bg-white/5 text-slate-400 hover:text-white"
                 )}
               >
-                {isListening ? <MicOff size={18} /> : <Mic size={18} />}
-                 <span className="sr-only sm:not-sr-only">{t("tutor.voice")}</span>
+                {voiceMessage.recording ? <MicOff size={18} /> : <Mic size={18} />}
+                 <span className="sr-only sm:not-sr-only">{voiceMessage.recording ? "Stop" : t("tutor.voice")}</span>
               </button>
             </div>
 
             <button
               type="button"
               onClick={handleSend}
-              disabled={(!input.trim() && attachedFiles.length === 0) || isTyping}
+              disabled={(!input.trim() && attachedFiles.length === 0) || isTyping || voiceMessage.recording || voiceMessage.busy}
               className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-blue-600 px-5 text-sm font-black text-white shadow-xl shadow-blue-500/20 transition hover:bg-blue-500 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 disabled:active:scale-100"
             >
               {isTyping ? <Loader2 size={18} className="animate-spin" /> : <Send size={18} />}

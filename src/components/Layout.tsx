@@ -2,6 +2,8 @@ import { getProfileAvatar } from '@/src/lib/profileAvatar';
 import '@/src/features/pro/brand.css';
 import '@/src/features/pro/reference.css';
 import '@/src/features/pro/recovery.css';
+import '@/src/features/pro/liquid.css';
+import '@/src/features/pro/pro-sidebar.css';
 import {useProCopy} from '@/src/features/pro/proCopy';
 import {useMembership} from '@/src/features/pro/MembershipContext';
 import {MembershipBadge} from '@/src/features/pro/ProMembership';
@@ -52,7 +54,6 @@ import { db } from "@/src/lib/firebase";
 import { getAppErrorMessage } from "@/src/lib/errors";
 import { calculateLevelName, getLocalDayKey } from "@/src/lib/progress";
 import { FloatingTutor } from "@/src/components/FloatingTutor";
-import { SyncRecovery } from "@/src/components/SyncRecovery";
 import type { UserProfile } from "@/src/types";
 import {
   getNotificationPreferences,
@@ -269,9 +270,14 @@ export const Layout: React.FC<{
     [visibleNotifications]
   );
   const isDarkTheme = theme === "dark";
+  useEffect(() => {
+    const applyProfileTheme = (event: Event) => { const value=(event as CustomEvent).detail; if(value==='light'||value==='dark')setTheme(value); };
+    window.addEventListener('noviq:pro-theme', applyProfileTheme);
+    return () => window.removeEventListener('noviq:pro-theme', applyProfileTheme);
+  }, []);
 
   const primaryMenuItems = [
-    { id: "dashboard", label: t("nav.today"), shortLabel: t("nav.today"), icon: <LayoutDashboard size={20} /> },
+    { id: "dashboard", label: membership.cinematic ? 'Dashboard' : t("nav.today"), shortLabel: t("nav.today"), icon: <LayoutDashboard size={20} /> },
     { id: "planner", label: t("nav.planner"), shortLabel: t("nav.plan"), icon: <Calendar size={20} /> },
     { id: "tutor", label: t("nav.tutor"), shortLabel: t("nav.tutor"), icon: <MessageSquare size={20} /> },
     { id: "notes", label: t("nav.library"), shortLabel: t("nav.library"), icon: <BookOpen size={20} /> },
@@ -570,7 +576,7 @@ export const Layout: React.FC<{
   );
 
   return (
-    <div data-pro-page={activeTab} data-pro-theme={isDarkTheme ? "midnight-aurora" : "cloud-lavender"} className={cn("noviq-app relative flex h-screen overflow-hidden font-sans", isDarkTheme && "dark", membership.cinematic && "pro-environment")}>
+    <div data-pro-page={activeTab} data-pro-theme={isDarkTheme ? "midnight-aurora" : "cloud-lavender"} className={cn("noviq-app relative flex h-screen overflow-hidden font-sans", isDarkTheme && "dark", membership.cinematic && "pro-environment pro-sidebar-unified", membership.cinematic && ['dashboard', 'planner', 'tutor', 'notes', 'focus'].includes(activeTab) && 'pro-liquid')}>
       <div className="app-bg pointer-events-none fixed inset-0 -z-20 overflow-hidden" />
 
       {/* Mobile Top Nav */}
@@ -687,6 +693,7 @@ export const Layout: React.FC<{
         </nav>
 
         <div className={cn("sidebar-footer space-y-2.5 px-6 pb-5 pt-3", isSidebarCollapsed && "lg:px-4 lg:pb-6")}>
+          {membership.cinematic && <a className="pro-sidebar-profile" href="#/profile" aria-label={t('nav.profile')}><img className="pro-sidebar-avatar" src={getProfileAvatar(profile, membership.access.entitled)} alt=""/><span className={cn(isSidebarCollapsed && 'lg:hidden')}><strong>{firstName}</strong><small>NOVIQ PRO</small></span></a>}
           <div
             className={cn(
               "app-sidebar-card sidebar-momentum hidden rounded-xl border border-[#E5E7EB] bg-white px-3.5 py-3 lg:block",
@@ -726,7 +733,7 @@ export const Layout: React.FC<{
       {/* Main Content */}
       <main ref={mainContent} tabIndex={-1} aria-label={[...primaryMenuItems, ...secondaryMenuItems].find(item => item.id === activeTab)?.label} className="relative flex flex-1 flex-col overflow-hidden pb-[calc(4.75rem+env(safe-area-inset-bottom))] pt-[calc(5rem+env(safe-area-inset-top))] lg:pb-0 lg:pt-0">
         <div className="app-main-surface pointer-events-none absolute inset-0 rounded-[2rem] border border-[#E5E7EB] bg-white/45" />
-        {activeTab === "dashboard" && <div className="relative z-[300] hidden h-14 shrink-0 items-center justify-end gap-3 px-6 lg:flex"><HeaderLanguagePicker/>{renderThemeToggleButton()}</div>}
+        {activeTab === "dashboard" && <div data-dashboard-preferences className="relative z-[300] hidden h-14 shrink-0 items-center justify-end gap-3 px-6 lg:flex"><HeaderLanguagePicker/>{renderThemeToggleButton()}</div>}
         {activeTab !== "dashboard" && <header data-pro-shell-header className={cn("relative z-[300] hidden shrink-0 items-center justify-between lg:flex", activeTab === "tutor" ? "h-20 px-5" : "h-28 px-10 xl:px-14")}>
           <div className="space-y-1">
             <h2 className="group flex items-center gap-3 text-3xl font-bold leading-none tracking-tight text-[#111827]">
@@ -777,7 +784,7 @@ export const Layout: React.FC<{
                  onClick={() => setActiveTab('profile')}
                  className="group relative h-14 w-14 overflow-hidden rounded-[1.25rem] border border-[#E5E7EB] bg-white transition-colors hover:border-[var(--noviq-accent)]"
                >
-                 <img src={getProfileAvatar(profile)} alt="" onError={event => { if (!event.currentTarget.src.endsWith("/profile-placeholder.svg")) event.currentTarget.src = "/profile-placeholder.svg"; }} className="w-full h-full object-cover" />
+                 <img src={getProfileAvatar(profile, membership.access.entitled)} alt="" onError={event => { if (!event.currentTarget.src.endsWith("/profile-placeholder.svg")) event.currentTarget.src = "/profile-placeholder.svg"; }} className="w-full h-full object-cover" />
                  <div className="absolute inset-0 bg-[var(--noviq-accent)]/0 transition-colors group-hover:bg-[var(--noviq-accent)]/10" />
                </button>
             </div>
@@ -790,7 +797,6 @@ export const Layout: React.FC<{
               key={activeTab}
               className={cn("mx-auto relative z-10 w-full", activeTab === "tutor" || activeTab === "notes" ? "flex min-h-0 flex-1 flex-col" : "max-w-[1600px]")}
             >
-              <SyncRecovery />
               {children}
             </div>
         </div>

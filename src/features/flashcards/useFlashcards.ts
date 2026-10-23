@@ -25,6 +25,11 @@ export function useFlashcards(uid: string) {
     const [retry, setRetry] = useState(0);
     const active = useRef(true);
     const dirty = useRef(new Set<string>());
+    const pendingWrites = useRef(new Map<string, { path: string[]; data: Record<string, unknown> }>());
+    useEffect(() => {
+        dirty.current.clear();
+        pendingWrites.current.clear();
+    }, [uid]);
     const update = (fn: (l: Library) => Library, persist = true) => {
         const next = fn(current.current);
         if (persist)
@@ -131,23 +136,26 @@ export function useFlashcards(uid: string) {
         return () => { live = false; active.current = false; stop(); stopSessions(); unsubscribers.forEach(stop => stop()); window.removeEventListener('storage', onStorage); };
     }, [uid, key, retry]);
     const write = (path: string[], data: unknown) => {
-        dirty.current.add(path.join('/'));
+        const key = path.join('/');
+        const payload = { path, data: { ...pendingWrites.current.get(key)?.data, ...clone(data) as Record<string, unknown> } };
+        pendingWrites.current.set(key, payload);
+        dirty.current.add(key);
         setSync('pending');
         if (isReadOnlyAudit) {
-            dirty.current.delete(path.join('/'));
+            dirty.current.delete(key);
+            pendingWrites.current.delete(key);
             setSync('device');
-            return;
+            return Promise.resolve();
         }
-        void writeDocWithQueue({ userId: uid, path, data: clone(data) as Record<string, unknown>, merge: true }).then(status => {
-            if (active.current) {
-                dirty.current.delete(path.join('/'));
-                setSync(status);
-                if (status === 'failed')
-                    setMessage('Saved on this device. Cloud sync failed; use Retry sync.');
+        return writeDocWithQueue({ userId: uid, path, data: payload.data, merge: true }).then(() => {
+            if (active.current && pendingWrites.current.get(key) === payload) {
+                pendingWrites.current.delete(key);
+                dirty.current.delete(key);
+                setSync(pendingWrites.current.size ? 'pending' : 'synced');
             }
-        }).catch(() => { if (active.current) {
+        }).catch(() => { if (active.current && pendingWrites.current.get(key) === payload) {
             setSync('failed');
-            setMessage('Saved on this device. Cloud sync could not be queued. Keep this browser’s data and retry.');
+            setMessage('Could not save to the server. Check your connection and retry.');
         } });
     };
     const safe = (fn: () => void) => { if (blocked || !ready)
@@ -179,6 +187,7 @@ export function useFlashcards(uid: string) {
                 syncStatus?: unknown;
             }) => item.id.includes('-local-') || ['pending', 'failed'].includes(String(item.syncStatus || ''));
             if (!isReadOnlyAudit && !blocked) {
+                await Promise.all([...pendingWrites.current.values()].map(item => write(item.path, item.data)));
                 for (const deck of current.current.decks) {
                     const path = ['users', uid, 'decks', deck.id];
                     if (legacy(deck) && !getQueuedOperation('set', path))
@@ -194,7 +203,7 @@ export function useFlashcards(uid: string) {
             setRetry(n => n + 1);
         }
         catch {
-            setMessage('Sync failed. Device data has been preserved.');
+            setMessage('Could not save to the server. Check your connection and retry.');
         }
     };
     return { library, ready, blocked, message, setMessage, sync, saveDeck, saveCards, saveReview, saveSession, saveResult, getReview, retrySync };

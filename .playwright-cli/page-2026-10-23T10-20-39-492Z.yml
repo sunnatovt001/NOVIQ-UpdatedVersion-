@@ -1,0 +1,96 @@
+- generic [ref=e3]:
+  - complementary [ref=e4]:
+    - generic [ref=e5]:
+      - button [ref=e6]:
+        - img "Noviq logo" [ref=e7]
+        - heading "Noviq PRO" [level=1] [ref=e8]
+      - button "Collapse sidebar" [ref=e9]
+    - navigation "Workspace navigation" [ref=e13]:
+      - button "Dashboard" [ref=e14]
+      - button "Planner" [ref=e24]
+      - button "Tutor" [ref=e31]
+      - button "Library" [ref=e38]
+      - button "Focus" [ref=e45]
+      - button "Flashcards" [ref=e54]
+      - button "Community" [ref=e63]
+      - button "Progress" [ref=e72]
+      - button "Plans" [ref=e79]
+      - button "Profile" [ref=e86]
+    - generic [ref=e94]:
+      - link "Profile" [ref=e95] [cursor=pointer]:
+        - /url: "#/profile"
+        - generic [ref=e96]:
+          - strong [ref=e97]: Tolibjon
+          - text: NOVIQ PRO
+      - button "Sign out" [ref=e98]
+  - main "Community" [ref=e103]:
+    - generic [ref=e104]:
+      - heading "Hi, Tolibjon" [level=2] [ref=e106]
+      - generic [ref=e108]:
+        - button "Language" [ref=e110] [cursor=pointer]:
+          - generic [ref=e115]: English
+        - button "Switch to dark theme" [ref=e118]
+        - button "Notifications" [ref=e122]
+        - button "Open profile" [ref=e126]
+    - generic [ref=e130]:
+      - generic [ref=e133]:
+        - heading "Community" [level=1] [ref=e134]
+        - paragraph [ref=e135]: Study together, share ideas, and stay motivated with your friends.
+      - alert [ref=e136]:
+        - text: Fixture unavailable
+        - button "Dismiss" [ref=e137]
+      - navigation "Community" [ref=e138]:
+        - button "My Groups" [pressed] [ref=e139]
+        - button "Discover Groups" [ref=e140]
+        - button "Create group" [ref=e141]
+      - generic [ref=e143]:
+        - complementary [ref=e144]:
+          - generic [ref=e145]:
+            - heading "My Groups" [level=2] [ref=e147]
+            - textbox "Search groups" [ref=e149]:
+              - /placeholder: Search groups…
+            - generic [ref=e150]: You haven't joined any study groups yet.
+          - button "Discover Groups Join public study groups with similar goals." [ref=e156]:
+            - generic [ref=e160]:
+              - strong [ref=e161]: Discover Groups
+              - generic [ref=e162]: Join public study groups with similar goals.
+        - generic [ref=e165]:
+          - generic [ref=e172]:
+            - heading [level=2] [ref=e173]:
+              - button "Study chat" [disabled] [ref=e174]
+            - paragraph [ref=e175]: Choose or join a group to start chatting.
+          - log "Group messages" [ref=e176]:
+            - generic [ref=e177]: Your group conversation will appear here.
+          - generic [ref=e180]:
+            - generic [ref=e181]: Message
+            - generic [ref=e182]:
+              - textbox "Message" [disabled] [ref=e183]:
+                - /placeholder: Join a group to send messages
+              - button "Send message" [disabled] [ref=e184]
+            - generic [ref=e188]: Enter to send · Shift + Enter for a new line
+        - complementary [ref=e189]:
+          - generic [ref=e190]:
+            - generic [ref=e191]:
+              - heading "Group members" [level=2] [ref=e192]
+              - button "View group members" [disabled] [ref=e193]
+            - paragraph [ref=e196]: Choose or join a group to start chatting.
+          - generic [ref=e197]:
+            - heading "Invite Friends" [level=2] [ref=e198]
+            - paragraph [ref=e202]: Bring friends to Noviq and study together.
+            - generic [ref=e203]:
+              - generic [ref=e204]: Friend's email
+              - textbox "Friend's email" [ref=e205]
+            - button "Create invitation link" [disabled] [ref=e206]
+            - paragraph [ref=e207]: Share the link yourself. Only the invited email can accept it.
+          - generic [ref=e208]:
+            - heading "Sent invitations" [level=2] [ref=e209]
+            - paragraph [ref=e213]: No invitations sent yet.
+          - generic [ref=e214]:
+            - heading "Friends" [level=2] [ref=e215]
+            - paragraph [ref=e220]: No friends here yet.
+    - status [ref=e221]: Your online status could not be updated. The app will retry automatically.
+    - button "Open Saidamin Noviq Tutor" [ref=e223]:
+      - img "Saidamin" [ref=e225]
+      - generic [ref=e226]:
+        - generic [ref=e227]: Saidamin
+        - generic [ref=e231]: Ask Noviq Tutor

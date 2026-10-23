@@ -1,0 +1,176 @@
+- generic [ref=e3]:
+  - complementary [ref=e4]:
+    - generic [ref=e5]:
+      - button [ref=e6]:
+        - img "Noviq logo" [ref=e7]
+        - heading "Noviq PRO" [level=1] [ref=e8]
+      - button "Collapse sidebar" [ref=e9]
+    - navigation "Workspace navigation" [ref=e13]:
+      - button "Dashboard" [ref=e14]
+      - button "Planner" [ref=e24]
+      - button "Tutor" [ref=e31]
+      - button "Library" [ref=e38]
+      - button "Focus" [ref=e45]
+      - button "Flashcards" [ref=e54]
+      - button "Community" [ref=e63]
+      - button "Progress" [ref=e73]
+      - button "Plans" [ref=e79]
+      - button "Profile" [ref=e86]
+    - generic [ref=e94]:
+      - link "Profile" [ref=e95] [cursor=pointer]:
+        - /url: "#/profile"
+        - generic [ref=e96]:
+          - strong [ref=e97]: Tolibjon
+          - text: NOVIQ PRO
+      - button "Sign out" [ref=e98]
+  - main "Progress" [ref=e103]:
+    - generic [ref=e104]:
+      - heading "Hi, Tolibjon" [level=2] [ref=e106]
+      - generic [ref=e108]:
+        - button "Language" [ref=e110] [cursor=pointer]:
+          - generic [ref=e115]: English
+        - button "Switch to dark theme" [ref=e118]
+        - button "Notifications" [ref=e122]
+        - button "Open profile" [ref=e126]
+    - generic [ref=e130]:
+      - generic [ref=e131]:
+        - generic [ref=e132]:
+          - paragraph [ref=e133]:
+            - text: Workspace
+            - generic [ref=e134]: /
+            - text: Progress
+          - heading "Your progress" [level=1] [ref=e135]
+          - paragraph [ref=e136]: Every focused minute moves you forward.
+        - group "Productivity flow" [ref=e137]:
+          - button "Week" [pressed] [ref=e138] [cursor=pointer]
+          - button "Month" [ref=e139] [cursor=pointer]
+      - alert [ref=e140]:
+        - text: Statistics temporarily unavailable. Check your connection and retry.
+        - button "Retry" [ref=e141] [cursor=pointer]
+      - region "This week" [ref=e142]:
+        - generic [ref=e143]:
+          - heading "This week" [level=2] [ref=e144]
+          - strong [ref=e145]: 3 h 25 min
+          - paragraph [ref=e146]: of your 3 h 30 min goal
+          - generic [ref=e147]:
+            - progressbar "Current week goal" [ref=e148]
+            - generic [ref=e149]: 98%
+          - generic [ref=e150]:
+            - button "Continue learning" [ref=e151] [cursor=pointer]
+            - generic [ref=e154]: 5 min to your goal
+        - generic [ref=e155]:
+          - strong [ref=e158]: —
+          - generic [ref=e159]: Current streak
+        - generic [ref=e160]:
+          - strong [ref=e164]: —
+          - generic [ref=e165]: Tasks completed
+          - generic [ref=e166]: All time
+      - generic [ref=e167]:
+        - generic [ref=e168]:
+          - heading "Study rhythm" [level=2] [ref=e169]
+          - paragraph [ref=e170]: Focused time, day by day
+          - 'img "Mon: 40 min, Tue: 45 min, Wed: 35 min, Thu: 1 h, Fri: 25 min, Sat: 0 s, Sun: 0 s" [ref=e171]':
+            - generic [ref=e172]:
+              - generic [ref=e173]: 60 min
+              - generic [ref=e174]: 30 min
+              - generic [ref=e175]: 0 min
+            - generic [ref=e177]:
+              - generic [ref=e178]:
+                - generic [ref=e179]: 40 min
+                - generic [ref=e182]: Mon
+              - generic [ref=e183]:
+                - generic [ref=e184]: 45 min
+                - generic [ref=e187]: Tue
+              - generic [ref=e188]:
+                - generic [ref=e189]: 35 min
+                - generic [ref=e192]: Wed
+              - generic [ref=e193]:
+                - generic [ref=e194]: 60 min
+                - generic [ref=e197]: Thu
+              - generic [ref=e198]:
+                - generic [ref=e199]: 25 min
+                - generic [ref=e202]: Fri
+              - generic [ref=e203]: Sat
+              - generic [ref=e206]: Sun
+          - paragraph [ref=e209]: 3 h 25 min of focused study
+        - generic [ref=e210]:
+          - heading "Consistency" [level=2] [ref=e211]
+          - paragraph [ref=e212]: Last 5 weeks · daily study time
+          - generic [ref=e213]:
+            - generic [ref=e214]: Mon
+            - generic [ref=e215]: Tue
+            - generic [ref=e216]: Wed
+            - generic [ref=e217]: Thu
+            - generic [ref=e218]: Fri
+            - generic [ref=e219]: Sat
+            - generic [ref=e220]: Sun
+          - generic [ref=e221]:
+            - 'img "2026-09-21: 0 s" [ref=e222]'
+            - 'img "2026-09-22: 0 s" [ref=e223]'
+            - 'img "2026-09-23: 0 s" [ref=e224]'
+            - 'img "2026-09-24: 0 s" [ref=e225]'
+            - 'img "2026-09-25: 0 s" [ref=e226]'
+            - 'img "2026-09-26: 0 s" [ref=e227]'
+            - 'img "2026-09-27: 0 s" [ref=e228]'
+            - 'img "2026-09-28: 0 s" [ref=e229]'
+            - 'img "2026-09-29: 0 s" [ref=e230]'
+            - 'img "2026-09-30: 0 s" [ref=e231]'
+            - 'img "2026-10-01: 0 s" [ref=e232]'
+            - 'img "2026-10-02: 0 s" [ref=e233]'
+            - 'img "2026-10-03: 0 s" [ref=e234]'
+            - 'img "2026-10-04: 0 s" [ref=e235]'
+            - 'img "2026-10-05: 0 s" [ref=e236]'
+            - 'img "2026-10-06: 0 s" [ref=e237]'
+            - 'img "2026-10-07: 0 s" [ref=e238]'
+            - 'img "2026-10-08: 0 s" [ref=e239]'
+            - 'img "2026-10-09: 0 s" [ref=e240]'
+            - 'img "2026-10-10: 0 s" [ref=e241]'
+            - 'img "2026-10-11: 0 s" [ref=e242]'
+            - 'img "2026-10-12: 0 s" [ref=e243]'
+            - 'img "2026-10-13: 0 s" [ref=e244]'
+            - 'img "2026-10-14: 0 s" [ref=e245]'
+            - 'img "2026-10-15: 0 s" [ref=e246]'
+            - 'img "2026-10-16: 0 s" [ref=e247]'
+            - 'img "2026-10-17: 0 s" [ref=e248]'
+            - 'img "2026-10-18: 0 s" [ref=e249]'
+            - 'img "2026-10-19: 40 min" [ref=e250]'
+            - 'img "2026-10-20: 45 min" [ref=e251]'
+            - 'img "2026-10-21: 35 min" [ref=e252]'
+            - 'img "2026-10-22: 1 h" [ref=e253]'
+            - 'img "2026-10-23: 25 min" [ref=e254]'
+            - 'img "2026-10-24: 0 s" [ref=e255]'
+            - 'img "2026-10-25: 0 s" [ref=e256]'
+          - generic [ref=e257]:
+            - generic [ref=e258]: Less
+            - generic [ref=e264]: More
+      - generic [ref=e265]:
+        - generic [ref=e266]:
+          - heading "Recent sessions" [level=2] [ref=e267]
+          - table [ref=e268]:
+            - rowgroup [ref=e269]:
+              - row [ref=e270]:
+                - columnheader "Subject" [ref=e271]
+                - columnheader "Date & time" [ref=e272]
+                - columnheader "Duration" [ref=e273]
+            - rowgroup [ref=e274]:
+              - row [ref=e275]:
+                - cell "SAT" [ref=e276]
+                - cell "Oct 23, 10:13 AM" [ref=e281]
+                - cell "25 min" [ref=e282]
+              - row [ref=e283]:
+                - cell "SAT" [ref=e284]
+                - cell "Oct 22, 10:13 AM" [ref=e289]
+                - cell "1 h" [ref=e290]
+              - row [ref=e291]:
+                - cell "SAT" [ref=e292]
+                - cell "Oct 21, 10:13 AM" [ref=e297]
+                - cell "35 min" [ref=e298]
+        - generic [ref=e299]:
+          - heading "Your next step" [level=2] [ref=e300]
+          - paragraph [ref=e304]: Make room for one focused session.
+          - button "Open Planner" [ref=e305] [cursor=pointer]
+    - button "Open Saidamin Noviq Tutor" [ref=e309]:
+      - img "Saidamin" [ref=e311]
+      - generic [ref=e312]:
+        - generic [ref=e313]: Saidamin
+        - generic [ref=e317]: Ask Noviq Tutor

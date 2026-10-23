@@ -1,0 +1,130 @@
+- generic [ref=f3e3]:
+  - link "Skip to content" [ref=f3e4] [cursor=pointer]:
+    - /url: "#landing-main"
+  - banner [ref=f3e5]:
+    - link "NOVIQ" [ref=f3e6] [cursor=pointer]:
+      - /url: "#landing-home"
+    - navigation "Open navigation" [ref=f3e8]:
+      - link "Home" [ref=f3e9] [cursor=pointer]:
+        - /url: "#landing-home"
+      - link "Features" [ref=f3e10] [cursor=pointer]:
+        - /url: "#study-tools"
+      - link "Exam tracks" [ref=f3e11] [cursor=pointer]:
+        - /url: "#exam-tracks"
+    - generic [ref=f3e12]:
+      - generic [ref=f3e13]: Language
+      - combobox "Language" [ref=f3e14] [cursor=pointer]:
+        - option "English" [selected]
+        - option "O‘zbekcha"
+        - option "Русский"
+    - generic [ref=f3e15]:
+      - button "Sign in" [ref=f3e16] [cursor=pointer]
+      - button "Start free" [ref=f3e17] [cursor=pointer]
+  - main [ref=f3e20]:
+    - region [ref=f3e21]:
+      - generic [ref=f3e22]:
+        - paragraph [ref=f3e23]: AI-powered learning, brighter futures
+        - heading "Make exam prep make sense." [level=1] [ref=f3e27]:
+          - generic [ref=f3e28]: Make exam prep
+          - generic [ref=f3e29]: make sense.
+        - paragraph [ref=f3e30]: Your AI study operating system for IELTS, SAT, HSK, CEFR, school subjects, and university entrance exams. Plan smarter. Practice better. Go further.
+        - generic [ref=f3e31]:
+          - button "Start free" [ref=f3e32] [cursor=pointer]
+          - link "Explore features" [ref=f3e35] [cursor=pointer]:
+            - /url: "#study-tools"
+        - generic "Exam tracks" [ref=f3e38]:
+          - generic [ref=f3e39]: IELTS
+          - generic [ref=f3e40]: SAT
+          - generic [ref=f3e41]: HSK
+          - generic [ref=f3e42]: CEFR
+          - generic [ref=f3e43]: School
+          - generic [ref=f3e44]: University
+      - generic [ref=f3e45]:
+        - generic:
+          - img "Two NOVIQ student characters, one holding books and another a certificate, surrounded by learning illustrations"
+        - generic [ref=f3e52]: AI Tutor
+        - generic [ref=f3e58]: Practice better
+        - generic [ref=f3e64]: Plan smarter
+    - region "Features" [ref=f3e65]:
+      - article [ref=f3e66]:
+        - generic [ref=f3e70]:
+          - heading "Smart exam planning" [level=2] [ref=f3e71]
+          - paragraph [ref=f3e72]: Build a study plan around your goals, timeline and available time.
+      - article [ref=f3e73]:
+        - generic [ref=f3e79]:
+          - heading "Focused practice" [level=2] [ref=f3e80]
+          - paragraph [ref=f3e81]: Review vocabulary, work through topics and protect your study time.
+      - article [ref=f3e82]:
+        - generic [ref=f3e87]:
+          - heading "AI Tutor" [level=2] [ref=f3e88]
+          - paragraph [ref=f3e89]: Ask questions and get explanations, with AI usage limits based on your plan.
+    - region [ref=f3e90]:
+      - generic [ref=f3e91]:
+        - paragraph [ref=f3e92]: Your all-in-one study space
+        - heading "Everything you need to achieve more." [level=2] [ref=f3e96]:
+          - generic [ref=f3e97]: Everything you need
+          - generic [ref=f3e98]: to achieve more.
+        - paragraph [ref=f3e99]: A focused workspace brings planning, flashcards, your AI tutor and study notes together — so the next useful step is always close.
+        - link "Explore features" [ref=f3e100] [cursor=pointer]:
+          - /url: "#study-tools"
+        - list [ref=f3e103]:
+          - listitem [ref=f3e104]: Personalized planning
+          - listitem [ref=f3e107]: Connected study tools
+          - listitem [ref=f3e110]: Exam-focused learning
+      - figure "Actual NOVIQ interface · Empty account shown, not a student result." [ref=f3e113]:
+        - img "Actual NOVIQ Today dashboard showing an empty study plan, study library and focus tools" [ref=f3e115]
+        - img "Actual mobile NOVIQ dashboard with the Today, Plan, Tutor, Library and Focus navigation" [ref=f3e117]
+    - region [ref=f3e119]:
+      - generic [ref=f3e120]:
+        - generic [ref=f3e121]:
+          - paragraph [ref=f3e122]: Powerful tools for every learner
+          - heading "Built for real exam preparation." [level=2] [ref=f3e126]
+        - paragraph [ref=f3e127]: From planning to practice, vocabulary to notes — your tools stay in one focused workspace.
+      - generic [ref=f3e128]:
+        - button "Exam Planning Plan around your exam date, target score and available study time." [ref=f3e129] [cursor=pointer]:
+          - generic [ref=f3e133]:
+            - generic [ref=f3e134]: Exam Planning
+            - generic [ref=f3e135]: Plan around your exam date, target score and available study time.
+        - button "Vocabulary Decks Organize vocabulary and review it with your own flashcard decks." [ref=f3e138] [cursor=pointer]:
+          - generic [ref=f3e144]:
+            - generic [ref=f3e145]: Vocabulary Decks
+            - generic [ref=f3e146]: Organize vocabulary and review it with your own flashcard decks.
+        - button "Timed Practice Use focused sessions for reading, revision and exam preparation." [ref=f3e149] [cursor=pointer]:
+          - generic [ref=f3e155]:
+            - generic [ref=f3e156]: Timed Practice
+            - generic [ref=f3e157]: Use focused sessions for reading, revision and exam preparation.
+        - button "Performance Metrics Follow recorded study activity, focus time and learning progress." [ref=f3e160] [cursor=pointer]:
+          - generic [ref=f3e163]:
+            - generic [ref=f3e164]: Performance Metrics
+            - generic [ref=f3e165]: Follow recorded study activity, focus time and learning progress.
+        - button "AI Exam Tutor Work through questions with structured AI explanations." [ref=f3e168] [cursor=pointer]:
+          - generic [ref=f3e173]:
+            - generic [ref=f3e174]: AI Exam Tutor
+            - generic [ref=f3e175]: Work through questions with structured AI explanations.
+        - button "Academic Notebook Keep sources, study notes and exam reflections in one place." [ref=f3e178] [cursor=pointer]:
+          - generic [ref=f3e182]:
+            - generic [ref=f3e183]: Academic Notebook
+            - generic [ref=f3e184]: Keep sources, study notes and exam reflections in one place.
+    - region [ref=f3e187]:
+      - generic [ref=f3e192]:
+        - paragraph [ref=f3e193]: Your next chapter starts here
+        - heading "Start your exam success journey today." [level=2] [ref=f3e194]
+        - paragraph [ref=f3e195]: Create your account and bring your study tools together.
+      - generic [ref=f3e196]:
+        - button "Start free" [ref=f3e197] [cursor=pointer]
+        - paragraph [ref=f3e200]: Free account available. AI limits depend on your plan.
+  - contentinfo [ref=f3e201]:
+    - generic [ref=f3e202]:
+      - link "NOVIQ" [ref=f3e203] [cursor=pointer]:
+        - /url: "#landing-home"
+      - navigation "Features" [ref=f3e205]:
+        - link "Home" [ref=f3e206] [cursor=pointer]:
+          - /url: "#landing-home"
+        - link "Features" [ref=f3e207] [cursor=pointer]:
+          - /url: "#study-tools"
+        - link "Exam tracks" [ref=f3e208] [cursor=pointer]:
+          - /url: "#exam-tracks"
+        - button "Sign in" [ref=f3e209] [cursor=pointer]
+    - generic [ref=f3e210]:
+      - paragraph [ref=f3e211]: © 2026 NOVIQ. Crafted for modern students, everywhere.
+      - generic [ref=f3e212]: All rights reserved.

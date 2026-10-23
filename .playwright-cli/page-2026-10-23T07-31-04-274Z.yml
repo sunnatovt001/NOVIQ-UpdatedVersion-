@@ -1,0 +1,129 @@
+- generic [ref=e3]:
+  - complementary [ref=e4]:
+    - generic [ref=e5]:
+      - button [ref=e6]:
+        - img "Noviq logo" [ref=e7]
+        - heading "Noviq PRO" [level=1] [ref=e8]
+      - button "Collapse sidebar" [ref=e9]
+    - navigation "Workspace navigation" [ref=e13]:
+      - button "Dashboard" [ref=e14]
+      - button "Planner" [ref=e24]
+      - button "Tutor" [ref=e31]
+      - button "Library" [ref=e38]
+      - button "Focus" [ref=e45]
+      - button "Flashcards" [ref=e54]
+      - button "Community" [ref=e63]
+      - button "Progress" [ref=e73]
+      - button "Plans" [ref=e80]
+      - button "Profile" [ref=e87]
+    - generic [ref=e94]:
+      - link "Profile" [ref=e95] [cursor=pointer]:
+        - /url: "#/profile"
+        - generic [ref=e96]:
+          - strong [ref=e97]: Tolibjon
+          - text: NOVIQ PRO
+      - button "Sign out" [ref=e98]
+  - main "Profile" [ref=e103]:
+    - generic [ref=e104]:
+      - heading "Hi, Tolibjon" [level=2] [ref=e106]
+      - generic [ref=e107]:
+        - generic [ref=e108]:
+          - generic [ref=e109]:
+            - paragraph [ref=e110]: Novice Student
+            - paragraph [ref=e111]: "0"
+          - generic [ref=e112]:
+            - paragraph [ref=e113]: Current streak
+            - paragraph [ref=e117]: "5"
+        - generic [ref=e119]:
+          - button "Language" [ref=e121] [cursor=pointer]:
+            - generic [ref=e126]: English
+          - button "Switch to dark theme" [ref=e129]
+          - button "Notifications" [ref=e133]
+          - button "Open profile" [ref=e137]
+    - generic [ref=e141]:
+      - generic [ref=e142]:
+        - generic [ref=e143]:
+          - generic [ref=e144]: Profile
+          - heading "Profile" [level=2] [ref=e147]
+          - paragraph [ref=e148]: Manage your account, study preferences, avatar, and connected services.
+        - button "Edit profile" [ref=e149]
+      - generic [ref=e153]:
+        - complementary [ref=e154]:
+          - generic [ref=e155]:
+            - generic [ref=e156]:
+              - img "Tolibjon" [ref=e158]
+              - button "Change avatar" [ref=e159]
+            - heading "Tolibjon" [level=3] [ref=e163]
+            - paragraph
+            - generic [ref=e164]:
+              - button "Change avatar" [ref=e165]
+              - button "Hide buttons" [ref=e169]
+            - generic [ref=e170]:
+              - paragraph [ref=e171]: Premium avatars
+              - generic "Premium avatars" [ref=e172]:
+                - button "Choose premium avatar 1" [pressed] [ref=e173]
+                - button "Choose premium avatar 2" [ref=e174]
+                - button "Choose premium avatar 3" [ref=e175]
+                - button "Choose premium avatar 4" [ref=e176]
+            - generic [ref=e177]:
+              - generic [ref=e178]:
+                - paragraph [ref=e179]: "1"
+                - paragraph [ref=e180]: Novice Student
+              - generic [ref=e181]:
+                - paragraph [ref=e182]: "0"
+                - paragraph [ref=e183]: XP
+              - generic [ref=e184]:
+                - paragraph [ref=e185]: "5"
+                - paragraph [ref=e186]: Streak
+          - generic [ref=e187]:
+            - heading "Connected services" [level=4] [ref=e188]
+            - generic [ref=e191]:
+              - generic [ref=e193]:
+                - generic [ref=e194]: Telegram connection
+                - text: Not connected
+              - paragraph [ref=e196]: Open the bot and press Start. NOVIQ will securely connect the verified chat to your profile for study summaries.
+              - button "Connect bot" [ref=e198]
+        - main [ref=e203]:
+          - generic [ref=e204]:
+            - heading "Account details" [level=4] [ref=e205]
+            - generic [ref=e207]:
+              - generic [ref=e208]:
+                - text: Full name
+                - textbox "Full name" [disabled] [ref=e213]: Tolibjon
+              - generic [ref=e214]:
+                - text: Email
+                - textbox "Email" [disabled] [ref=e219]
+              - generic [ref=e220]:
+                - text: Academic status
+                - combobox "Academic status" [disabled] [ref=e221]:
+                  - option "Beginner" [selected]
+                  - option "High school"
+                  - option "University student"
+                  - option "IELTS student"
+                  - option "DTM preparer"
+                  - option "Independent student"
+              - generic [ref=e222]:
+                - text: Daily target (minutes)
+                - spinbutton "Daily target (minutes)" [disabled] [ref=e228]: "30"
+              - generic [ref=e229]:
+                - text: Telegram ID
+                - textbox "Telegram ID Open the bot and press Start. NOVIQ will securely connect the verified chat to your profile for study summaries." [disabled] [ref=e233]:
+                  - /placeholder: "123456789"
+                - paragraph [ref=e234]: Open the bot and press Start. NOVIQ will securely connect the verified chat to your profile for study summaries.
+          - generic [ref=e235]:
+            - heading "Preferences" [level=4] [ref=e236]
+            - generic [ref=e238]:
+              - generic [ref=e239]:
+                - paragraph [ref=e245]: Study reminders
+                - switch "Study reminders enabled" [checked] [ref=e246]
+              - generic [ref=e248]:
+                - paragraph [ref=e253]: Daily streak summary
+                - switch "Daily streak summary enabled" [checked] [ref=e254]
+              - generic [ref=e256]:
+                - paragraph [ref=e263]: AI source previews
+                - switch "AI source previews enabled" [checked] [ref=e264]
+    - button "Open Saidamin Noviq Tutor" [ref=e267]:
+      - img "Saidamin" [ref=e269]
+      - generic [ref=e270]:
+        - generic [ref=e271]: Saidamin
+        - generic [ref=e275]: Ask Noviq Tutor

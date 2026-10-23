@@ -1,0 +1,212 @@
+- generic [ref=f1e1]:
+  - generic [ref=f1e3]:
+    - complementary [ref=f1e4]:
+      - generic [ref=f1e5]:
+        - button [ref=f1e6]:
+          - img "Noviq logo" [ref=f1e7]
+          - heading "Noviq PRO" [level=1] [ref=f1e8]
+        - button "Collapse sidebar" [ref=f1e9]
+      - navigation "Workspace navigation" [ref=f1e13]:
+        - button "Dashboard" [ref=f1e14]
+        - button "Planner" [ref=f1e24]
+        - button "Tutor" [ref=f1e31]
+        - button "Library" [ref=f1e38]
+        - button "Focus" [ref=f1e45]
+        - button "Flashcards" [ref=f1e54]
+        - button "Community" [ref=f1e62]
+        - button "Progress" [ref=f1e72]
+        - button "Plans" [ref=f1e79]
+        - button "Profile" [ref=f1e86]
+      - generic [ref=f1e94]:
+        - link "Profile" [ref=f1e95] [cursor=pointer]:
+          - /url: "#/profile"
+          - generic [ref=f1e96]:
+            - strong [ref=f1e97]: Tolibjon
+            - text: NOVIQ PRO
+        - button "Sign out" [ref=f1e98]
+    - main "Flashcards" [ref=f1e103]:
+      - generic [ref=f1e104]:
+        - heading "Hi, Tolibjon" [level=2] [ref=f1e106]
+        - generic [ref=f1e108]:
+          - button "Language" [ref=f1e110] [cursor=pointer]:
+            - generic [ref=f1e115]: English
+          - button "Switch to dark theme" [ref=f1e118]
+          - button "Notifications" [ref=f1e122]
+          - button "Open profile" [ref=f1e126]
+      - generic [ref=f1e347]:
+        - generic [ref=f1e348]:
+          - generic [ref=f1e349]:
+            - heading "Flashcards" [level=2] [ref=f1e350]
+            - paragraph [ref=f1e351]: Create effortlessly. Learn actively. Remember longer.
+          - generic [ref=f1e352]:
+            - link "Draft a flashcard deck" [ref=f1e353] [cursor=pointer]:
+              - /url: "#/dashboard"
+            - button "Backup" [ref=f1e357] [cursor=pointer]
+            - button "Create deck" [ref=f1e361] [cursor=pointer]
+        - region "Your flashcard activity" [ref=f1e363]:
+          - generic [ref=f1e370]:
+            - strong [ref=f1e371]: "9"
+            - generic [ref=f1e372]: Cards in your library
+          - generic [ref=f1e378]:
+            - strong [ref=f1e379]: "9"
+            - generic [ref=f1e380]: Ready to review
+          - generic [ref=f1e386]:
+            - strong [ref=f1e387]: "0"
+            - generic [ref=f1e388]: Sessions completed
+          - paragraph [ref=f1e389]: A little recall today. A stronger memory tomorrow.
+        - generic [ref=f1e398]:
+          - group [ref=f1e399]:
+            - generic "My library · 3" [ref=f1e400] [cursor=pointer]
+            - complementary [ref=f1e404]:
+              - textbox "Search decks" [ref=f1e409]:
+                - /placeholder: Search decks, subjects, tags
+              - generic [ref=f1e410]:
+                - combobox "Library filter" [ref=f1e411]:
+                  - option "All decks" [selected]
+                  - option "Favorites"
+                  - option "Archived"
+                - combobox "Sort decks" [ref=f1e412]:
+                  - option "Recent" [selected]
+                  - option "Title"
+              - navigation "Deck library" [ref=f1e413]:
+                - button "SAT Vocabulary SAT · 4 cards" [ref=f1e414]:
+                  - generic [ref=f1e420]:
+                    - strong [ref=f1e421]: SAT Vocabulary
+                    - generic [ref=f1e422]: SAT · 4 cards
+                - button "Motion & forces Physics · 3 cards" [ref=f1e425]:
+                  - generic [ref=f1e431]:
+                    - strong [ref=f1e432]: Motion & forces
+                    - generic [ref=f1e433]: Physics · 3 cards
+                - button "Everyday expressions IELTS · 2 cards" [ref=f1e434]:
+                  - generic [ref=f1e440]:
+                    - strong [ref=f1e441]: Everyday expressions
+                    - generic [ref=f1e442]: IELTS · 2 cards
+          - main [ref=f1e443]:
+            - generic [ref=f1e444]:
+              - generic [ref=f1e445]:
+                - generic [ref=f1e446]: SAT
+                - heading "SAT Vocabulary" [level=3] [ref=f1e447]
+                - paragraph [ref=f1e448]: Words worth remembering.
+              - generic [ref=f1e449]:
+                - button "Favorite deck" [pressed] [ref=f1e450] [cursor=pointer]
+                - button "Archive deck" [ref=f1e453] [cursor=pointer]
+            - group [ref=f1e457]:
+              - generic "Deck details & tags" [ref=f1e458] [cursor=pointer]
+            - generic [ref=f1e459]:
+              - generic [ref=f1e460]:
+                - strong [ref=f1e461]: "4"
+                - text: cards
+              - generic [ref=f1e462]:
+                - strong [ref=f1e463]: "4"
+                - text: due
+              - generic [ref=f1e464]:
+                - strong [ref=f1e465]: "0"
+                - text: reviewed at least once
+              - generic [ref=f1e466]: Cloud loaded
+            - generic [ref=f1e467]:
+              - generic [ref=f1e469]:
+                - heading "Learn your way" [level=4] [ref=f1e470]
+                - paragraph [ref=f1e471]: Recall first. Reveal when you’re ready.
+              - group "Flashcard preview. Use arrow keys to navigate." [ref=f1e472]:
+                - button "Flip preview card" [ref=f1e473] [cursor=pointer]:
+                  - generic [ref=f1e474]:
+                    - generic [aria-hidden] [ref=f1e475]:
+                      - generic [ref=f1e476]: Question
+                      - generic [ref=f1e480]: Resilient
+                      - generic [ref=f1e481]: Click to flip
+                    - generic [ref=f1e482]:
+                      - generic [ref=f1e483]: Answer
+                      - generic [ref=f1e487]: Able to recover after difficulty.
+                      - generic [ref=f1e488]: Click to flip
+                - generic [ref=f1e489]:
+                  - button "Previous preview card" [disabled] [ref=f1e490]
+                  - generic [ref=f1e493]: 1 / 4
+                  - button "Next preview card" [ref=f1e494] [cursor=pointer]
+              - generic [ref=f1e497]:
+                - button "Flashcards" [pressed] [ref=f1e498] [cursor=pointer]
+                - button "Match" [ref=f1e499] [cursor=pointer]
+                - button "Type answer" [ref=f1e500] [cursor=pointer]
+                - button "Missing letters" [ref=f1e501] [cursor=pointer]
+                - button "Multiple choice" [ref=f1e502] [cursor=pointer]
+                - button "Listen & spell" [ref=f1e503] [cursor=pointer]
+                - button "Smart Learn" [ref=f1e504] [cursor=pointer]
+              - generic [ref=f1e505]:
+                - generic [ref=f1e506]:
+                  - checkbox "Shuffle" [checked] [ref=f1e507]
+                  - text: Shuffle
+                - generic [ref=f1e508]:
+                  - checkbox "Vocabulary hints" [checked] [ref=f1e509]
+                  - text: Vocabulary hints
+              - generic [ref=f1e510]:
+                - button "Start studying" [ref=f1e511] [cursor=pointer]
+                - button "Review due cards (4)" [ref=f1e514] [cursor=pointer]
+                - button "Resume session" [ref=f1e556] [cursor=pointer]
+              - paragraph [ref=f1e515]: Match uses up to 6 distinct pairs; other sessions use up to 200 cards. Duplicate pairs are excluded from choice activities.
+            - generic [ref=f1e516]:
+              - heading "Cards" [level=4] [ref=f1e517]
+              - generic [ref=f1e518]:
+                - button "Edit & add cards" [ref=f1e519] [cursor=pointer]
+                - button "Export" [ref=f1e521] [cursor=pointer]
+                - button "Add to Planner" [ref=f1e525] [cursor=pointer]
+            - textbox "Search cards" [ref=f1e532]:
+              - /placeholder: Find a card
+            - generic [ref=f1e533]:
+              - article [ref=f1e534]:
+                - strong [ref=f1e536]: Resilient
+                - paragraph [ref=f1e537]: Able to recover after difficulty.
+                - generic [ref=f1e538]: Due
+              - article [ref=f1e539]:
+                - strong [ref=f1e541]: Pragmatic
+                - paragraph [ref=f1e542]: Dealing with things in a practical way.
+                - generic [ref=f1e543]: Due
+              - article [ref=f1e544]:
+                - strong [ref=f1e546]: Ambiguous
+                - paragraph [ref=f1e547]: Having more than one possible meaning.
+                - generic [ref=f1e548]: Due
+              - article [ref=f1e549]:
+                - strong [ref=f1e551]: Concise
+                - paragraph [ref=f1e552]: Expressing much in a few words.
+                - generic [ref=f1e553]: Due
+        - group [ref=f1e554]:
+          - generic "Library insights" [ref=f1e555] [cursor=pointer]
+      - button "Open Saidamin Noviq Tutor" [ref=f1e336]:
+        - img "Saidamin" [ref=f1e338]
+        - generic [ref=f1e339]:
+          - generic [ref=f1e340]: Saidamin
+          - generic [ref=f1e344]: Ask Noviq Tutor
+  - dialog "Flashcards" [ref=f1e558]:
+    - banner [ref=f1e559]:
+      - button "Save & exit" [ref=f1e560] [cursor=pointer]
+      - generic [ref=f1e563]:
+        - strong [ref=f1e564]: Flashcards
+        - paragraph [ref=f1e565]: 0 / 4 reviewed
+      - button "Show hint" [ref=f1e566] [cursor=pointer]: Hint
+    - progressbar "Session progress" [ref=f1e569]
+    - generic [ref=f1e570]:
+      - group [ref=f1e571]:
+        - generic "Study options" [ref=f1e572] [cursor=pointer]
+      - button "Flip card" [active] [ref=f1e573]:
+        - generic [ref=f1e574]:
+          - generic [aria-hidden] [ref=f1e575]:
+            - generic [ref=f1e576]: RECALL FIRST
+            - generic [ref=f1e577]: Pragmatic
+          - generic [ref=f1e578]:
+            - generic [ref=f1e579]: ANSWER
+            - generic [ref=f1e580]: Dealing with things in a practical way.
+        - generic [ref=f1e581]: Space or Enter to flip
+      - generic [ref=f1e588]:
+        - button "Again 1" [ref=f1e589] [cursor=pointer]:
+          - text: Again
+          - generic [ref=f1e590]: "1"
+        - button "Hard 2" [ref=f1e591] [cursor=pointer]:
+          - text: Hard
+          - generic [ref=f1e592]: "2"
+        - button "Good 3" [ref=f1e593] [cursor=pointer]:
+          - text: Good
+          - generic [ref=f1e594]: "3"
+        - button "Easy 4" [ref=f1e595] [cursor=pointer]:
+          - text: Easy
+          - generic [ref=f1e596]: "4"
+    - contentinfo [ref=f1e582]:
+      - generic [ref=f1e583]: Hints make the next review sooner. Take your time; this is not a race.
+      - button "Try again" [ref=f1e584] [cursor=pointer]

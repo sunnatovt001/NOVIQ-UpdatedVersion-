@@ -12,6 +12,25 @@ export const createLazyPage = (loader: () => Promise<Record<string, any>>, name:
 
 // Cache component definitions only, never account data or rendered page state.
 type PageLoader = () => Promise<Record<string, any>>;
+const preparedPages = new WeakMap<PageLoader, Map<string, React.ComponentType<any>>>();
+const preparingPages = new WeakMap<PageLoader, Map<string, Promise<void>>>();
+
+// Prepare component code before navigation; never cache rendered account data.
+export const prepareRoutePage = (loader: PageLoader, name: string): Promise<void> => {
+  if (preparedPages.get(loader)?.has(name)) return Promise.resolve();
+  let pending = preparingPages.get(loader);
+  if (!pending) { pending = new Map(); preparingPages.set(loader, pending); }
+  const existing = pending.get(name);
+  if (existing) return existing;
+  const request = withDeadline(loader(), 15000).then(module => {
+    if (!module[name]) throw new Error(`Page export ${name} is missing`);
+    let pages = preparedPages.get(loader);
+    if (!pages) { pages = new Map(); preparedPages.set(loader, pages); }
+    pages.set(name, module[name]);
+  }).finally(() => pending!.delete(name));
+  pending.set(name, request);
+  return request;
+};
 const lazyPages = new WeakMap<PageLoader, Map<string, ReturnType<typeof createLazyPage>>>();
 export const getCachedLazyPage = (loader: PageLoader, name: string, retry = false) => {
   let pages = lazyPages.get(loader);
@@ -44,7 +63,7 @@ export class PageBoundary extends React.Component<React.PropsWithChildren<{ retr
 // A rejected React.lazy promise is cached; retry must create a new lazy type.
 export function RoutePage({ loader, name, pageProps }: { loader: () => Promise<Record<string, any>>; name: string; pageProps?: Record<string, unknown> }) {
   const [attempt, setAttempt] = useState(0);
-  const Page = useMemo(() => getCachedLazyPage(loader, name, attempt > 0), [loader, name, attempt]);
+  const Page = useMemo(() => attempt === 0 && preparedPages.get(loader)?.get(name) || getCachedLazyPage(loader, name, attempt > 0), [loader, name, attempt]);
   return <PageBoundary key={`${name}:${attempt}`} retry={() => setAttempt(value => value + 1)}>
     <Suspense fallback={<div role="status" className="p-12 text-center">{getRecoveryCopy().loading}</div>}><Page {...pageProps} /></Suspense>
   </PageBoundary>;

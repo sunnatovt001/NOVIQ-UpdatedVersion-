@@ -1,0 +1,181 @@
+- generic [ref=e3]:
+  - complementary [ref=e4]:
+    - generic [ref=e5]:
+      - button [ref=e6]:
+        - img "Noviq logo" [ref=e7]
+        - heading "Noviq PRO" [level=1] [ref=e8]
+      - button "Collapse sidebar" [ref=e9]
+    - navigation "Workspace navigation" [ref=e13]:
+      - button "Dashboard" [ref=e14]
+      - button "Planner" [ref=e23]
+      - button "Tutor" [ref=e30]
+      - button "Library" [ref=e37]
+      - button "Focus" [ref=e44]
+      - button "Flashcards" [ref=e53]
+      - button "Community" [ref=e62]
+      - button "Progress" [ref=e72]
+      - button "Plans" [ref=e79]
+      - button "Profile" [ref=e86]
+    - generic [ref=e94]:
+      - link "Profile" [ref=e95] [cursor=pointer]:
+        - /url: "#/profile"
+        - generic [ref=e97]:
+          - strong [ref=e98]: Tolibjon
+          - text: NOVIQ PRO
+      - button "Sign out" [ref=e99]
+  - main "Dashboard" [ref=e104]:
+    - generic [ref=e105]:
+      - button "Language" [ref=e107] [cursor=pointer]:
+        - generic [ref=e112]: English
+      - button "Switch to dark theme" [ref=e115]
+    - generic [ref=e120]:
+      - generic [ref=e121]:
+        - generic [ref=e122]: Workspace / Dashboard
+        - generic [ref=e123]:
+          - textbox "Search your workspace" [ref=e128]
+          - button "Notifications" [ref=e130] [cursor=pointer]
+          - link "Open profile" [ref=e134] [cursor=pointer]:
+            - /url: "#/profile"
+      - generic [ref=e135]:
+        - generic [ref=e136]:
+          - heading "Good morning, Tolibjon" [level=1] [ref=e137]
+          - paragraph [ref=e138]: A clear plan. A little focus. Real progress.
+        - time [ref=e139]: Friday, October 23
+      - status [ref=e140]: Loading your workspace…
+      - generic [ref=e141]:
+        - generic [ref=e147]:
+          - strong [ref=e148]: —
+          - paragraph [ref=e149]: Study time this week
+        - generic [ref=e155]:
+          - strong [ref=e156]: —
+          - paragraph [ref=e157]: Tasks completed
+        - generic [ref=e162]:
+          - strong [ref=e163]: 5 days
+          - paragraph [ref=e164]: Current streak
+        - generic [ref=e171]:
+          - strong [ref=e172]: —
+          - paragraph [ref=e173]: Cards to review
+      - generic [ref=e174]:
+        - generic [ref=e176]:
+          - paragraph [ref=e177]: CONTINUE YOUR JOURNEY
+          - heading "Physics · Kinematics" [level=2] [ref=e178]
+          - paragraph [ref=e179]: Motion, velocity and acceleration · 45 min
+          - progressbar "Task progress" [ref=e180]
+          - generic [ref=e181]: 1 of 3 tasks completed
+          - button "Start focus session" [disabled] [ref=e182]
+        - generic [ref=e185]:
+          - generic [ref=e186]:
+            - heading "This week" [level=2] [ref=e187]
+            - generic [ref=e188]: —
+          - 'img "Study minutes by day this week: 2026-10-19: —; 2026-10-20: —; 2026-10-21: —; 2026-10-22: —; 2026-10-23: —; 2026-10-24: —; 2026-10-25: —" [ref=e189]':
+            - generic [ref=e190]:
+              - generic [ref=e191]: 2h
+              - generic [ref=e192]: 1h
+              - generic [ref=e193]: 0h
+            - generic [ref=e194]:
+              - generic [ref=e195]:
+                - generic [ref=e196]:
+                  - 'generic "2026-10-19: 0 min"'
+                - generic [ref=e197]: Mon
+              - generic [ref=e198]:
+                - generic [ref=e199]:
+                  - 'generic "2026-10-20: 0 min"'
+                - generic [ref=e200]: Tue
+              - generic [ref=e201]:
+                - generic [ref=e202]:
+                  - 'generic "2026-10-21: 0 min"'
+                - generic [ref=e203]: Wed
+              - generic [ref=e204]:
+                - generic [ref=e205]:
+                  - 'generic "2026-10-22: 0 min"'
+                - generic [ref=e206]: Thu
+              - generic [ref=e207]:
+                - generic [ref=e208]:
+                  - 'generic "2026-10-23: 0 min"'
+                - generic [ref=e209]: Fri
+              - generic [ref=e210]:
+                - generic [ref=e211]:
+                  - 'generic "2026-10-24: 0 min"'
+                - generic [ref=e212]: Sat
+              - generic [ref=e213]:
+                - generic [ref=e214]:
+                  - 'generic "2026-10-25: 0 min"'
+                - generic [ref=e215]: Sun
+        - generic [ref=e216]:
+          - generic [ref=e217]:
+            - heading "Your study plan" [level=2] [ref=e218]
+            - link "View planner" [ref=e219] [cursor=pointer]:
+              - /url: "#/planner"
+          - generic [ref=e222]:
+            - generic [ref=e223]:
+              - time [ref=e224]: 09:00
+              - generic [ref=e225]:
+                - link "SAT Reading & Writing Practice transitions" [ref=e230] [cursor=pointer]:
+                  - /url: "#/planner"
+                  - strong [ref=e231]: SAT Reading & Writing
+                  - generic [ref=e232]: Practice transitions
+                - generic [ref=e233]: 25 min
+                - 'button "Reopen: Practice transitions" [pressed] [ref=e237] [cursor=pointer]'
+            - generic [ref=e240]:
+              - time [ref=e241]: 14:00
+              - generic [ref=e242]:
+                - link "Physics · Kinematics Motion, velocity and acceleration" [ref=e246] [cursor=pointer]:
+                  - /url: "#/planner"
+                  - strong [ref=e247]: Physics · Kinematics
+                  - generic [ref=e248]: Motion, velocity and acceleration
+                - generic [ref=e249]: 45 min
+                - 'button "Complete: Motion, velocity and acceleration" [ref=e253] [cursor=pointer]'
+            - generic [ref=e254]:
+              - time [ref=e255]: 17:00
+              - generic [ref=e256]:
+                - link "IELTS Speaking Part 2 · Sample questions" [ref=e260] [cursor=pointer]:
+                  - /url: "#/planner"
+                  - strong [ref=e261]: IELTS Speaking
+                  - generic [ref=e262]: Part 2 · Sample questions
+                - generic [ref=e263]: 30 min
+                - 'button "Complete: Part 2 · Sample questions" [ref=e267] [cursor=pointer]'
+        - generic [ref=e268]:
+          - heading "Review & remember" [level=2] [ref=e269]
+          - generic [ref=e287]:
+            - strong [ref=e288]: — cards
+            - paragraph [ref=e289]: ready for review
+            - link "Review flashcards" [ref=e290] [cursor=pointer]:
+              - /url: "#/flashcards"
+        - generic [ref=e293]:
+          - heading "Your subjects" [level=2] [ref=e294]
+          - generic [ref=e295]:
+            - link "SAT Reading & Writing Reading & Writing 100 100%" [ref=e296] [cursor=pointer]:
+              - /url: "#/planner"
+              - generic [ref=e300]:
+                - strong [ref=e301]: SAT Reading & Writing
+                - generic [ref=e302]: Reading & Writing
+              - 'progressbar "SAT Reading & Writing: 100%" [ref=e303]'
+              - generic [ref=e304]: 100%
+            - link "Physics · Kinematics Motion, velocity and acceleration 0 0%" [ref=e305] [cursor=pointer]:
+              - /url: "#/planner"
+              - generic [ref=e309]:
+                - strong [ref=e310]: Physics · Kinematics
+                - generic [ref=e311]: Motion, velocity and acceleration
+              - 'progressbar "Physics · Kinematics: 0%" [ref=e312]'
+              - generic [ref=e313]: 0%
+            - link "IELTS Speaking Part 2 · Sample questions 0 0%" [ref=e314] [cursor=pointer]:
+              - /url: "#/planner"
+              - generic [ref=e318]:
+                - strong [ref=e319]: IELTS Speaking
+                - generic [ref=e320]: Part 2 · Sample questions
+              - 'progressbar "IELTS Speaking: 0%" [ref=e321]'
+              - generic [ref=e322]: 0%
+        - generic [ref=e327]:
+          - heading "A useful next step" [level=2] [ref=e328]
+          - paragraph [ref=e329]: Bring a tricky question to your tutor before your next session.
+          - link "Open Tutor" [ref=e330] [cursor=pointer]:
+            - /url: "#/tutor"
+      - generic [ref=e333]:
+        - button "Explore your learning insights" [ref=e334] [cursor=pointer]
+        - link "NOVIQ PRO" [ref=e337] [cursor=pointer]:
+          - /url: "#/pricing"
+    - button "Open Saidamin Noviq Tutor" [ref=e339]:
+      - img "Saidamin" [ref=e341]
+      - generic [ref=e342]:
+        - generic [ref=e343]: Saidamin
+        - generic [ref=e347]: Ask Noviq Tutor

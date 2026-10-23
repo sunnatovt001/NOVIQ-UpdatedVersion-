@@ -1,0 +1,44 @@
+- generic [ref=e3]:
+  - complementary [ref=e4]:
+    - generic [ref=e5]:
+      - button [ref=e6]:
+        - img "Noviq logo" [ref=e7]
+        - heading "Noviq PRO" [level=1] [ref=e8]
+      - button "Collapse sidebar" [ref=e9]
+    - navigation "Workspace navigation" [ref=e13]:
+      - button "Dashboard" [ref=e14]
+      - button "Planner" [ref=e24]
+      - button "Tutor" [ref=e31]
+      - button "Library" [ref=e38]
+      - button "Focus" [ref=e45]
+      - button "Flashcards" [ref=e54]
+      - button "Community" [ref=e63]
+      - button "Progress" [ref=e73]
+      - button "Plans" [ref=e80]
+      - button "Profile" [ref=e87]
+    - generic [ref=e94]:
+      - link "Profile" [ref=e95] [cursor=pointer]:
+        - /url: "#/profile"
+        - generic [ref=e96]:
+          - strong [ref=e97]: Tolibjon
+          - text: NOVIQ PRO
+      - button "Sign out" [ref=e98]
+  - main "Profile" [ref=e103]:
+    - generic [ref=e104]:
+      - heading "Hi, Tolibjon" [level=2] [ref=e106]
+      - generic [ref=e108]:
+        - button "Language" [ref=e110] [cursor=pointer]:
+          - generic [ref=e115]: English
+        - button "Switch to dark theme" [ref=e118]
+        - button "Notifications" [ref=e122]
+        - button "Open profile" [ref=e126]
+    - alert [ref=e130]:
+      - heading "This page could not be loaded" [level=1] [ref=e131]
+      - paragraph [ref=e132]: Check your connection and try again. Your saved data is unchanged.
+      - button "Retry page" [ref=e133]
+      - button "Reload app" [ref=e134]
+    - button "Open Saidamin Noviq Tutor" [ref=e136]:
+      - img "Saidamin" [ref=e138]
+      - generic [ref=e139]:
+        - generic [ref=e140]: Saidamin
+        - generic [ref=e144]: Ask Noviq Tutor

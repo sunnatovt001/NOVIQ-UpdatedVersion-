@@ -1,4 +1,6 @@
 import {useStudyEvidence,type StudyEvidence} from '@/src/features/pro/useStudyEvidence';
+import { useMembership } from '@/src/features/pro/MembershipContext';
+import { GlassProgress } from '@/src/features/analytics/GlassProgress';
 import {activityDay,actualDuration} from '@/src/features/pro/activitySummary';
 import {ReferenceActivityRail} from '@/src/features/pro/ReferenceActivityRail';
 import {ProEntry} from '@/src/features/pro/ProEntry';
@@ -95,6 +97,7 @@ const heatmapClass = (intensity: number) => {
 
 export const Analytics = ({ setActiveTab }: { setActiveTab?: (t: string) => void }) => {
   const { user, profile } = useAuth();
+  const { cinematic } = useMembership();
   const { locale } = useLocale();
   const copy = useMemo(() => getAnalyticsCopy(locale), [locale]);
   const activityMetrics = useUserActivityMetrics(user?.uid);
@@ -159,6 +162,8 @@ export const Analytics = ({ setActiveTab }: { setActiveTab?: (t: string) => void
       bg: "bg-blue-50 dark:bg-blue-500/10",
     },
   ];
+
+  if (cinematic) return <GlassProgress sessions={studySessions} ready={dataReady} loading={sessionLoading} error={sessionError} deviceSeconds={evidence.deviceSeconds} retry={() => { evidence.retry(); activityMetrics.retry(); }} metrics={activityMetrics} dailyTargetMinutes={dailyTargetMinutes} navigate={setActiveTab}/>;
 
   return (
     <div className="pro-analytics-workspace space-y-8 px-0 pb-24 text-slate-950 dark:text-slate-50 sm:space-y-10">

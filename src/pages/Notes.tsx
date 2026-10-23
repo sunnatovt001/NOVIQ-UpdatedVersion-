@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   Book,
   FileText,
+  FolderOpen,
   Globe,
   Highlighter,
   Link as LinkIcon,
@@ -72,6 +73,7 @@ export const Notes = () => {
   const [activeNoteId, setActiveNoteId] = useState("");
   const notebookOwnerRef=useRef(user?.uid);notebookOwnerRef.current=user?.uid;
   const [search, setSearch] = useState("");
+  const [collectionFilter, setCollectionFilter] = useState<'all' | 'notes' | 'documents' | 'links'>('all');
   const [chatInput, setChatInput] = useState("");
   const [isSavingNote, setIsSavingNote] = useState(false);
   const [isAiLoading, setIsAiLoading] = useState(false);
@@ -140,13 +142,13 @@ export const Notes = () => {
   const activeNote = useMemo(() => notes.find((note) => note.id === activeNoteId) || null, [activeNoteId, notes]);
   const {draftTitle,setDraftTitle,draftContent,setDraftContent,draftRef,draftConflict,setDraftConflict,draftStorageError,setDraftStorageError,changeDraft}=useNotebookDraft(user?.uid,activeNote,isSavingNote);
   const showAiSourcePreviews = isNotificationPreferenceEnabled(profile, "aiSourcePreviews");
-  const filteredNotes = notes.filter(
+  const filteredNotes = notes.filter(() => collectionFilter === 'all' || collectionFilter === 'notes').filter(
     (note) =>
       note.title.toLowerCase().includes(search.toLowerCase()) ||
       note.content.toLowerCase().includes(search.toLowerCase()) ||
       note.tags.some((tag) => tag.toLowerCase().includes(search.toLowerCase()))
   );
-  const filteredSources = sources.filter(
+  const filteredSources = sources.filter(source => collectionFilter === 'all' || (collectionFilter === 'documents' && source.type === 'file') || (collectionFilter === 'links' && source.type !== 'file')).filter(
     (source) =>
       source.title.toLowerCase().includes(search.toLowerCase()) ||
       (showAiSourcePreviews && (source.summary || "").toLowerCase().includes(search.toLowerCase()))
@@ -751,6 +753,14 @@ export const Notes = () => {
   };
 
   return (
+    <div className="liquid-library">
+      <header className="liquid-library-heading"><div><h1>{locale === 'uz' ? 'Kutubxona' : locale === 'ru' ? 'Библиотека' : 'Library'}</h1><p>{locale === 'uz' ? 'Materiallaringiz, qaydlaringiz va yangi g‘oyalaringiz bir joyda.' : locale === 'ru' ? 'Материалы, заметки и новые идеи в одном месте.' : 'Your materials, notes and bright ideas. All together.'}</p></div><button className="liquid-button liquid-primary" disabled={isSourceLoading} onClick={() => sourceInputRef.current?.click()}><Upload size={16}/>{t('notebook.upload')}</button></header>
+      <div className="liquid-library-collections" aria-label={locale === 'uz' ? 'To‘plamlar' : locale === 'ru' ? 'Коллекции' : 'Collections'}>{[
+        { id: 'all' as const, icon: FolderOpen, label: locale === 'uz' ? 'Barcha materiallar' : locale === 'ru' ? 'Все материалы' : 'All materials', count: notes.length + sources.length },
+        { id: 'notes' as const, icon: Book, label: t('notebook.notes'), count: notes.length },
+        { id: 'documents' as const, icon: FileText, label: locale === 'uz' ? 'Hujjatlar' : locale === 'ru' ? 'Документы' : 'Documents', count: sources.filter(s => s.type === 'file').length },
+        { id: 'links' as const, icon: LinkIcon, label: locale === 'uz' ? 'Havolalar' : locale === 'ru' ? 'Ссылки' : 'Saved links', count: sources.filter(s => s.type !== 'file').length },
+      ].map(({ id, icon: Icon, label, count }) => <button key={id} aria-pressed={collectionFilter === id} onClick={() => { setCollectionFilter(id); setMobileView('notes'); }}><Icon size={24}/><span><strong>{label}</strong><small>{count} {locale === 'uz' ? 'ta material' : locale === 'ru' ? 'материалов' : 'items'}</small></span></button>)}</div>
     <div className="pro-notebook-workspace grid h-full min-h-0 grid-cols-1 gap-3 overflow-hidden sm:gap-4 xl:grid-cols-[250px_minmax(0,1fr)_310px] 2xl:grid-cols-[300px_minmax(0,1fr)_360px]">
       <input
         ref={sourceInputRef}
@@ -1010,6 +1020,7 @@ export const Notes = () => {
         onAnalyzeTranscript={handleAddYoutubeSource}
       />
 
+    </div>
     </div>
   );
 };

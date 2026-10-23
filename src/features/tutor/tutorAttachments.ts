@@ -6,7 +6,8 @@ export interface TutorAttachment extends AiAttachment {
   previewUrl?: string;
 }
 
-const MAX_FILE_BYTES = 12 * 1024 * 1024;
+// Base64 adds a third; keep the full callable body below its 8 MiB limit.
+const MAX_FILE_BYTES = 5 * 1024 * 1024;
 const DOCX_MIME_TYPE =
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 
@@ -40,6 +41,13 @@ const isDocxFile = (file: File) =>
   file.type === DOCX_MIME_TYPE || /\.docx$/i.test(file.name);
 
 const getSupportedInlineMimeType = (file: File) => {
+  const mediaTypes: Record<string, string> = {
+    mp3: "audio/mpeg", wav: "audio/wav", m4a: "audio/mp4", ogg: "audio/ogg",
+    flac: "audio/flac", aac: "audio/aac", mp4: "video/mp4", webm: "video/webm", mov: "video/mov",
+  };
+  const extension = file.name.split(".").pop()?.toLowerCase() || "";
+  if (file.type.startsWith("audio/") || file.type.startsWith("video/")) return file.type.split(";")[0];
+  if (mediaTypes[extension]) return mediaTypes[extension];
   if (file.type.startsWith("image/")) return file.type;
   if (file.type === "application/pdf" || /\.pdf$/i.test(file.name)) {
     return "application/pdf";

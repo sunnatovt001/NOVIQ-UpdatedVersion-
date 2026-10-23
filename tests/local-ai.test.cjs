@@ -74,3 +74,31 @@ test('non-Tutor AI keeps its configured model and structured response settings',
  const settings=JSON.parse(calls[1].options.body).generationConfig;
  assert.equal(settings.responseMimeType,'application/json');assert.equal(settings.maxOutputTokens,8192);assert.equal(settings.thinkingConfig,undefined);
 });
+
+ test('Tutor forwards audio, images and only the allowlisted URL retrieval tool',async()=>{
+  let provider;
+  const handler=localAi({apiKey:'secret',logger:{warn(){}},fetchImpl:async(url,options)=>{
+   if(url.includes('accounts:lookup'))return {ok:true,json:async()=>({users:[{localId:'fixture'}]})};
+   provider=JSON.parse(options.body);return {ok:true,json:async()=>({candidates:[{content:{parts:[{text:'Source-backed answer'}]}}]})};
+  }});
+  const contents=[{role:'user',parts:[{inlineData:{mimeType:'audio/webm',data:'YXVkaW8='}},{inlineData:{mimeType:'image/png',data:'aW1hZ2U='}},{text:'Explain https://example.com'}]}];
+  const response=await run(handler,request({}, {contents,config:{tools:[{urlContext:{}},{googleSearch:{}}]}}));
+  assert.equal(response.statusCode,200);assert.deepEqual(provider.contents,contents);assert.deepEqual(provider.tools,[{urlContext:{}}]);
+ });
+ test('invalid Gemini key is a configuration failure, not a bad student question',async()=>{
+  const handler=localAi({apiKey:'secret',logger:{warn(){}},fetchImpl:async url=>url.includes('accounts:lookup')?{ok:true,json:async()=>({users:[{localId:'fixture'}]})}:{ok:false,status:400,json:async()=>({error:{message:'API key not valid. secret'}})}});
+  const result=await run(handler,request());assert.equal(result.body.error,'AI_KEY_OR_PERMISSION');assert.ok(!JSON.stringify(result.body).includes('secret'));
+ });
+
+test('local AI uses a newly saved key on the next request without a restart',async()=>{
+ let key='',used=[];
+ const handler=localAi({apiKey:'stale-key',getApiKey:()=>key,logger:{warn(){}},fetchImpl:async(url,options)=>{
+  if(url.includes('accounts:lookup'))return {ok:true,json:async()=>({users:[{localId:'rotation-fixture'}]})};
+  used.push(options.headers['x-goog-api-key']);
+  return {ok:true,json:async()=>({candidates:[{content:{parts:[{text:'Verified answer'}]}}]})};
+ }});
+ assert.equal((await run(handler,request())).body.error,'MISSING_GEMINI_API_KEY');
+ key='first-key';assert.equal((await run(handler,request())).statusCode,200);
+ key='rotated-key';assert.equal((await run(handler,request())).statusCode,200);
+ assert.deepEqual(used,['first-key','rotated-key']);
+});

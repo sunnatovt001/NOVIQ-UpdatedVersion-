@@ -5,8 +5,7 @@ import { loadLocalData, trySaveLocalData } from '@/src/lib/localStore';
 export const avatarOptions = (premium: boolean) =>
   Array.from({ length: 4 }, (_, index) => `/avatars/${premium ? 'pro' : 'free'}-${index + 1}.png`);
 
-export function getProfileAvatar(profile?: UserProfile | null): string {
-  const premium = isPro(profile);
+export function getProfileAvatar(profile?: UserProfile | null, premium = isPro(profile)): string {
   const photo = profile?.photoURL || '';
   const preset = photo.match(/^\/avatars\/(?:free|pro)-([1-4])\.png$/);
   if (preset) return avatarOptions(premium)[Number(preset[1]) - 1];

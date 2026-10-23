@@ -47,3 +47,11 @@ test('each plan has exactly four existing image assets', () => {
     for (const path of options) assert.ok(fs.statSync('public' + path).size > 10000);
   }
 });
+
+test('verified membership selects premium avatars even before the profile projection catches up', () => {
+  const api = fixture();
+  const profile = { uid: 'verified-member', photoURL: '/avatars/free-4.png', subscription: { plan: 'free' } };
+  assert.equal(api.getProfileAvatar(profile, true), '/avatars/pro-4.png');
+  assert.equal(api.getProfileAvatar({ ...profile, photoURL: '/avatars/pro-2.png' }, false), '/avatars/free-2.png');
+  assert.equal(api.getProfileAvatar({ ...profile, photoURL: 'https://example.com/upload.jpg' }, true), 'https://example.com/upload.jpg');
+});

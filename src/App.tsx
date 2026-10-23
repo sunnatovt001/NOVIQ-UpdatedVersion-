@@ -3,13 +3,14 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { AuthProvider, useAuth } from "@/src/contexts/AuthContext";
 import { useLocale } from "@/src/contexts/LocaleContext";
 import { getAppCopy } from "@/src/features/auth/appCopy";
 import { AppLoadingScreen } from "@/src/features/auth/AppLoadingScreen";
 import { getAccountErrorMessage } from "@/src/features/auth/accountErrors";
-import { RoutePage } from "@/src/components/RoutePage";
+import { prepareRoutePage, RoutePage } from "@/src/components/RoutePage";
+import { transitionRoute } from '@/src/lib/routeTransition';
 import {useMembership} from '@/src/features/pro/MembershipContext';
 import {useProCopy} from '@/src/features/pro/proCopy';
 import {MembershipProvider} from '@/src/features/pro/MembershipContext';
@@ -71,15 +72,42 @@ const AppContent = () => {
       : "landing";
   };
   const [activeTab, updateActiveTab] = useState(readTab);
-  const setActiveTab = useCallback((tab: string) => {
-    window.location.hash = `/${tab}`;
-    updateActiveTab(tab);
-  }, []);
+  const activeTabRef = useRef(activeTab), navigationId = useRef(0);
+  activeTabRef.current = activeTab;
+  const navigate = useCallback(async (tab: string, changeHash: boolean) => {
+    if (tab === activeTabRef.current) {
+      navigationId.current++;
+      delete document.documentElement.dataset.routePending;
+      if (changeHash) window.location.hash = `/${tab}`;
+      return;
+    }
+    const id = ++navigationId.current;
+    document.documentElement.dataset.routePending = tab;
+    const pageName = tab.charAt(0).toUpperCase() + tab.slice(1);
+    const loader = !membership.cinematic && freePageLoaders[pageName] || pageLoaders[pageName];
+    if (loader) {
+      try { await prepareRoutePage(loader, pageName); }
+      catch { /* The route boundary provides the existing retry controls. */ }
+    }
+    if (id !== navigationId.current) return;
+    delete document.documentElement.dataset.routePending;
+    transitionRoute(() => {
+      if (id !== navigationId.current) return;
+      activeTabRef.current = tab;
+      if (changeHash) window.location.hash = `/${tab}`;
+      updateActiveTab(tab);
+    });
+  }, [membership.cinematic, user?.uid]);
+  const setActiveTab = useCallback((tab: string) => { void navigate(tab, true); }, [navigate]);
   useEffect(() => {
-    const onNavigate = () => updateActiveTab(readTab());
+    const onNavigate = () => { void navigate(readTab(), false); };
     window.addEventListener("hashchange", onNavigate);
     return () => window.removeEventListener("hashchange", onNavigate);
-  }, []);
+  }, [navigate]);
+  useEffect(() => () => {
+    navigationId.current++;
+    delete document.documentElement.dataset.routePending;
+  }, [membership.cinematic, user?.uid]);
 
   useEffect(() => {
     if (loading) return;

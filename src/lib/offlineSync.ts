@@ -241,34 +241,43 @@ export const writeDocWithQueue = async ({
   kind?: SyncOperationKind;
 }): Promise<SyncStatus> => {
   if (isReadOnlyAudit) throw new Error("Saving is disabled in read-only audit mode.");
-  const existing = getQueuedOperation(kind, path);
-  const operation = buildOperation({
-    userId,
-    path,
-    kind,
-    data:
-      existing?.status !== "synced" && merge && kind !== "delete"
-        ? { ...existing?.data, ...data }
-        : data,
-    merge,
-    attempts: existing?.attempts || 0,
-    status: "pending",
+  if (!userId) throw new Error("Sign in before saving your changes.");
+  if (typeof navigator !== "undefined" && !navigator.onLine) {
+    throw new Error("No internet connection. Your changes have not been saved to the server. Reconnect and try again.");
+  }
+  const operation = buildOperation({ userId, path, kind, data, merge });
+  if (!isValidOperation(operation)) throw new Error("Invalid save request.");
+  // The old queue is migration-only. New saves go directly to the server and
+  // never write a pending record to browser storage. Share the lock with legacy
+  // retries so an older queued edit cannot overwrite a newer confirmed save.
+  const previous = activeFlushes.get(userId) || flushOfflineSyncQueue(userId);
+  const request = previous.catch(error => console.warn("Previous sync could not finish", error)).then(async () => {
+    let legacy: OfflineSyncOperation[] = [];
+    try { legacy = loadQueue().filter(item => item.userId === userId && item.path.join('/') === operation.path.join('/') && item.status !== 'synced'); }
+    catch { /* A broken legacy cache must not prevent a server save. */ }
+    if (merge && kind !== 'delete') {
+      operation.data = Object.assign({}, ...legacy.filter(item => item.kind === kind).map(item => item.data), data);
+    }
+    await applyOperation(operation);
+    // Retire only the old revisions this acknowledged write superseded.
+    if (legacy.length) {
+      try {
+        saveQueue(loadQueue().filter(item => !legacy.some(old => old.id === item.id && old.revision === item.revision)));
+      } catch (error) { console.warn("Could not retire legacy sync records", error); }
+    }
   });
-
-  upsertQueuedOperation(operation);
-  if (typeof navigator !== "undefined" && !navigator.onLine) return "pending";
+  const locked = request.finally(() => { if (activeFlushes.get(userId) === locked) activeFlushes.delete(userId); });
+  activeFlushes.set(userId, locked);
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
-    // Settle the caller without releasing the actual flush lock. The SDK may
-    // complete later; serial ordering protects newer revisions from old writes.
     await Promise.race([
-      flushOfflineSyncQueue(userId),
-      new Promise<void>((resolve) => { timer = setTimeout(resolve, 15000); }),
+      locked,
+      new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error("The server has not confirmed this save yet. Check your connection and try again.")), 15000); }),
     ]);
+    return "synced";
   } finally {
     if (timer !== undefined) clearTimeout(timer);
   }
-  return getQueuedOperation(kind, path)?.status || "pending";
 };
 
 export const flushOfflineSyncQueue = async (userId?: string | null) => {
@@ -317,7 +326,7 @@ export const flushOfflineSyncQueue = async (userId?: string | null) => {
       }
     }
   };
-  const promise = run().finally(() => activeFlushes.delete(userId));
+  const promise = run().finally(() => { if (activeFlushes.get(userId) === promise) activeFlushes.delete(userId); });
   activeFlushes.set(userId, promise);
   return promise;
 };
@@ -336,8 +345,11 @@ export const useOfflineSyncQueue = (userId?: string | null) => {
       });
     };
 
+    const onVisible = () => { if (!document.hidden) handleOnline(); };
+    const interval = window.setInterval(handleOnline, 30000);
     window.addEventListener("online", handleOnline);
-    return () => window.removeEventListener("online", handleOnline);
+    document.addEventListener("visibilitychange", onVisible);
+    return () => { window.clearInterval(interval); window.removeEventListener("online", handleOnline); document.removeEventListener("visibilitychange", onVisible); };
   }, [userId]);
 };
 

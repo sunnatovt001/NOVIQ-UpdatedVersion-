@@ -1,3 +1,4 @@
+import { useVoiceMessage } from "@/src/features/tutor/useVoiceMessage";
 import { getProfileAvatar } from '@/src/lib/profileAvatar';
 import { createTutorRecognition, getTutorSpeechSynthesis, stopTutorRecognition, cancelTutorSpeech } from "@/src/features/tutor/browserSpeech";
 import {TutorProControls,useTutorModes} from '@/src/features/pro/TutorProControls';
@@ -8,6 +9,9 @@ import { trackUserEvent } from "@/src/lib/analytics";
 import { motion, AnimatePresence } from "motion/react";
 import {
   AlertCircle,
+  ArrowUpRight,
+  BookOpen,
+  Lightbulb,
   MessageSquare,
   SquarePen,
   FileText,
@@ -162,26 +166,11 @@ export const Tutor = ({ setActiveTab }: { setActiveTab: (tab: string) => void })
     setIsSpeaking(false);
   };
 
-  const handleToggleListening = () => {
-    if (!recognitionRef.current) {
-      setAiError({ speech: true });
-      return;
-    }
-
-    if (isListening) {
-      stopTutorRecognition(recognitionRef.current);
-      setIsListening(false);
-      return;
-    }
-
-    try {
-      recognitionRef.current.start();
-      setIsListening(true);
-    } catch (error) {
-      console.warn("Speech recognition failed to start", error);
-      setIsListening(false);
-    }
-  };
+  const voiceMessage = useVoiceMessage(
+    file => setAttachedFiles(current => [...current, file]),
+    message => setUploadError(message),
+  );
+  const handleToggleListening = () => { setUploadError(""); void voiceMessage.toggle(); };
 
   const addFiles = async (files: FileList | File[]) => {
     const fileArray = Array.from(files);
@@ -325,7 +314,7 @@ export const Tutor = ({ setActiveTab }: { setActiveTab: (tab: string) => void })
         type="file"
         multiple
         className="hidden"
-        accept="image/*,.pdf,.docx,.txt,.md,.csv,.json"
+        accept="image/*,audio/*,video/*,.pdf,.docx,.txt,.md,.csv,.json"
         onChange={(event) => {
           if (event.target.files) addFiles(event.target.files);
           event.currentTarget.value = "";
@@ -336,7 +325,7 @@ export const Tutor = ({ setActiveTab }: { setActiveTab: (tab: string) => void })
         <div className="flex items-center gap-4">
           <Avatar src={ASSISTANT_AVATAR} alt="Noviq Tutor" size="lg" />
           <div>
-            <h2 className="font-display text-base font-bold text-white sm:text-xl">Saidamin - Noviq Tutor</h2>
+            <h2 className="font-display text-base font-bold text-white sm:text-xl">{activePro ? 'NOVIQ Tutor' : 'Saidamin - Noviq Tutor'}</h2>
             <p className="hidden text-[10px] font-black uppercase tracking-widest text-cyan-300 sm:block">
               {t("tutor.coaching")}
             </p>
@@ -532,20 +521,23 @@ export const Tutor = ({ setActiveTab }: { setActiveTab: (tab: string) => void })
               <button
                 type="button"
                 onClick={handleToggleListening}
+                disabled={isTyping || voiceMessage.busy}
+                aria-pressed={voiceMessage.recording}
+                aria-label={voiceMessage.recording ? "Stop recording" : t("tutor.voice")}
                 className={cn(
                   "inline-flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-bold transition-all",
-                  isListening ? "bg-red-500 text-white" : "bg-white/5 text-slate-400 hover:text-white"
+                  voiceMessage.recording ? "bg-red-500 text-white" : "bg-white/5 text-slate-400 hover:text-white"
                 )}
               >
-                {isListening ? <MicOff size={18} /> : <Mic size={18} />}
-                 <span className="sr-only sm:not-sr-only">{t("tutor.voice")}</span>
+                {voiceMessage.recording ? <MicOff size={18} /> : <Mic size={18} />}
+                 <span className="sr-only sm:not-sr-only">{voiceMessage.recording ? "Stop" : t("tutor.voice")}</span>
               </button>
             </div>
 
             <button
               type="button"
               onClick={handleSend}
-              disabled={(!input.trim() && attachedFiles.length === 0) || isTyping}
+              disabled={(!input.trim() && attachedFiles.length === 0) || isTyping || voiceMessage.recording || voiceMessage.busy}
               className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-blue-600 px-5 text-sm font-black text-white shadow-xl shadow-blue-500/20 transition hover:bg-blue-500 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 disabled:active:scale-100"
             >
               {isTyping ? <Loader2 size={18} className="animate-spin" /> : <Send size={18} />}
@@ -558,6 +550,16 @@ export const Tutor = ({ setActiveTab }: { setActiveTab: (tab: string) => void })
         </p>
       </div>
     </div>
+    {activePro && <aside className="liquid-tutor-context" aria-label={locale === 'uz' ? 'O‘rganish vositalari' : locale === 'ru' ? 'Учебные инструменты' : 'Learning tools'}>
+      <section className="liquid-panel"><span className="liquid-eyebrow">NOVIQ PRO</span><h3>{locale === 'uz' ? 'Chuqurroq o‘rganing' : locale === 'ru' ? 'Изучайте глубже' : 'Go a little deeper'}</h3><p>{locale === 'uz' ? 'Tushuntirishni o‘zingizga moslang.' : locale === 'ru' ? 'Выберите подходящий способ обучения.' : 'Choose how you want to understand the topic.'}</p>
+        {[
+          { icon: Lightbulb, label: locale === 'uz' ? 'Bosqichma-bosqich tushuntir' : locale === 'ru' ? 'Объясни по шагам' : 'Explain step by step', prompt: locale === 'uz' ? 'Hozirgi mavzuni sodda misollar bilan bosqichma-bosqich tushuntir.' : locale === 'ru' ? 'Объясни текущую тему по шагам с простыми примерами.' : 'Explain the current topic step by step with a simple worked example.' },
+          { icon: BookOpen, label: locale === 'uz' ? 'Mashq bilan tekshir' : locale === 'ru' ? 'Проверить на практике' : 'Test my understanding', prompt: locale === 'uz' ? 'Hozirgi mavzudan bitta mashq ber. Javobimni kut, keyin tushuntir.' : locale === 'ru' ? 'Дай одну задачу по текущей теме. Дождись моего ответа и объясни.' : 'Give me one practice question on the current topic. Wait for my answer before explaining.' },
+          { icon: ArrowUpRight, label: locale === 'uz' ? 'Faqat hint ber' : locale === 'ru' ? 'Дай подсказку' : 'Give me a hint', prompt: locale === 'uz' ? 'Oxirgi savolimga faqat kichik ishora ber, javobni aytma.' : locale === 'ru' ? 'Дай небольшую подсказку к последнему вопросу, не раскрывая ответ.' : 'Give me a small hint for my last question without revealing the answer.' },
+        ].map(({ icon: Icon, label, prompt }) => <button key={label} disabled={isTyping} onClick={() => { setInput(prompt); requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>('.tutor-composer textarea')?.focus()); }}><Icon size={17}/>{label}</button>)}
+      </section>
+      <section className="liquid-panel"><h3>{locale === 'uz' ? 'O‘rganish jarayoni' : locale === 'ru' ? 'Ваш учебный процесс' : 'Keep learning connected'}</h3><p>{locale === 'uz' ? 'Muhim fikrlarni kutubxonaga yozib oling yoki fokus mashg‘ulotini boshlang.' : locale === 'ru' ? 'Сохраните идеи в библиотеку или начните фокус-сессию.' : 'Keep your notes in Library, then put what you learn into practice.'}</p><button onClick={() => setActiveTab('notes')}><BookOpen size={17}/>{locale === 'uz' ? 'Kutubxonani ochish' : locale === 'ru' ? 'Открыть библиотеку' : 'Open Library'}</button><button onClick={() => setActiveTab('focus')}><ArrowUpRight size={17}/>{locale === 'uz' ? 'Fokusni boshlash' : locale === 'ru' ? 'Начать фокус' : 'Start a focus session'}</button></section>
+    </aside>}
     </div>
   );
 };

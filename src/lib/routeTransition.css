@@ -1,0 +1,30 @@
+/* Only the page is replaced. Navigation retains its position and identity. */
+.noviq-app > main { view-transition-name: noviq-page; }
+html[data-route-motion=view] .noviq-app [data-route-content] { animation: none; }
+::view-transition { pointer-events: none; }
+::view-transition-old(root) { display: none; }
+::view-transition-new(root) { animation: none; }
+::view-transition-group(noviq-page) {
+  animation-duration: 340ms;
+  animation-timing-function: cubic-bezier(.22,1,.36,1);
+}
+::view-transition-old(noviq-page) {
+  animation: noviq-page-leave 160ms ease-out both;
+}
+::view-transition-new(noviq-page) {
+  animation: noviq-page-enter 340ms cubic-bezier(.22,1,.36,1) both;
+}
+@keyframes noviq-page-leave { to { opacity: 0; transform: translateY(-6px); } }
+@keyframes noviq-page-enter { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+html[data-route-pending] .noviq-app > main { cursor: progress; }
+html[data-route-pending] .noviq-app > main::after {
+  content: ''; position: absolute; z-index: 400; top: 0; left: 0; right: 0;
+  height: 2px; background: #268cff; transform-origin: left;
+  animation: noviq-route-loading 900ms ease-in-out infinite alternate;
+  pointer-events: none;
+}
+@keyframes noviq-route-loading { from { transform: scaleX(.15); opacity: .4; } to { transform: scaleX(.9); opacity: .9; } }
+@media(prefers-reduced-motion:reduce) {
+  ::view-transition-group(*), ::view-transition-old(*), ::view-transition-new(*) { animation: none !important; }
+  html[data-route-pending] .noviq-app > main::after { animation: none; opacity: .65; }
+}

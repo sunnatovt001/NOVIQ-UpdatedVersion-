@@ -593,6 +593,7 @@ export const Focus = () => {
             className="pro-focus-dial mx-auto mt-6 grid h-[clamp(270px,31vw,340px)] w-[clamp(270px,31vw,340px)] place-items-center rounded-full bg-[conic-gradient(var(--focus-ring)_0%,#e8eff9_var(--focus-ring)_100%)] p-3 shadow-[0_0_0_16px_rgba(37,99,235,0.05)]"
             style={{ "--focus-ring": `${progress}%` } as React.CSSProperties}
           >
+            <svg className="liquid-timer-progress hidden" viewBox="0 0 100 100" aria-hidden="true"><circle cx="50" cy="50" r="48" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" pathLength="100" strokeDasharray={`${progress} 100`}/></svg>
             <div className="grid h-full w-full place-items-center rounded-full bg-white text-center shadow-inner dark:bg-slate-900">
               <div>
                 <Brain className="mx-auto text-blue-600" size={34} />

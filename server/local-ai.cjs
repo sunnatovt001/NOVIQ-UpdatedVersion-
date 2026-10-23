@@ -2,7 +2,7 @@
 const loopback = (address) => ["127.0.0.1", "::1", "::ffff:127.0.0.1"].includes(address);
 const safeError = (status) => status === 401 || status === 403 ? "AI_KEY_OR_PERMISSION" : status === 429 ? "AI_QUOTA_OR_RATE_LIMIT" : status === 404 ? "AI_MODEL_UNAVAILABLE" : status === 400 ? "AI_REQUEST_REJECTED" : "AI_PROVIDER_UNAVAILABLE";
 const TUTOR_MODEL = "gemini-3.5-flash-lite";
-module.exports = function localAi({ apiKey, firebaseApiKey, fetchImpl = fetch, logger = console, models = ["gemini-3.5-flash", "gemini-3.1-flash-lite"] }) {
+module.exports = function localAi({ apiKey: configuredApiKey, getApiKey, firebaseApiKey, fetchImpl = fetch, logger = console, models = ["gemini-3.5-flash", "gemini-3.1-flash-lite"] }) {
   const usage = new Map();
   return async (req, res, next) => {
     if (req.url !== "/__local-ai") return next();
@@ -10,6 +10,9 @@ module.exports = function localAi({ apiKey, firebaseApiKey, fetchImpl = fetch, l
     let origin;
     try { origin = new URL(req.headers.origin); } catch { return send(403, { error: "LOCAL_ORIGIN_REQUIRED" }); }
     if (!loopback(req.socket.remoteAddress) || !["localhost", "127.0.0.1", "[::1]"].includes(origin.hostname) || origin.host !== req.headers.host || req.method !== "POST" || !String(req.headers["content-type"] || "").startsWith("application/json")) return send(403, { error: "LOCAL_ORIGIN_REQUIRED" });
+    // Read rotated development credentials for each request instead of retaining
+    // the key that happened to exist when Vite started.
+    const apiKey = getApiKey ? getApiKey() : configuredApiKey;
     if (!apiKey) return send(503, { error: "MISSING_GEMINI_API_KEY" });
     const token = /^Bearer (\S+)$/.exec(req.headers.authorization || "")?.[1];
     if (!token) return send(401, { error: "unauthenticated" });
@@ -33,6 +36,7 @@ module.exports = function localAi({ apiKey, firebaseApiKey, fetchImpl = fetch, l
       const config = input.config || {};
       const tutor = !input.feature || input.feature === "tutor";
       const body = { contents, generationConfig: { maxOutputTokens: tutor ? 4096 : 8192, ...(tutor ? { thinkingConfig: { thinkingLevel: "minimal" } } : {}), ...(config.responseMimeType ? { responseMimeType: config.responseMimeType } : {}), ...(config.responseSchema ? { responseSchema: config.responseSchema } : {}) }, ...(typeof config.systemInstruction === "string" ? { systemInstruction: { parts: [{ text: config.systemInstruction }] } } : {}) };
+      if (Array.isArray(config.tools) && config.tools.some(tool => tool && Object.hasOwn(tool, "urlContext"))) body.tools = [{ urlContext: {} }];
       let response, selectedModel;
       const signal = AbortSignal.timeout(30000);
       // Tutor always uses one fast model. Retry only an explicit transient HTTP
@@ -45,7 +49,11 @@ module.exports = function localAi({ apiKey, firebaseApiKey, fetchImpl = fetch, l
         if (response.ok) { selectedModel = model; break; }
         logger.warn("Local Gemini model failed", { model, status: response.status });
         const retryable = tutor ? [500, 502, 503, 504] : [404, 500, 502, 503, 504];
-        if (!retryable.includes(response.status)) return send(response.status, { error: safeError(response.status) });
+        if (!retryable.includes(response.status)) {
+          const failure = await response.json().catch(() => ({}));
+          const invalidKey = /API[_ ]KEY[_ ]INVALID|API key not valid/i.test(JSON.stringify(failure.error || {}));
+          return send(response.status, { error: invalidKey ? "AI_KEY_OR_PERMISSION" : safeError(response.status) });
+        }
         await response.body?.cancel();
       }
       if (!response || !response.ok) return send(response?.status || 503, { error: safeError(response?.status || 503) });

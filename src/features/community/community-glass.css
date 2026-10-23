@@ -1,0 +1,160 @@
+/* Community inherits the Dashboard's glass shell. All feature rules are Pro-scoped. */
+.noviq-app.pro-sidebar-unified[data-pro-page=community]>main{background:#ffffff3b!important;border:1px solid #ffffffd1!important;border-radius:26px;box-shadow:0 8px 32px #3860ab0b,inset 0 1px 0 #ffffffd9;backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);min-width:0}
+.noviq-app.pro-sidebar-unified.dark[data-pro-page=community]>main{background:#0a172c33!important;border-color:#a6c7ff38!important;box-shadow:0 12px 40px #050e252b,inset 0 1px 0 #ffffff12}
+.noviq-app.pro-sidebar-unified[data-pro-page=community] :is(.app-main-surface,.app-content-surface){display:none}
+.noviq-app.pro-sidebar-unified[data-pro-page=community] [data-pro-shell-header]{height:70px;padding:12px 25px}
+.noviq-app.pro-sidebar-unified[data-pro-page=community] [data-pro-shell-header] h2{font-size:19px;letter-spacing:-.025em}
+.noviq-app.pro-sidebar-unified[data-pro-page=community] [data-pro-shell-header] :is(.text-right,.w-px){display:none}
+.noviq-app.pro-sidebar-unified[data-pro-page=community] [data-page-scroll]{padding:10px 24px 26px}
+.noviq-app.pro-environment .community-glass{--cg-ink:#0b173e;--cg-muted:#50659c;--cg-accent:#176bfa;--cg-panel:#ffffffa6;--cg-soft:#e7f0ff91;--cg-line:#ffffffd9;--cg-tint:#dbeaff;padding:0;border:0;border-radius:0;background:transparent;box-shadow:none;color:var(--cg-ink);min-height:0;font-size:14px;line-height:1.55}
+.noviq-app.pro-environment.dark .community-glass{--cg-ink:#eff5ff;--cg-muted:#b7c9e6;--cg-accent:#79b5ff;--cg-panel:#142b4bd6;--cg-soft:#28476b80;--cg-line:#a6c7ff30;--cg-tint:#24476c;background:transparent;color:var(--cg-ink)}
+.noviq-app.pro-environment .community-glass :is(h1,h2,h3){color:var(--cg-ink);letter-spacing:-.03em}
+.noviq-app.pro-environment .community-glass :is(.text-slate-500,.text-slate-400,.text-slate-600){color:var(--cg-muted)}
+.noviq-app.pro-environment .community-glass :is(button,input,textarea,select){font:inherit}
+.noviq-app.pro-environment .community-glass :is(button,a,input,textarea):focus-visible{outline:3px solid #378bff;outline-offset:3px}
+.noviq-app.pro-environment .community-glass :is(input,textarea){caret-color:var(--cg-accent)}
+.noviq-app.pro-environment .community-glass button{min-height:40px;transition:background-color 180ms ease,transform 160ms cubic-bezier(.16,1,.3,1)}
+.noviq-app.pro-environment .community-glass button:not(:disabled):active{transform:scale(.97)}
+.noviq-app.pro-environment .community-glass :is(button:disabled,textarea:disabled){cursor:not-allowed;opacity:.5}
+.noviq-app.pro-environment .community-glass .cg-hero{padding:11px 0 19px;background:transparent;border:0;border-radius:0;box-shadow:none}
+.community-glass .cg-hero>div:first-child{gap:15px;flex-wrap:nowrap}
+.community-glass .cg-hero>div:first-child>div:first-child{background:linear-gradient(135deg,#eaf4ff,#c2dfff);border:1px solid white;color:#176bfa;border-radius:18px;width:58px;height:58px;flex-shrink:0}
+.community-glass .cg-hero h1{font-size:34px;font-weight:750;line-height:1.2}
+.community-glass .cg-hero p{font-size:14px;color:var(--cg-muted);line-height:1.7;max-width:650px}
+.community-glass .cg-hero>div:last-child{margin-top:15px;padding:0;border:0;font-size:12px;gap:8px 24px;color:var(--cg-muted)}
+.community-glass .cg-hero>div:last-child svg{width:16px;height:16px;color:var(--cg-accent)}
+.community-glass .cg-overview{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:13px;margin-bottom:18px}
+.community-glass .cg-overview>div{display:flex;align-items:center;gap:16px;padding:14px 19px;border:1px solid var(--cg-line);border-radius:17px;background:var(--cg-panel)}
+.community-glass .cg-overview>div>span{display:grid;place-items:center;width:43px;height:43px;flex-shrink:0;border:1px solid #ffffffb8;border-radius:13px;color:var(--cg-accent);background:var(--cg-tint)}
+.community-glass .cg-overview p{margin:0;display:flex;align-items:baseline;gap:11px;flex-wrap:wrap}
+.community-glass .cg-overview strong{font-size:25px;letter-spacing:-.035em;line-height:1.25;font-weight:700;font-variant-numeric:tabular-nums}
+.community-glass .cg-overview small{font-size:12px;color:var(--cg-muted)}
+.noviq-app.pro-environment .community-glass .cg-workspace{display:grid;grid-template-columns:220px minmax(0,1fr) 230px;gap:15px;margin-top:0;align-items:start}
+.community-glass :is(.cg-groups,.cg-social){min-width:0;display:flex;flex-direction:column;gap:15px}
+.noviq-app.pro-environment .community-glass :is(.cg-groups,.cg-social)>*+*{margin-top:0}
+.noviq-app.pro-environment .community-glass .cg-panel{padding:17px;background:var(--cg-panel);border:1px solid var(--cg-line);border-radius:19px;box-shadow:inset 0 1px 0 #ffffff45;color:var(--cg-ink);min-width:0}
+.noviq-app.pro-environment .community-glass .cg-panel h2{font-size:16px;font-weight:650;line-height:1.5}
+.community-glass .cg-panel h2>svg{width:20px;height:20px;color:var(--cg-accent)}
+.community-glass .cg-my-groups>div:first-child>button{width:34px;min-height:34px;height:34px;border:1px solid #84b9ff77;border-radius:11px;background:linear-gradient(#3294ff,#146bff);color:white;padding:7px;box-shadow:inset 0 1px 1px #ffffff45}
+.noviq-app.pro-environment .community-glass .cg-my-groups input{background:var(--cg-soft);border:1px solid var(--cg-line);border-radius:11px;color:var(--cg-ink);font-size:12px;min-height:42px}
+.noviq-app.pro-environment .community-glass input::placeholder,.noviq-app.pro-environment .community-glass textarea::placeholder{color:var(--cg-muted);opacity:.85}
+.noviq-app.pro-environment .community-glass .cg-room{background:transparent;border:1px solid transparent;border-radius:13px;padding:11px 10px;min-height:65px;gap:10px;font-size:13px;color:var(--cg-ink);margin-top:7px}
+.noviq-app.pro-environment .community-glass .cg-room>span:first-child{background:var(--cg-tint);color:var(--cg-accent);border-radius:11px;width:36px;height:36px}
+.noviq-app.pro-environment .community-glass .cg-room>span:nth-child(2)>span:last-child{font-size:10px;color:var(--cg-muted)}
+.noviq-app.pro-environment .community-glass .cg-room[aria-pressed=true]{background:linear-gradient(125deg,#338bff,#176bf1);border-color:#8cc2ff;color:white;box-shadow:0 4px 12px #1d6de622}
+.noviq-app.pro-environment .community-glass .cg-room[aria-pressed=true]>span:first-child{background:#ffffff26;color:white}
+.noviq-app.pro-environment .community-glass .cg-room[aria-pressed=true] :is(.text-slate-500,.text-slate-400){color:#e4efff}
+.community-glass .cg-discover>p{font-size:12px;line-height:1.7;margin-top:6px}
+.noviq-app.pro-environment .community-glass .cg-discovery-card{background:var(--cg-soft);border:1px solid var(--cg-line);border-radius:13px;padding:12px}
+.community-glass .cg-discovery-card h3{font-size:13px;font-weight:650}.community-glass .cg-discovery-card p{font-size:11px;line-height:1.7}
+.noviq-app.pro-environment .community-glass .cg-discovery-card button{font-size:11px;min-height:35px;margin-top:10px;padding:8px 12px;border:1px solid #b0cfff;background:var(--cg-tint);color:var(--cg-accent);border-radius:10px}
+.noviq-app.pro-environment .community-glass .cg-chat{height:clamp(560px,calc(100dvh - 340px),820px);min-height:560px;padding:0;overflow:hidden;display:flex;flex-direction:column;background:linear-gradient(140deg,var(--cg-panel),var(--cg-soft))}
+.noviq-app.pro-environment .community-glass .cg-chat-header{margin:0;padding:17px 18px 14px;border-color:var(--cg-line);gap:12px;flex-wrap:nowrap;background:#ffffff26}
+.community-glass .cg-chat-header>div:first-child{gap:11px;min-width:0;flex-basis:auto}
+.community-glass .cg-chat-header>div:first-child>span{width:43px;height:43px;background:var(--cg-tint);border:1px solid var(--cg-line);border-radius:13px;color:var(--cg-accent)}
+.noviq-app.pro-environment .community-glass .cg-chat-header h2{font-size:16px;line-height:1.5;min-width:0}
+.noviq-app.pro-environment .community-glass .cg-chat-header h2>button{font-size:16px;font-weight:650;text-align:left;min-height:24px;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.community-glass .cg-chat-header p{font-size:10px;line-height:1.6}
+.community-glass .cg-chat-header>div:last-child{gap:8px;flex-shrink:0}
+.noviq-app.pro-environment .community-glass .cg-chat-header>div:last-child>button{font-size:11px;min-height:38px;border-radius:11px;border-color:var(--cg-line);color:var(--cg-muted)}
+.community-glass .cg-chat>p{padding:7px 18px 0;font-size:10px;color:var(--cg-muted)}
+.noviq-app.pro-environment .community-glass .cg-messages{padding:18px;scrollbar-width:thin;scrollbar-color:#a9c3e5 transparent;overscroll-behavior:contain}
+.community-glass .cg-messages>div:not([role=alert]){font-size:13px;color:var(--cg-muted)}
+.community-glass .cg-messages>div>svg{color:var(--cg-accent);background:var(--cg-tint);border:1px solid var(--cg-line);border-radius:20px;width:70px;height:70px;padding:18px}
+.noviq-app.pro-environment .community-glass .cg-message{background:var(--cg-panel);border:1px solid var(--cg-line);color:var(--cg-ink);padding:12px 14px;border-radius:15px 15px 15px 4px;max-width:88%;box-shadow:0 3px 10px #3860ab08}
+.community-glass .cg-message>p:first-child{font-size:10px;color:var(--cg-muted)}
+.community-glass .cg-message>p:last-child{font-size:13px;line-height:1.75;margin-top:4px;overflow-wrap:anywhere}
+.noviq-app.pro-environment .community-glass .cg-message.chat-user-message{background:linear-gradient(125deg,#348dff,#1d6cf0)!important;border-color:#71aaff;color:#fff;border-radius:15px 15px 4px 15px}
+.noviq-app.pro-environment .community-glass .cg-message.chat-user-message>p:first-child,.noviq-app.pro-environment .community-glass .cg-message.chat-user-message time{color:#dfecff!important}
+.noviq-app.pro-environment .community-glass .cg-composer{padding:13px 16px;border-color:var(--cg-line);background:#ffffff26}
+.noviq-app.pro-environment .community-glass .cg-compose-field{border:1px solid var(--cg-line);background:var(--cg-panel);border-radius:15px;padding:7px;align-items:end;gap:8px;box-shadow:0 2px 7px #3860ab06}
+.noviq-app.pro-environment .community-glass .cg-compose-field:focus-within{border-color:#7eafff;box-shadow:0 0 0 3px #2b82fa14}
+.noviq-app.pro-environment .community-glass .cg-compose-field textarea{font-size:13px;line-height:1.65;color:var(--cg-ink);padding:8px;min-height:42px;min-width:0}
+.noviq-app.pro-environment .community-glass .cg-compose-field>button{width:41px;height:41px;min-height:41px;flex-shrink:0;border-radius:12px;background:linear-gradient(#3294ff,#146bff);color:white;border:1px solid #8cbdff99;box-shadow:inset 0 1px 1px #ffffff55}
+.community-glass .cg-composer>span{font-size:10px;margin-top:7px;color:var(--cg-muted);line-height:1.7}
+.community-glass .cg-invite{position:relative;overflow:hidden}
+.community-glass .cg-invite>p{font-size:12px;line-height:1.7;margin-top:9px}
+.noviq-app.pro-environment .community-glass .cg-invite input{min-height:42px;border:1px solid var(--cg-line);background:var(--cg-soft);color:var(--cg-ink);font-size:12px;border-radius:11px;margin:12px 0 9px}
+.noviq-app.pro-environment .community-glass .cg-invite>button{background:linear-gradient(#3294ff,#146bff);color:white;border:1px solid #8cbdff99;border-radius:11px;font-size:12px;min-height:41px;padding:9px;box-shadow:inset 0 1px 1px #ffffff55}
+.community-glass .cg-invite>p:last-child{font-size:10px;line-height:1.7;margin-top:9px}
+.community-glass :is(.cg-invitations,.cg-friends)>p{font-size:12px;line-height:1.7;margin-top:9px}
+.community-glass .cg-invitations>div{padding-top:10px;margin-top:9px;border-top:1px solid var(--cg-line)}
+.community-glass .cg-invitations :is(p,input){font-size:11px}
+.community-glass .cg-friends>p:has(span){display:flex;align-items:center;gap:9px;margin-top:11px;padding:9px;background:var(--cg-soft);border-radius:11px;border:1px solid var(--cg-line);font-size:12px}
+.community-glass .cg-friends>p>span{background:var(--cg-tint);color:var(--cg-accent);width:30px;height:30px}
+.noviq-app.pro-environment .community-glass .cg-my-groups form{padding:13px;background:var(--cg-soft);border:1px solid var(--cg-line);border-radius:13px}
+.community-glass .cg-my-groups form :is(input,textarea){background:var(--cg-panel);border-color:var(--cg-line);color:var(--cg-ink);font-size:12px;border-radius:10px;min-width:0}
+.community-glass .cg-my-groups form button{font-size:12px;border-radius:10px;min-height:40px}
+.noviq-app.pro-environment .community-glass :is([role=alert],[role=status]){border-radius:12px;line-height:1.65}
+.noviq-app.pro-sidebar-unified .community-members-panel{background:#f0f7ffec!important;color:#0b173e!important;border:1px solid white;border-radius:22px;box-shadow:0 20px 55px #153d7b2b;backdrop-filter:blur(20px)}
+.noviq-app.pro-sidebar-unified .community-members-panel input{background:#ffffff9e!important;border-color:#d4e5fc!important;color:#0b173e!important}
+.noviq-app.pro-sidebar-unified .community-members-panel :is(.text-slate-500,.text-slate-400){color:#50659c}
+.noviq-app.pro-sidebar-unified.dark .community-members-panel{background:#142b4bf5!important;color:#eff5ff!important;border-color:#a6c7ff30}
+.noviq-app.pro-sidebar-unified.dark .community-members-panel input{background:#234367!important;border-color:#a6c7ff30!important;color:#eff5ff!important}
+.noviq-app.pro-sidebar-unified.dark .community-members-panel :is(.text-slate-500,.text-slate-400){color:#b7c9e6}
+@media(max-width:1250px){.noviq-app.pro-environment .community-glass .cg-workspace{grid-template-columns:205px minmax(0,1fr)}.community-glass .cg-social{grid-column:1/-1;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}.community-glass .cg-overview>div{padding:13px 16px}.community-glass .cg-overview p{gap:4px 10px}.noviq-app.pro-environment .community-glass .cg-chat-header p{max-width:230px}}
+@media(max-width:1023px){.noviq-app.pro-sidebar-unified[data-pro-page=community]>main{border:0!important;border-radius:0;box-shadow:none}.noviq-app.pro-sidebar-unified[data-pro-page=community] [data-page-scroll]{padding:18px}.community-glass .cg-hero h1{font-size:30px}.community-glass .cg-hero p{font-size:13px}.noviq-app.pro-environment .community-glass .cg-workspace{grid-template-columns:200px minmax(0,1fr)}.noviq-app.pro-environment .community-glass .cg-chat{height:650px}.community-glass .cg-social{grid-template-columns:1fr 1fr}.community-glass .cg-invite{grid-column:1/-1}.community-glass .cg-hero>div:last-child{font-size:11px;gap:7px 16px}.community-glass .cg-overview>div{gap:9px;padding:12px}.community-glass .cg-overview strong{font-size:23px}.community-glass .cg-overview small{font-size:11px}.community-glass .cg-overview>div>span{width:36px;height:36px}}
+@media(max-width:700px){.noviq-app.pro-sidebar-unified[data-pro-page=community] [data-page-scroll]{padding:16px 13px 25px}.community-glass .cg-hero>div:first-child{gap:12px;align-items:start}.community-glass .cg-hero>div:first-child>div:first-child{width:49px;height:49px;border-radius:15px}.community-glass .cg-hero>div:first-child svg{width:25px;height:25px}.community-glass .cg-hero h1{font-size:28px}.community-glass .cg-hero p{font-size:12px;line-height:1.7}.community-glass .cg-hero>div:last-child{gap:8px 13px;font-size:10px}.community-glass .cg-overview{gap:7px}.community-glass .cg-overview>div{padding:10px 8px;flex-direction:column;gap:8px;align-items:start;border-radius:14px}.community-glass .cg-overview p{display:block}.community-glass .cg-overview strong{display:block;font-size:23px}.community-glass .cg-overview small{display:block;font-size:10px;margin-top:3px}.community-glass .cg-overview>div>span{width:32px;height:32px;border-radius:10px}.community-glass .cg-overview svg{width:18px;height:18px}.noviq-app.pro-environment .community-glass .cg-workspace{grid-template-columns:1fr;gap:14px}.community-glass .cg-groups{display:contents}.community-glass .cg-my-groups{order:0}.community-glass .cg-chat{order:1}.community-glass .cg-discover{order:2}.community-glass .cg-social{order:3;grid-column:1}.noviq-app.pro-environment .community-glass .cg-panel{padding:16px}.noviq-app.pro-environment .community-glass .cg-chat{padding:0;height:600px;min-height:520px}.community-glass .cg-my-groups>div:last-child{display:flex;overflow-x:auto;gap:8px;padding-bottom:4px;scrollbar-width:thin}.noviq-app.pro-environment .community-glass .cg-room{flex:0 0 185px;width:185px;margin:0}.community-glass .cg-social{display:flex;flex-direction:column;gap:14px}.community-glass .cg-chat-header{padding:15px!important;flex-wrap:wrap!important}.community-glass .cg-chat-header>div:first-child{flex-basis:100%!important}.community-glass .cg-chat-header>div:last-child{margin-left:54px}.community-glass .cg-message{max-width:92%!important}.community-glass .cg-messages{padding:15px!important}.community-glass .cg-compose-field textarea{min-height:44px!important}.noviq-app.pro-environment .community-glass .cg-compose-field>button{width:44px;height:44px;min-height:44px}}
+@media(hover:hover){.noviq-app.pro-environment .community-glass .cg-room:not([aria-pressed=true]):hover{background:var(--cg-soft)}.noviq-app.pro-environment .community-glass .cg-invite>button:not(:disabled):hover{filter:brightness(1.06)}}
+@media(prefers-reduced-motion:reduce){.community-glass *{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
+.noviq-app.pro-sidebar-unified[data-pro-page=community]>.noviq-modal-backdrop:has(.community-members-panel){z-index:650;backdrop-filter:blur(8px)}
+.noviq-app.pro-environment .community-glass .cg-my-groups>div:first-child>button{width:40px;height:40px;min-height:40px}
+@media(max-width:700px){.noviq-app.pro-environment .community-glass .cg-my-groups>div:first-child>button{width:44px;height:44px;min-height:44px}.noviq-app.pro-environment .community-glass .cg-discovery-card button,.noviq-app.pro-environment .community-glass .cg-chat-header>div:last-child>button{min-height:44px}}
+.noviq-app.pro-environment .community-glass .cg-room[aria-pressed=true]>span:nth-child(2)>span:last-child{color:#e4efff}
+.noviq-app.pro-environment .community-glass :is(.cg-groups,.cg-social)>*{margin-block:0}
+
+/* Approved messenger concept: quiet navigation, generous conversation, contextual rail. */
+.community-glass .cg-hero>div:first-child>div:first-child,.community-glass .cg-hero>div:last-child{display:none}
+.noviq-app.pro-environment .community-glass .cg-hero{padding:0 8px 20px}
+.community-glass .cg-hero h1{font-size:38px;letter-spacing:-.045em}
+.community-glass .cg-hero p{font-size:15px}
+.community-glass .cg-tabs{display:flex;align-items:center;gap:20px;padding:7px 14px;margin-bottom:12px;border:1px solid var(--cg-line);border-radius:16px;background:#ffffff73}
+.community-glass .cg-tabs>button{position:relative;padding:9px 15px;color:var(--cg-muted);font-size:13px;font-weight:600;border-radius:10px}
+.community-glass .cg-tabs>button[aria-pressed=true]{color:var(--cg-accent)}
+.community-glass .cg-tabs>button[aria-pressed=true]:after{content:"";position:absolute;bottom:-7px;left:14px;right:14px;height:3px;background:#176bfa;border-radius:4px 4px 0 0}
+.noviq-app.pro-environment .community-glass .cg-tabs>.cg-create{margin-left:auto;display:flex;align-items:center;gap:7px;background:#076aff;color:white;box-shadow:0 3px 9px #176bfa20}
+.noviq-app.pro-environment .community-glass .cg-workspace{grid-template-columns:minmax(205px,.9fr) minmax(0,1.65fr) minmax(220px,.9fr);gap:10px;align-items:stretch}
+.noviq-app.pro-environment .community-glass .cg-panel{border-radius:17px;box-shadow:none;padding:18px;background:#ffffffad}
+.noviq-app.pro-environment .community-glass .cg-groups{border:1px solid var(--cg-line);border-radius:17px;background:#ffffffad;padding:0;gap:14px;overflow:hidden}
+.noviq-app.pro-environment .community-glass .cg-my-groups{background:transparent;border:0;flex:1}
+.community-glass .cg-my-groups h2>svg,.community-glass .cg-my-groups>div:first-child>button{display:none}
+.noviq-app.pro-environment .community-glass .cg-room{min-height:76px;padding:13px 10px;gap:12px}
+.noviq-app.pro-environment .community-glass .cg-room>span:first-child{height:43px;width:43px;background:linear-gradient(135deg,#ddecff,#bedfff)}
+.noviq-app.pro-environment .community-glass .cg-room[aria-pressed=true]{background:#dcecffb0;border-color:transparent;color:var(--cg-ink);box-shadow:none}
+.noviq-app.pro-environment .community-glass .cg-room[aria-pressed=true]>span:first-child{background:#c7e0ff;color:#1269ff}
+.noviq-app.pro-environment .community-glass .cg-room[aria-pressed=true]>span:nth-child(2)>span:last-child{color:var(--cg-muted)}
+.community-glass .cg-discover-link{display:flex;align-items:center;gap:12px;margin:0 12px 12px!important;padding:15px 12px;border:1px solid #bfd9f9;border-radius:14px;text-align:left;color:var(--cg-accent);background:#ffffff60}
+.community-glass .cg-discover-link>span{flex:1;min-width:0}.community-glass .cg-discover-link svg{flex-shrink:0}
+.community-glass .cg-discover-link strong{display:block;color:var(--cg-ink);font-size:12px}.community-glass .cg-discover-link small{display:block;color:var(--cg-muted);font-size:11px;line-height:1.6;margin-top:5px}
+.community-glass [data-view=groups] .cg-discover{display:none}
+.community-glass [data-view=discover] .cg-my-groups{display:none}
+.community-glass [data-view=discover] .cg-discover{order:-1;border:0;background:transparent!important;flex:1}
+.noviq-app.pro-environment .community-glass .cg-chat{height:clamp(590px,calc(100dvh - 265px),900px);padding:0;background:linear-gradient(140deg,#ffffffe6,#ffffff7a)}
+.noviq-app.pro-environment .community-glass .cg-chat-header{padding:19px 20px}
+.noviq-app.pro-environment .community-glass .cg-messages{padding:26px 20px}
+.noviq-app.pro-environment .community-glass .cg-message{max-width:86%;background:#e9f0fa;border:0;padding:13px 16px;box-shadow:none}
+.community-glass .cg-message>p:last-child{font-size:14px;line-height:1.7}
+.noviq-app.pro-environment .community-glass .cg-message.chat-user-message{background:linear-gradient(115deg,#2484ff,#0063ff)!important;border:0}
+.noviq-app.pro-environment .community-glass .cg-compose-field{border-radius:22px;background:#ffffffb5;padding:6px 8px 6px 12px}
+.noviq-app.pro-environment .community-glass .cg-compose-field>button{border-radius:50%;width:44px;height:44px}
+.community-glass .cg-social{background:#ffffffad;border:1px solid var(--cg-line);border-radius:17px;gap:0;padding:0 19px 65px;align-self:start;max-height:calc(100dvh - 265px);overflow-y:auto;scrollbar-width:thin}
+.noviq-app.pro-environment .community-glass .cg-social>.cg-panel{border:0;border-radius:0;background:transparent;padding:18px 0;flex-shrink:0}
+.noviq-app.pro-environment .community-glass .cg-social>.cg-panel+*{border-top:1px solid #cbdcf180}
+.community-glass .cg-members-heading{display:flex;align-items:center;justify-content:space-between;gap:4px}
+.community-glass .cg-members-heading button{color:var(--cg-accent);width:35px;flex-shrink:0}
+.community-glass .cg-member-row{display:flex;align-items:center;gap:11px;margin-top:16px;min-width:0}
+.community-glass .cg-member-avatar{position:relative;width:39px;height:39px;display:grid;place-items:center;flex-shrink:0;border-radius:50%;background:linear-gradient(130deg,#c8e8ff,#9abff4);color:#174d9a;font-weight:700}
+.community-glass .cg-member-avatar i{position:absolute;bottom:0;right:0;width:9px;height:9px;border:2px solid white;border-radius:50%;background:#18a773}
+.community-glass .cg-member-row>div{min-width:0}.community-glass .cg-member-row strong{font-size:12px;display:block;overflow-wrap:anywhere}.community-glass .cg-member-row small{display:block;font-size:11px;color:var(--cg-muted);margin-top:2px;overflow-wrap:anywhere}
+.community-glass .cg-members>p{font-size:11px;color:var(--cg-muted);line-height:1.7;margin-top:10px}.community-glass .cg-members>p button{color:var(--cg-accent);text-decoration:underline}
+.community-glass .cg-social .cg-invitations{order:4}.community-glass .cg-social .cg-friends{order:3}
+.community-glass .cg-friends>p:has(span){background:transparent;border:0;padding:0}
+.noviq-app.pro-environment.dark .community-glass :is(.cg-tabs,.cg-panel,.cg-groups,.cg-social){background:var(--cg-panel)}
+.noviq-app.pro-environment.dark .community-glass .cg-chat{background:linear-gradient(135deg,#142b4bef,#142b4bb0)}
+.noviq-app.pro-environment.dark .community-glass .cg-room[aria-pressed=true]{background:#2a5183}
+.noviq-app.pro-environment.dark .community-glass .cg-message{background:#294263}
+.noviq-app.pro-environment.dark .community-glass .cg-compose-field{background:#152f50}
+.noviq-app.pro-environment.dark .community-glass .cg-my-groups,.noviq-app.pro-environment.dark .community-glass .cg-social>.cg-panel{background:transparent}
+@media(min-width:1251px){.community-glass .cg-social{grid-column:auto;display:flex}}
+@media(min-width:701px) and (max-width:1250px){.noviq-app.pro-environment .community-glass .cg-workspace{grid-template-columns:210px minmax(0,1fr)}.community-glass .cg-social{grid-column:1/-1;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));max-height:none;padding:0 18px 20px;gap:20px}.community-glass .cg-social>.cg-invite{grid-column:auto}.noviq-app.pro-environment .community-glass .cg-social>.cg-panel{border:0}.community-glass .cg-social .cg-invitations{grid-column:1/-1}.community-glass .cg-chat-header p{max-width:210px}}
+@media(max-width:700px){.community-glass .cg-hero h1{font-size:30px}.community-glass .cg-hero p{font-size:13px}.community-glass .cg-tabs{gap:0;padding:7px 5px;flex-wrap:wrap}.community-glass .cg-tabs>button{padding:9px 10px;font-size:11px;min-height:44px}.community-glass .cg-tabs>.cg-create{gap:4px;font-size:11px}.noviq-app.pro-environment .community-glass .cg-workspace{grid-template-columns:1fr}.noviq-app.pro-environment .community-glass .cg-groups{display:flex;order:0}.noviq-app.pro-environment .community-glass .cg-my-groups{padding:14px}.community-glass .cg-my-groups>label{margin-top:10px}.noviq-app.pro-environment .community-glass .cg-room{flex-basis:200px;min-height:66px}.community-glass .cg-discover-link{padding:10px;margin-bottom:10px!important}.community-glass .cg-discover-link small{display:none}.noviq-app.pro-environment .community-glass .cg-chat{height:610px;padding:0}.community-glass .cg-social{max-height:none;padding:0 18px 70px;display:flex}.community-glass .cg-chat-header>div:last-child{margin-left:0}.noviq-app.pro-environment .community-glass .cg-message{max-width:92%}}

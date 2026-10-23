@@ -49,7 +49,6 @@ import { db } from "@/src/lib/firebase";
 import { getAppErrorMessage } from "@/src/lib/errors";
 import { calculateLevelName, getLocalDayKey } from "@/src/lib/progress";
 import { FloatingTutor } from "@/src/components/FloatingTutor";
-import { SyncRecovery } from "@/src/components/SyncRecovery";
 import type { UserProfile } from "@/src/types";
 import {
   getNotificationPreferences,
@@ -787,7 +786,6 @@ export const Layout: React.FC<{
               key={activeTab}
               className={cn("mx-auto relative z-10 w-full", activeTab === "tutor" || activeTab === "notes" ? "flex min-h-0 flex-1 flex-col" : "max-w-[1600px]")}
             >
-              <SyncRecovery />
               {children}
             </div>
         </div>
