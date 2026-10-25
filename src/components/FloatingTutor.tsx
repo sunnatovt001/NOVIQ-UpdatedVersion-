@@ -13,6 +13,7 @@ import { TutorSaveStatus } from "@/src/components/TutorSaveStatus";
 import {useTutorHistory} from "@/src/lib/useTutorHistory";
 import { useLocale } from "@/src/contexts/LocaleContext";
 import { getTutorIntro, type TutorLanguage } from "@/src/features/tutor/tutorCopy";
+import './floating-tutor.css';
 
 const SAIDAMIN_AVATAR = "/saidamin-avatar.jpg";
 
@@ -127,9 +128,7 @@ export const FloatingTutor = ({ activeTab }: { activeTab?: string }) => {
     <div
       data-floating-tutor
       className={cn(
-        "fixed bottom-[calc(5.25rem+env(safe-area-inset-bottom))] right-3 z-[100] hidden max-w-[calc(100vw-1.5rem)] flex-col items-end gap-2 sm:right-5 sm:flex lg:bottom-5",
-        activeTab === "admin" && "hidden",
-        activeTab === "pricing" && "!hidden"
+        "fixed bottom-[calc(5.25rem+env(safe-area-inset-bottom))] right-3 z-[100] flex max-w-[calc(100vw-1.5rem)] flex-col items-end gap-2 sm:right-5 lg:bottom-5"
       )}
     >
       <AnimatePresence>
@@ -141,7 +140,7 @@ export const FloatingTutor = ({ activeTab }: { activeTab?: string }) => {
             exit={{ opacity: 0, y: 20, scale: 0.96 }}
             transition={{ duration: 0.22, ease: "easeOut" }}
             className={cn(
-              "noviq-popover-viewport flex min-h-0 flex-col rounded-[2rem] border border-[#E5E7EB] bg-white text-[#111827] shadow-[0_24px_80px_rgba(17,24,39,0.14)]",
+              "saidamin-glass-chat noviq-popover-viewport flex min-h-0 flex-col rounded-[2rem] border border-[#E5E7EB] bg-white text-[#111827] shadow-[0_24px_80px_rgba(17,24,39,0.14)]",
               "w-full sm:w-[min(calc(100vw-1.5rem),480px)]",
               isCompact ? "h-[min(60dvh,440px)]" : "h-[min(85dvh,720px)]"
             )}
@@ -290,7 +289,7 @@ export const FloatingTutor = ({ activeTab }: { activeTab?: string }) => {
           whileTap={{ scale: 0.96 }}
             ref={launcherRef}
             onClick={() => setIsOpen(true)}
-          className="group relative flex items-center gap-3 rounded-full border border-[#E5E7EB] bg-white p-2 pr-4 text-left text-[#111827] shadow-[0_18px_50px_rgba(17,24,39,0.12)]"
+          className="saidamin-glass-launcher group relative flex items-center gap-3 rounded-full border border-[#E5E7EB] bg-white p-2 pr-4 text-left text-[#111827] shadow-[0_18px_50px_rgba(17,24,39,0.12)]"
           aria-label={t("tutor.open")}
         >
           <span className="relative h-10 w-10 overflow-hidden rounded-full border-2 border-[#3F7D58]/30 bg-white">

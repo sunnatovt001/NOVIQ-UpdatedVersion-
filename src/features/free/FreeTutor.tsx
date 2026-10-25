@@ -1,4 +1,5 @@
 import { useVoiceMessage } from "@/src/features/tutor/useVoiceMessage";
+import './free-tutor.css';
 import { getProfileAvatar } from '@/src/lib/profileAvatar';
 import { createTutorRecognition, getTutorSpeechSynthesis, stopTutorRecognition, cancelTutorSpeech } from "@/src/features/tutor/browserSpeech";
 import {TutorProControls,useTutorModes} from '@/src/features/pro/TutorProControls';
@@ -266,7 +267,7 @@ export const Tutor = ({ setActiveTab }: { setActiveTab: (tab: string) => void })
   const historyProps = { chat, disabled: isTyping, onSelect: selectConversation, onNew: newConversation };
 
   return (
-    <div className="tutor-workspace flex min-h-0 min-w-0 flex-1 overflow-hidden rounded-2xl border border-slate-200 shadow-xl sm:rounded-[1.5rem]">
+    <div className="free-tutor-workspace tutor-workspace flex min-h-0 min-w-0 flex-1 overflow-hidden rounded-2xl border border-slate-200 shadow-xl sm:rounded-[1.5rem]">
       <aside className="hidden w-60 shrink-0 border-r border-slate-200 xl:block" style={{background: "var(--noviq-card)"}}>
         <TutorChatHistory {...historyProps} />
       </aside>
@@ -318,11 +319,11 @@ export const Tutor = ({ setActiveTab }: { setActiveTab: (tab: string) => void })
         }}
       />
 
-      <div className="flex shrink-0 flex-col gap-2 border-b border-white/10 bg-white/[0.02] p-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:p-4">
+      <div className="ftu-chat-header flex shrink-0 flex-col gap-2 border-b border-white/10 bg-white/[0.02] p-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:p-4">
         <div className="flex items-center gap-4">
           <Avatar src={ASSISTANT_AVATAR} alt="Noviq Tutor" size="lg" />
           <div>
-            <h2 className="font-display text-base font-bold text-white sm:text-xl">Saidamin - Noviq Tutor</h2>
+            <h2 className="font-display text-base font-bold text-white sm:text-xl">Saidamin</h2>
             <p className="hidden text-[10px] font-black uppercase tracking-widest text-cyan-300 sm:block">
               {t("tutor.coaching")}
             </p>
@@ -346,14 +347,14 @@ export const Tutor = ({ setActiveTab }: { setActiveTab: (tab: string) => void })
           >
             {autoSpeak ? <Volume2 size={20} /> : <VolumeX size={20} />}
           </button>
-          <button
+          {isSpeaking && <button
             type="button"
             onClick={stopSpeaking}
             disabled={!isSpeaking}
             className="rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs font-bold text-red-300 transition hover:bg-red-500/15 disabled:cursor-not-allowed disabled:opacity-40"
           >
               {t("tutor.stop")}
-          </button>
+          </button>}
         </div>
       </div>
 
@@ -479,7 +480,8 @@ export const Tutor = ({ setActiveTab }: { setActiveTab: (tab: string) => void })
         </AnimatePresence>
       </div>
 
-      <div className="mt-auto shrink-0 border-t border-white/10 bg-white/[0.02] p-3 sm:p-4">
+      <div className="ftu-compose-wrap mt-auto shrink-0 border-t border-white/10 bg-white/[0.02] p-3 sm:p-4">
+        {!isTyping&&!input.trim()&&<div className="ftu-prompts">{(locale==='uz'?['Sodda qilib tushuntir','Mashq savolini ber','Javobimni tekshir']:locale==='ru'?['Объясни проще','Дай вопрос для практики','Проверь мой ответ']:['Explain simply','Give me a practice question','Check my answer']).map(prompt=><button type="button" key={prompt} onClick={()=>setInput(prompt)}>{prompt}</button>)}</div>}
 
 
         <div className="tutor-composer rounded-2xl border border-white/10 bg-white/5 p-2 transition-colors focus-within:border-slate-400">

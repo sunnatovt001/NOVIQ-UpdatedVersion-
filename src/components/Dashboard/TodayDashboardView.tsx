@@ -9,6 +9,9 @@ import {
   Layers3,
   Search,
   Timer,
+  CalendarDays,
+  Compass,
+  Sparkles,
 } from "lucide-react";
 import { cn } from "@/src/lib/utils";
 import { useLocale } from "@/src/contexts/LocaleContext";
@@ -24,9 +27,10 @@ export type TodayTask = {
   source: "roadmap" | "planner";
 };
 
-type RhythmDay = { day: string; level: number };
+type RhythmDay = { day: string; level: number; minutes?: number };
 
 interface TodayDashboardViewProps {
+  freeDesign?: boolean;
   firstName: string;
   tasks: TodayTask[];
   tasksLoading: boolean;
@@ -69,6 +73,7 @@ const formatToday = (locale: keyof typeof DATE_LOCALES) =>
   }).format(new Date());
 
 export const TodayDashboardView = ({
+  freeDesign = false,
   firstName,
   tasks,
   tasksLoading,
@@ -97,9 +102,10 @@ export const TodayDashboardView = ({
 }: TodayDashboardViewProps) => {
   const { locale, t } = useLocale();
   const visibleTasks = tasks.slice(0, 4);
+  const words=locale==='uz'?{next:'Keyingi qadamingiz shu yerdan boshlanadi',empty:'Aniq kun kichik rejadan boshlanadi.',saved:'Saqlangan vazifalaringiz shu yerda ko‘rinadi.',focus:'Fokus mashg‘ulotini boshlash',explore:'O‘qish maydoningiz imkoniyatlarini kengaytiring.',compare:'Rejalarni solishtirish',none:'Hali fokus mashg‘uloti qayd etilmagan.'}:locale==='ru'?{next:'Ваш следующий шаг начинается здесь',empty:'Ясный день начинается с небольшого плана.',saved:'Здесь появятся сохранённые задачи.',focus:'Начать фокус-сессию',explore:'Откройте больше возможностей для учёбы.',compare:'Сравнить планы',none:'Фокус-сессий пока нет.'}:{next:'Your next step starts here',empty:'A clear day starts with a small plan.',saved:'Your saved tasks will appear here.',focus:'Start a focus session',explore:'Explore a more connected study workspace.',compare:'Compare plans',none:'No focus sessions recorded yet.'};
 
   return (
-    <div className="today-shell mx-auto w-full max-w-[1280px] space-y-5 pb-8 sm:space-y-6">
+    <div className={cn(freeDesign && 'free-today',"today-shell mx-auto w-full max-w-[1280px] space-y-5 pb-8 sm:space-y-6")}>
       <header className="flex flex-col gap-4 px-1 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <p className="text-sm font-semibold text-[var(--noviq-muted)]">{formatToday(locale)}</p>
@@ -169,9 +175,10 @@ export const TodayDashboardView = ({
         </div>
       )}
 
-      <div className="grid gap-5 xl:grid-cols-[minmax(0,1.65fr)_minmax(300px,0.75fr)]">
+      <div className="ft-grid grid gap-5 xl:grid-cols-[minmax(0,1.65fr)_minmax(300px,0.75fr)]">
         <div className="space-y-5">
           <section className="today-next-card overflow-hidden rounded-[1.75rem] p-6 sm:p-8">
+            {freeDesign&&<Compass className="ft-compass" size={46} aria-hidden="true"/>}
             <div className="flex flex-col gap-7 sm:flex-row sm:items-end sm:justify-between">
               <div className="min-w-0">
                 <div className="flex items-center gap-2 text-sm font-semibold text-[#2148C7] dark:text-[#AFC3FF]">
@@ -194,7 +201,7 @@ export const TodayDashboardView = ({
                 ) : (
                   <>
                     <h2 className="mt-4 font-display text-3xl font-bold tracking-[-0.04em] text-[var(--noviq-text)]">
-                      {t("today.noMission")}
+                      {freeDesign ? words.next : t("today.noMission")}
                     </h2>
                     <p className="mt-3 max-w-lg text-sm leading-6 text-[var(--noviq-muted)]">
                       {t("today.buildPlan")}
@@ -220,7 +227,7 @@ export const TodayDashboardView = ({
                 <p className="mt-1 text-sm text-[var(--noviq-muted)]">{t("today.planSubtitle")}</p>
               </div>
               <span className="rounded-lg bg-[var(--noviq-soft)] px-3 py-1.5 text-sm font-semibold text-[var(--noviq-accent-hover)]">
-                {taskCompletionLabel}
+                {freeDesign && !tasksLoading && !tasksError && tasks.length===0 ? (locale==='uz'?'0 vazifa':locale==='ru'?'0 задач':'0 tasks') : taskCompletionLabel}
               </span>
             </div>
 
@@ -256,9 +263,11 @@ export const TodayDashboardView = ({
                   </div>
                 ))
               ) : (
-                <div className="py-6 text-center">
-                  <p className="text-sm font-semibold text-[var(--noviq-text)]">{t("today.noMission")}</p>
-                  <p className="mt-1 text-sm text-[var(--noviq-muted)]">{t("today.createSteps")}</p>
+                <div className="ft-empty py-6 text-center">
+                  {freeDesign&&<CalendarDays size={43} aria-hidden="true"/>}
+                  <p className="text-sm font-semibold text-[var(--noviq-text)]">{freeDesign ? words.empty : t("today.noMission")}</p>
+                  <p className="mt-1 text-sm text-[var(--noviq-muted)]">{freeDesign ? words.saved : t("today.createSteps")}</p>
+                  {freeDesign&&<button type="button" className="today-secondary-button" onClick={()=>onNavigate('planner')}>{t('nav.planner')}<ArrowRight size={15}/></button>}
                 </div>
               )}
             </div>
@@ -270,7 +279,7 @@ export const TodayDashboardView = ({
             )}
           </section>
 
-          <section className="today-card rounded-[1.5rem] p-5 sm:p-6">
+          <section className="ft-week today-card rounded-[1.5rem] p-5 sm:p-6">
             <div className="flex items-center justify-between gap-4">
               <div>
                 <h2 className="text-lg font-bold text-[var(--noviq-text)]">{t("today.thisWeek")}</h2>
@@ -284,13 +293,14 @@ export const TodayDashboardView = ({
                   <div className="flex h-20 items-end overflow-hidden rounded-xl bg-[var(--noviq-soft)] p-1.5 sm:h-24">
                     <div
                       className="w-full rounded-lg bg-[#315EFB] transition-[height] duration-200"
-                      style={{ height: `${sessionsReady ? item.level : 0}%` }}
+                      style={{ height: `${sessionsReady ? Math.min(100,item.level) : 0}%` }}
                     />
                   </div>
                   <span className="text-xs font-semibold text-[var(--noviq-muted)]">{WEEKDAY_LABELS[locale][index] || item.day}</span>
                 </div>
               ))}
             </div>
+            {freeDesign&&sessionsReady&&weeklyRhythm.every(day=>day.level===0)&&<p className="ft-week-empty">{words.none}</p>}
           </section>
         </div>
 
@@ -309,6 +319,7 @@ export const TodayDashboardView = ({
             </div>
             <p className="mt-3 text-xs text-[var(--noviq-muted)]">{t("today.dailyTarget", { count: dailyTargetMinutes })}</p>
             <p className="sr-only">{t("today.savedCompletion")}</p>
+            {freeDesign&&<button type="button" className="today-primary-button ft-focus-start" onClick={()=>onNavigate('focus')}>{words.focus}<ArrowRight size={16}/></button>}
           </section>
 
           <section className="today-card rounded-[1.5rem] p-5 sm:p-6">
@@ -342,6 +353,7 @@ export const TodayDashboardView = ({
                 <BookOpen size={19} aria-hidden="true" />
                 {t("today.addNote")}
               </button>
+              {freeDesign&&<><button type="button" onClick={()=>onNavigate('planner')} className="today-tool-button"><CalendarDays size={19}/>{t('nav.planner')}</button><button type="button" onClick={()=>onNavigate('flashcards')} className="today-tool-button"><Layers3 size={19}/>{t('today.flashcards')}</button></>}
             </div>
           </section>
 
@@ -353,6 +365,7 @@ export const TodayDashboardView = ({
           </section>
         </aside>
       </div>
+      {freeDesign&&<aside className="ft-upgrade"><Sparkles size={23}/><div><strong>{words.explore}</strong></div><button type="button" onClick={()=>onNavigate('pricing')}>{words.compare}<ArrowRight size={16}/></button></aside>}
     </div>
   );
 };

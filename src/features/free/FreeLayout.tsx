@@ -1,4 +1,6 @@
 import { getProfileAvatar } from '@/src/lib/profileAvatar';
+import './free-dashboard.css';
+import './free-planner.css';
 import {useProCopy} from '@/src/features/pro/proCopy';
 import {useMembership} from '@/src/features/pro/MembershipContext';
 import {MembershipBadge} from '@/src/features/pro/ProMembership';
@@ -267,7 +269,7 @@ export const Layout: React.FC<{
   const isDarkTheme = theme === "dark";
 
   const primaryMenuItems = [
-    { id: "dashboard", label: t("nav.today"), shortLabel: t("nav.today"), icon: <LayoutDashboard size={20} /> },
+    { id: "dashboard", label: "Dashboard", shortLabel: t("nav.today"), icon: <LayoutDashboard size={20} /> },
     { id: "planner", label: t("nav.planner"), shortLabel: t("nav.plan"), icon: <Calendar size={20} /> },
     { id: "tutor", label: t("nav.tutor"), shortLabel: t("nav.tutor"), icon: <MessageSquare size={20} /> },
     { id: "notes", label: t("nav.library"), shortLabel: t("nav.library"), icon: <BookOpen size={20} /> },
@@ -282,6 +284,7 @@ export const Layout: React.FC<{
     { id: "profile", label: t("nav.profile"), icon: <User size={20} /> },
   ];
 
+  useEffect(() => { const update=(event:Event)=>{const value=(event as CustomEvent).detail;if(value==='light'||value==='dark')setTheme(value);};window.addEventListener('noviq:free-theme',update);return()=>window.removeEventListener('noviq:free-theme',update); }, []);
   useEffect(() => {
     document.documentElement.classList.toggle("dark", isDarkTheme);
     try { window.localStorage.setItem("noviq-theme", theme); }
@@ -566,7 +569,7 @@ export const Layout: React.FC<{
   );
 
   return (
-    <div className={cn("noviq-app relative flex h-screen overflow-hidden font-sans", (isDarkTheme || membership.cinematic) && "dark", membership.cinematic && "pro-environment")}>
+    <div data-free-page={activeTab} className={cn("noviq-app relative flex h-screen overflow-hidden font-sans", ['dashboard','planner','tutor','notes','focus','flashcards','community','analytics','pricing','profile'].includes(activeTab)&&'free-dashboard-active', (isDarkTheme || membership.cinematic) && "dark", membership.cinematic && "pro-environment")}>
       <div className="app-bg pointer-events-none fixed inset-0 -z-20 overflow-hidden" />
 
       {/* Mobile Top Nav */}
@@ -620,6 +623,7 @@ export const Layout: React.FC<{
             />
             <h1 className={cn("font-display text-3xl font-black tracking-tighter text-[#111827]", isSidebarCollapsed && "lg:hidden")}>
               Noviq
+              {activeTab==='dashboard'&&<span className="ft-free-badge">FREE</span>}
             </h1>
           </button>
 
@@ -683,6 +687,7 @@ export const Layout: React.FC<{
         </nav>
 
         <div className={cn("sidebar-footer space-y-2.5 px-6 pb-5 pt-3", isSidebarCollapsed && "lg:px-4 lg:pb-6")}>
+          {activeTab==='dashboard'&&<button type="button" className="ft-account" aria-label="Open profile" onClick={()=>handleTabChange('profile')}><img src={getProfileAvatar(profile)} alt=""/><span className={cn(isSidebarCollapsed&&'lg:hidden')}><strong>{profile?.displayName||'Student'}</strong><small>Free plan</small></span></button>}
           <div
             className={cn(
               "app-sidebar-card sidebar-momentum hidden rounded-xl border border-[#E5E7EB] bg-white px-3.5 py-3 lg:block",
@@ -722,7 +727,7 @@ export const Layout: React.FC<{
       {/* Main Content */}
       <main ref={mainContent} tabIndex={-1} aria-label={[...primaryMenuItems, ...secondaryMenuItems].find(item => item.id === activeTab)?.label} className="relative flex flex-1 flex-col overflow-hidden pb-[calc(4.75rem+env(safe-area-inset-bottom))] pt-[calc(5rem+env(safe-area-inset-top))] lg:pb-0 lg:pt-0">
         <div className="app-main-surface pointer-events-none absolute inset-0 rounded-[2rem] border border-[#E5E7EB] bg-white/45" />
-        {activeTab === "dashboard" && <div className="relative z-[300] hidden h-14 shrink-0 items-center justify-end px-10 lg:flex xl:px-14"><HeaderLanguagePicker/></div>}
+        {activeTab === "dashboard" && <div className="ft-toolbar relative z-[300] hidden h-14 shrink-0 items-center justify-between px-10 lg:flex xl:px-14"><span>Workspace / Dashboard</span><div className="flex items-center gap-3"><HeaderLanguagePicker/>{renderThemeToggleButton()}<div className="relative"><button type="button" className="theme-toggle flex h-12 w-12 items-center justify-center rounded-2xl border border-[#E5E7EB] bg-white" aria-label={t('shell.notifications')} onClick={()=>setNotificationsOpen(current=>!current)}><Bell size={18}/></button>{notificationDropdown}</div></div></div>}
         {activeTab !== "dashboard" && <header className={cn("relative z-[300] hidden shrink-0 items-center justify-between lg:flex", activeTab === "tutor" ? "h-20 px-5" : "h-28 px-10 xl:px-14")}>
           <div className="space-y-1">
             <h2 className="group flex items-center gap-3 text-3xl font-bold leading-none tracking-tight text-[#111827]">

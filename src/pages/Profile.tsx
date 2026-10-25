@@ -41,6 +41,7 @@ import { getProfileCopy } from "@/src/features/profile/profileCopy";
 import { avatarOptions, getProfileAvatar } from '@/src/lib/profileAvatar';
 import { useMembership } from '@/src/features/pro/MembershipContext';
 import '@/src/features/profile/glass-profile.css';
+import '@/src/features/free/free-profile.css';
 
 const AVATAR_SIZE = 512;
 const TELEGRAM_BOT_USERNAME = (import.meta.env.VITE_TELEGRAM_BOT_USERNAME || "noviqq_bot").trim().replace(/^@/, "");
@@ -182,12 +183,13 @@ export const Profile = () => {
 
   const handleSave = async () => {
     if (isReadOnlyAudit) { setStatus(copy.auditSavingDisabled); return; }
-    if (!user) return;
+    if (!user || isSaving) return;
+    if (!formData.displayName.trim() || !Number.isFinite(formData.dailyTargetMinutes) || formData.dailyTargetMinutes < 5 || formData.dailyTargetMinutes > 480) { setStatus(locale==='uz'?'Ismingizni kiriting va kunlik maqsadni 5–480 daqiqa orasida tanlang.':locale==='ru'?'Введите имя и цель от 5 до 480 минут.':'Enter your name and a daily target between 5 and 480 minutes.'); return; }
     setIsSaving(true);
     setStatus("");
 
     const profilePatch = {
-      displayName: formData.displayName,
+      displayName: formData.displayName.trim(),
       currentLevel: formData.currentLevel,
       dailyTargetMinutes: formData.dailyTargetMinutes,
       showActionButtons: formData.showActionButtons,
@@ -334,8 +336,8 @@ export const Profile = () => {
       setIsAvatarSaving(true);
       setAvatarError('');
       try {
-        updateLocalProfile({ photoURL: selectedPreset });
         const syncStatus = await writeDocWithQueue({ userId: user.uid, path: ['users', user.uid], kind: 'update', data: { photoURL: selectedPreset } });
+        updateLocalProfile({ photoURL: selectedPreset });
         setStatus(syncStatus === 'synced' ? copy.avatarUpdated : copy.avatarCloudPending);
         setShowAvatarModal(false);
       } catch (error) { setAvatarError(getAppErrorMessage(error)); }
@@ -352,8 +354,8 @@ export const Profile = () => {
       const blob = await createCroppedAvatarBlob();
       const localPhotoURL = await blobToDataUrl(blob);
 
-      updateLocalProfile({ photoURL: localPhotoURL });
       const localSyncStatus = await writeDocWithQueue({ userId: user.uid, path: ['users', user.uid], kind: 'update', data: { photoURL: localPhotoURL } });
+      updateLocalProfile({ photoURL: localPhotoURL });
       savedLocally = true;
       setShowAvatarModal(false);
       setAvatarFile(null);
@@ -383,119 +385,7 @@ export const Profile = () => {
     setShowAvatarModal(true);
   };
 
-  return (
-    <div data-profile-tab={profileTab} className={cn(cinematic && 'pf-page', "mx-auto max-w-6xl space-y-8 pb-24 text-slate-950 dark:text-slate-50")}>
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept="image/*"
-        className="hidden"
-        onChange={(event) => {
-          const file = event.target.files?.[0];
-          if (file) handleAvatarFile(file);
-          event.currentTarget.value = "";
-        }}
-      />
-
-      <header className="pf-heading flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
-        <div className="space-y-3">
-          <div className="flex items-center gap-2">
-            <div className="h-1 w-10 rounded-full bg-blue-500" />
-            <span className="text-[10px] font-black uppercase tracking-[0.3em] text-blue-700 dark:text-blue-300">{copy.title}</span>
-          </div>
-          <h2 className="font-display text-4xl font-bold tracking-tight text-slate-950 dark:text-white sm:text-5xl">{cinematic ? ui.title : copy.title}</h2>
-          <p className="max-w-2xl text-base leading-7 text-slate-600 dark:text-slate-300 sm:text-lg">
-            {cinematic ? ui.subtitle : copy.subtitle}
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={() => (editing ? handleSave() : setEditing(true))}
-          disabled={isSaving}
-          className={cn(
-            "inline-flex min-h-12 items-center justify-center gap-3 rounded-2xl bg-blue-600 px-6 text-sm font-black text-white transition-colors hover:bg-blue-700 active:bg-blue-800 disabled:opacity-60",
-          )}
-        >
-          {isSaving ? <Loader2 size={18} className="animate-spin" /> : editing ? <Save size={18} /> : <User size={18} />}
-          {editing ? copy.saveChanges : copy.editProfile}
-        </button>
-      </header>
-
-      {status && (
-        <div role="status" className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
-          {status}
-        </div>
-      )}
-
-      <div className="pf-grid grid gap-8 lg:grid-cols-12">
-        <aside className="pf-aside space-y-6 lg:col-span-4">
-          <section className="pf-identity relative overflow-hidden rounded-3xl border border-slate-200 bg-white p-6 text-center dark:border-slate-700 dark:bg-slate-900 sm:p-8">
-            <Award className="pointer-events-none absolute -right-10 -top-10 text-slate-100 dark:text-white/[0.04]" size={180} aria-hidden="true" />
-
-            <div className="relative mx-auto mb-8 h-44 w-44">
-              <div className="h-44 w-44 overflow-hidden rounded-[3rem] border-8 border-slate-100 bg-slate-100 ring-1 ring-slate-200 dark:border-slate-800 dark:bg-slate-950 dark:ring-slate-700">
-                <img src={avatarSrc} alt={profile?.displayName || copy.student} className="h-full w-full object-cover" />
-              </div>
-              <button
-                type="button"
-                onClick={openAvatarPicker}
-                className="absolute bottom-2 right-2 flex h-12 w-12 items-center justify-center rounded-2xl border-4 border-white bg-blue-600 text-white transition-colors hover:bg-blue-700 dark:border-slate-900"
-                aria-label={copy.changeAvatar}
-              >
-                <Camera size={18} />
-              </button>
-            </div>
-
-            <h3 className="font-display text-3xl font-bold text-slate-950 dark:text-white">{profile?.displayName || copy.student}</h3>
-            <p className="mt-2 break-all text-sm text-slate-500 dark:text-slate-400">{profile?.email}</p>
-            {cinematic && <span className="pf-plan-badge"><Crown size={14}/>NOVIQ PRO</span>}
-            <div className="pf-legacy-actions mt-6 flex items-center justify-center gap-4">
-              {formData.showActionButtons && (
-                <button
-                  type="button"
-                  onClick={openAvatarPicker}
-                  className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 transition-colors hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
-                >
-                  <Upload size={16} />
-                  {copy.changeAvatar}
-                </button>
-              )}
-
-              <button
-                type="button"
-                onClick={() => setFormData({ ...formData, showActionButtons: !formData.showActionButtons })}
-                className="inline-flex min-h-11 items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 transition-colors hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
-              >
-                {formData.showActionButtons ? copy.hideButtons : copy.showButtons}
-              </button>
-            </div>
-
-            {premiumAvatars && <div className="pro-profile-avatars mt-6">
-              <p className="mb-3 text-sm font-semibold text-slate-700 dark:text-slate-200">{locale === 'uz' ? 'Premium avatarlar' : locale === 'ru' ? 'Премиум-аватары' : 'Premium avatars'}</p>
-              <div className="grid grid-cols-4 gap-3" aria-label="Premium avatars">
-                {avatarOptions(true).map((src, index) => <button key={src} type="button" aria-label={`Choose premium avatar ${index + 1}`} aria-pressed={avatarSrc === src} onClick={() => { openAvatarPicker(); setSelectedPreset(src); }} className={cn('aspect-square min-h-11 overflow-hidden rounded-full border-2 p-0.5', avatarSrc === src ? 'border-blue-500' : 'border-transparent')}><img src={src} alt="" className="h-full w-full rounded-full object-cover"/></button>)}
-              </div>
-            </div>}
-            {cinematic && <div className="pf-upload"><p>{ui.avatars}</p><button type="button" onClick={()=>fileInputRef.current?.click()}><Upload size={17}/>{ui.upload}</button><small>JPG, PNG · max 8 MB</small></div>}
-
-            <div className="pf-legacy-metrics mt-8 grid grid-cols-3 gap-3">
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-800">
-                <p className="text-xl font-black text-slate-950 [font-variant-numeric:tabular-nums] dark:text-white">{profile?.level || 1}</p>
-                <p className="text-[9px] font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400">{levelName}</p>
-              </div>
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-800">
-                <p className="text-xl font-black text-slate-950 [font-variant-numeric:tabular-nums] dark:text-white">{profile?.xp || 0}</p>
-                <p className="text-[9px] font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400">XP</p>
-              </div>
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-800">
-                <p className="text-xl font-black text-blue-700 [font-variant-numeric:tabular-nums] dark:text-blue-300">{profile?.streak || 0}</p>
-                <p className="text-[9px] font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400">{copy.streak}</p>
-              </div>
-            </div>
-          </section>
-
-          {cinematic && <section className="pf-membership"><span><Crown size={28}/></span><div><h3>NOVIQ PRO</h3><p>{ui.subtitle}</p><a href="#/pricing">{ui.plan}<ArrowRight size={16}/></a></div></section>}
-
+  const connectionsPanel = (
           <section className="pf-connections rounded-3xl border border-slate-200 bg-white p-6 dark:border-slate-700 dark:bg-slate-900">
             <h4 className="mb-4 flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">
               <Smartphone className="text-blue-600 dark:text-blue-300" size={14} aria-hidden="true" />
@@ -552,14 +442,131 @@ export const Profile = () => {
               </div>
             </div>
           </section>
+  );
+  return (
+    <div data-profile-tab={profileTab} className={cn(cinematic ? 'pf-page' : 'free-profile', "mx-auto max-w-6xl space-y-8 pb-24 text-slate-950 dark:text-slate-50")}>
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={(event) => {
+          const file = event.target.files?.[0];
+          if (file) handleAvatarFile(file);
+          event.currentTarget.value = "";
+        }}
+      />
+
+      <header className="pf-heading flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
+        <div className="space-y-3">
+          <div className="flex items-center gap-2">
+            <div className="h-1 w-10 rounded-full bg-blue-500" />
+            <span className="text-[10px] font-black uppercase tracking-[0.3em] text-blue-700 dark:text-blue-300">{copy.title}</span>
+          </div>
+          <h2 className="font-display text-4xl font-bold tracking-tight text-slate-950 dark:text-white sm:text-5xl">{cinematic ? ui.title : locale==='uz'?'O‘zingizga moslang.':locale==='ru'?'Настройте под себя.':'Make it yours.'}</h2>
+          <p className="max-w-2xl text-base leading-7 text-slate-600 dark:text-slate-300 sm:text-lg">
+            {cinematic ? ui.subtitle : locale==='uz'?'Profilingiz, sozlamalaringiz va o‘qish odatlaringiz.':locale==='ru'?'Ваш профиль, настройки и учебные привычки.':'Your profile, preferences and learning routine.'}
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => (editing ? handleSave() : setEditing(true))}
+          disabled={isSaving}
+          className={cn(
+            "inline-flex min-h-12 items-center justify-center gap-3 rounded-2xl bg-blue-600 px-6 text-sm font-black text-white transition-colors hover:bg-blue-700 active:bg-blue-800 disabled:opacity-60",
+          )}
+        >
+          {isSaving ? <Loader2 size={18} className="animate-spin" /> : editing ? <Save size={18} /> : <User size={18} />}
+          {editing ? copy.saveChanges : copy.editProfile}
+        </button>
+      </header>
+
+      {status && (
+        <div role="status" className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
+          {status}
+        </div>
+      )}
+
+      <div className="pf-grid grid gap-8 lg:grid-cols-12">
+        <aside className="pf-aside space-y-6 lg:col-span-4">
+          <section className="pf-identity relative overflow-hidden rounded-3xl border border-slate-200 bg-white p-6 text-center dark:border-slate-700 dark:bg-slate-900 sm:p-8">
+            <Award className="pointer-events-none absolute -right-10 -top-10 text-slate-100 dark:text-white/[0.04]" size={180} aria-hidden="true" />
+
+            <div className="relative mx-auto mb-8 h-44 w-44">
+              <div className="h-44 w-44 overflow-hidden rounded-[3rem] border-8 border-slate-100 bg-slate-100 ring-1 ring-slate-200 dark:border-slate-800 dark:bg-slate-950 dark:ring-slate-700">
+                <img src={avatarSrc} alt={profile?.displayName || copy.student} className="h-full w-full object-cover" />
+              </div>
+              <button
+                type="button"
+                onClick={openAvatarPicker}
+                className="absolute bottom-2 right-2 flex h-12 w-12 items-center justify-center rounded-2xl border-4 border-white bg-blue-600 text-white transition-colors hover:bg-blue-700 dark:border-slate-900"
+                aria-label={copy.changeAvatar}
+              >
+                <Camera size={18} />
+              </button>
+            </div>
+
+            <h3 className="font-display text-3xl font-bold text-slate-950 dark:text-white">{profile?.displayName || copy.student}</h3>
+            <p className="mt-2 break-all text-sm text-slate-500 dark:text-slate-400">{profile?.email}</p>
+            {cinematic ? <span className="pf-plan-badge"><Crown size={14}/>NOVIQ PRO</span> : <><span className="fpf-free-badge">Free plan</span><button type="button" className="fpf-avatar-button" onClick={openAvatarPicker}>{copy.changeAvatar}</button></>}
+            <div className="pf-legacy-actions mt-6 flex items-center justify-center gap-4">
+              {formData.showActionButtons && (
+                <button
+                  type="button"
+                  onClick={openAvatarPicker}
+                  className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 transition-colors hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                >
+                  <Upload size={16} />
+                  {copy.changeAvatar}
+                </button>
+              )}
+
+              <button
+                type="button"
+                onClick={() => setFormData({ ...formData, showActionButtons: !formData.showActionButtons })}
+                className="inline-flex min-h-11 items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 transition-colors hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+              >
+                {formData.showActionButtons ? copy.hideButtons : copy.showButtons}
+              </button>
+            </div>
+
+            {premiumAvatars && <div className="pro-profile-avatars mt-6">
+              <p className="mb-3 text-sm font-semibold text-slate-700 dark:text-slate-200">{locale === 'uz' ? 'Premium avatarlar' : locale === 'ru' ? 'Премиум-аватары' : 'Premium avatars'}</p>
+              <div className="grid grid-cols-4 gap-3" aria-label="Premium avatars">
+                {avatarOptions(true).map((src, index) => <button key={src} type="button" aria-label={`Choose premium avatar ${index + 1}`} aria-pressed={avatarSrc === src} onClick={() => { openAvatarPicker(); setSelectedPreset(src); }} className={cn('aspect-square min-h-11 overflow-hidden rounded-full border-2 p-0.5', avatarSrc === src ? 'border-blue-500' : 'border-transparent')}><img src={src} alt="" className="h-full w-full rounded-full object-cover"/></button>)}
+              </div>
+            </div>}
+            {cinematic && <div className="pf-upload"><p>{ui.avatars}</p><button type="button" onClick={()=>fileInputRef.current?.click()}><Upload size={17}/>{ui.upload}</button><small>JPG, PNG · max 8 MB</small></div>}
+
+            <div className="pf-legacy-metrics mt-8 grid grid-cols-3 gap-3">
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-800">
+                <p className="text-xl font-black text-slate-950 [font-variant-numeric:tabular-nums] dark:text-white">{profile?.level || 1}</p>
+                <p className="text-[9px] font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400">{levelName}</p>
+              </div>
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-800">
+                <p className="text-xl font-black text-slate-950 [font-variant-numeric:tabular-nums] dark:text-white">{profile?.xp || 0}</p>
+                <p className="text-[9px] font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400">XP</p>
+              </div>
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-800">
+                <p className="text-xl font-black text-blue-700 [font-variant-numeric:tabular-nums] dark:text-blue-300">{profile?.streak || 0}</p>
+                <p className="text-[9px] font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400">{copy.streak}</p>
+              </div>
+            </div>
+          </section>
+
+          {!cinematic&&<section className="fpf-upsell"><Crown size={24}/><h3>{locale==='uz'?'O‘sish uchun ko‘proq imkoniyat.':locale==='ru'?'Больше возможностей для роста.':'A little more room to grow.'}</h3><p>{locale==='uz'?'NOVIQ PRO bilan kengroq yordamni sinab ko‘ring.':locale==='ru'?'Откройте больше поддержки с NOVIQ PRO.':'Explore more learning support with NOVIQ PRO.'}</p><a href="#/pricing">{locale==='uz'?'Rejalarni taqqoslash':locale==='ru'?'Сравнить планы':'Compare plans'}<ArrowRight size={16}/></a></section>}
+          {cinematic && <section className="pf-membership"><span><Crown size={28}/></span><div><h3>NOVIQ PRO</h3><p>{ui.subtitle}</p><a href="#/pricing">{ui.plan}<ArrowRight size={16}/></a></div></section>}
+
+          {cinematic && connectionsPanel}
         </aside>
 
         <main className="pf-main space-y-6 lg:col-span-8">
-          {cinematic && <nav className="pf-tabs" aria-label={copy.title}>{(['details','preferences','security'] as const).map(tab=><button type="button" key={tab} aria-pressed={profileTab===tab} onClick={()=>setProfileTab(tab)}>{ui[tab]}</button>)}</nav>}
+          {<nav className="pf-tabs" aria-label={copy.title}>{(['details','preferences','security'] as const).map(tab=><button type="button" key={tab} aria-pressed={profileTab===tab} onClick={()=>setProfileTab(tab)}>{!cinematic&&tab==='security'?(locale==='uz'?'Ulanishlar':locale==='ru'?'Подключения':'Connections'):ui[tab]}</button>)}</nav>}
           <section className="pf-details rounded-3xl border border-slate-200 bg-white p-6 dark:border-slate-700 dark:bg-slate-900 sm:p-8">
             <h4 className="mb-8 flex items-center gap-4 text-2xl font-bold text-slate-950 dark:text-white">
               <div className="h-8 w-2 rounded-full bg-blue-600" />
-              {cinematic ? ui.details : copy.accountDetails}
+              {ui.details}
+              {!cinematic && <div className="fpf-edit-actions">{editing&&<button type="button" disabled={isSaving} onClick={()=>setEditing(false)}>{locale==='uz'?'Bekor qilish':locale==='ru'?'Отмена':'Cancel'}</button>}<button type="button" disabled={isSaving} onClick={()=>editing?void handleSave():setEditing(true)}>{isSaving?<Loader2 size={16} className="animate-spin"/>:editing?<Save size={16}/>:<User size={16}/ >}{editing?copy.saveChanges:copy.editProfile}</button></div>}
             </h4>
             {cinematic && <p className="pf-section-hint">{ui.hint}</p>}
             <div className="grid gap-6 md:grid-cols-2">
@@ -640,15 +647,16 @@ export const Profile = () => {
                 </p>
               </label>
             </div>
+            {!cinematic&&<p className="fpf-save-note"><Shield size={16}/>{ui.savingHint}</p>}
             {cinematic && <footer className="pf-save-row"><p>{ui.savingHint}</p><button type="button" disabled={isSaving} onClick={()=>editing?void handleSave():setEditing(true)}>{isSaving?<Loader2 size={17} className="animate-spin"/>:editing?<Save size={17}/>:<User size={17}/ >}{editing?copy.saveChanges:copy.editProfile}</button></footer>}
           </section>
 
-          {cinematic && <section className="pf-appearance"><h4>{ui.preferences}</h4><div><label>{ui.language}<select value={locale} onChange={e=>setLocale(e.target.value as typeof locale)}><option value="en">English</option><option value="uz">O‘zbekcha</option><option value="ru">Русский</option></select></label><div><span>{ui.appearance}</span><div className="pf-theme" role="group" aria-label={ui.appearance}>{[false,true].map(dark=><button key={String(dark)} type="button" aria-pressed={darkAppearance===dark} onClick={()=>window.dispatchEvent(new CustomEvent('noviq:pro-theme',{detail:dark?'dark':'light'}))}>{dark?<Moon size={17}/>:<Sun size={17}/ >}{dark?ui.dark:ui.light}</button>)}</div></div></div></section>}
-          {cinematic && <section className="pf-security"><h4><Shield size={21}/>{ui.security}</h4><p>{ui.securityHint}</p><dl><div><dt>{copy.email}</dt><dd>{user?.email||profile?.email||'—'}</dd></div><div><dt>{ui.provider}</dt><dd>{user?.providerData?.map(p=>p.providerId).join(', ')||'—'}</dd></div></dl>{user?.providerData?.some(p=>p.providerId==='password')&&<button type="button" disabled={resetSending} onClick={async()=>{if(isReadOnlyAudit){setStatus(copy.auditSavingDisabled);return;}if(!user.email||resetSending)return;setResetSending(true);try{await sendPasswordResetEmail(getAuth(),user.email);setStatus(ui.sent);}catch(error){setStatus(getAppErrorMessage(error));}finally{setResetSending(false);}}}>{resetSending?<Loader2 size={17} className="animate-spin"/>:<Mail size={17}/ >}{ui.reset}</button>}</section>}
+          {<section className="pf-appearance"><h4>{ui.preferences}</h4><div><label>{ui.language}<select value={locale} onChange={e=>setLocale(e.target.value as typeof locale)}><option value="en">English</option><option value="uz">O‘zbekcha</option><option value="ru">Русский</option></select></label><div><span>{ui.appearance}</span><div className="pf-theme" role="group" aria-label={ui.appearance}>{[false,true].map(dark=><button key={String(dark)} type="button" aria-pressed={darkAppearance===dark} onClick={()=>window.dispatchEvent(new CustomEvent(cinematic?'noviq:pro-theme':'noviq:free-theme',{detail:dark?'dark':'light'}))}>{dark?<Moon size={17}/>:<Sun size={17}/ >}{dark?ui.dark:ui.light}</button>)}</div></div></div></section>}
+          {<section className="pf-security"><h4><Shield size={21}/>{ui.security}</h4><p>{ui.securityHint}</p><dl><div><dt>{copy.email}</dt><dd>{user?.email||profile?.email||'—'}</dd></div><div><dt>{ui.provider}</dt><dd>{user?.providerData?.map(p=>p.providerId).join(', ')||'—'}</dd></div></dl>{user?.providerData?.some(p=>p.providerId==='password')&&<button type="button" disabled={resetSending} onClick={async()=>{if(isReadOnlyAudit){setStatus(copy.auditSavingDisabled);return;}if(!user.email||resetSending)return;setResetSending(true);try{await sendPasswordResetEmail(getAuth(),user.email);setStatus(ui.sent);}catch(error){setStatus(getAppErrorMessage(error));}finally{setResetSending(false);}}}>{resetSending?<Loader2 size={17} className="animate-spin"/>:<Mail size={17}/ >}{ui.reset}</button>}</section>}
           <section className="pf-notifications rounded-3xl border border-slate-200 bg-white p-6 dark:border-slate-700 dark:bg-slate-900 sm:p-8">
             <h4 className="mb-6 flex items-center gap-4 text-2xl font-bold text-slate-950 dark:text-white">
               <div className="h-8 w-2 rounded-full bg-blue-600" />
-              {cinematic ? ui.notifications : copy.preferences}
+              {ui.notifications}
             </h4>
             <div className="grid gap-4">
               {preferenceItems.map((item) => {
@@ -688,6 +696,7 @@ export const Profile = () => {
               })}
             </div>
           </section>
+          {!cinematic && connectionsPanel}
         </main>
       </div>
 

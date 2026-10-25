@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import './free-library.css';
 import {
   Book,
   FileText,
@@ -737,8 +738,16 @@ export const Notes = () => {
     }
   };
 
+  const formatSelection = (before:string,after='') => {
+    const editor=editorRef.current;if(!editor)return;
+    const start=editor.selectionStart,end=editor.selectionEnd;
+    setDraftContent(draftContent.slice(0,start)+before+draftContent.slice(start,end)+after+draftContent.slice(end));
+    requestAnimationFrame(()=>{editor.focus();editor.setSelectionRange(start+before.length,end+before.length);});
+  };
   return (
-    <div className="grid h-full min-h-0 grid-cols-1 gap-3 overflow-hidden sm:gap-4 xl:grid-cols-[250px_minmax(0,1fr)_310px] 2xl:grid-cols-[300px_minmax(0,1fr)_360px]">
+    <div className="free-library flex h-full min-h-0 flex-col gap-4 overflow-hidden">
+      <header className="fl-heading"><div><h1>{locale==='uz'?'O‘quv kutubxonangiz':locale==='ru'?'Ваша учебная библиотека':'Your study library'}</h1><p>{locale==='uz'?'Qaydlar va manbalaringizni bir joyda saqlang.':locale==='ru'?'Храните заметки и источники в одном месте.':'Keep your notes and sources in one clear place.'}</p></div><div><button type="button" className="fl-primary" onClick={handleCreateNote}><Plus size={17}/>{t('notebook.createNote')}</button><button type="button" disabled={isSourceLoading} onClick={()=>sourceInputRef.current?.click()}><Upload size={17}/>{t('notebook.upload')}</button><button type="button" onClick={()=>setShowSourceModal(true)}><LinkIcon size={17}/>{t('notebook.link')}</button></div></header>
+      <div className="fl-columns grid min-h-0 flex-1 grid-cols-1 gap-3 xl:grid-cols-[230px_minmax(0,1fr)_290px]">
       <input
         ref={sourceInputRef}
         type="file"
@@ -939,6 +948,7 @@ export const Notes = () => {
               </div>
             </header>
 
+            <div className="fl-format" role="group" aria-label="Markdown formatting"><button type="button" aria-label="Bold" onClick={()=>formatSelection('**','**')}><strong>B</strong></button><button type="button" aria-label="Italic" onClick={()=>formatSelection('*','*')}><em>I</em></button><button type="button" onClick={()=>formatSelection('\n- ')}>• List</button><small>Markdown</small></div>
             <textarea
               ref={editorRef}
               aria-label={t("notebook.noteContent")}
@@ -970,6 +980,7 @@ export const Notes = () => {
         onRetry={() => void runNotebookAi(lastAiPrompt, false)}
         onClose={closeAiPanel}
       />
+      </div>
 
       {status && (
         <div className="fixed bottom-6 left-1/2 z-[140] -translate-x-1/2 rounded-2xl border border-white/10 bg-slate-950/95 px-4 py-3 text-sm font-semibold text-white shadow-2xl">

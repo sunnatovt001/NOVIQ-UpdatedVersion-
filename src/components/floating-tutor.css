@@ -1,0 +1,19 @@
+[data-floating-tutor]{--saidamin-ink:#0b1b40;--saidamin-muted:#49628f;--saidamin-glass:rgba(239,248,255,.48);--saidamin-line:rgba(255,255,255,.85)}
+[data-floating-tutor]>.saidamin-glass-launcher{background:var(--saidamin-glass)!important;border:1px solid var(--saidamin-line)!important;backdrop-filter:blur(20px) saturate(140%);-webkit-backdrop-filter:blur(20px) saturate(140%);box-shadow:0 8px 26px #1c457e1f,inset 0 1px 0 #ffffff80;color:var(--saidamin-ink)}
+[data-floating-tutor]>.saidamin-glass-launcher>span:last-child>span:last-child{color:var(--saidamin-muted)}
+[data-floating-tutor] .saidamin-glass-chat{background:rgba(232,244,255,.76)!important;border:1px solid var(--saidamin-line)!important;backdrop-filter:blur(26px) saturate(135%);-webkit-backdrop-filter:blur(26px) saturate(135%);box-shadow:0 20px 60px #15376529,inset 0 1px 0 #ffffff80;color:var(--saidamin-ink);overflow:hidden}
+[data-floating-tutor] .saidamin-glass-chat>header,[data-floating-tutor] .saidamin-glass-chat>div.shrink-0{background:rgba(255,255,255,.28)!important;border-color:rgba(158,190,231,.35)}
+[data-floating-tutor] .saidamin-glass-chat :is(.bg-white,.bg-\[\#FAFAF8\]){background:rgba(255,255,255,.48)!important;border-color:rgba(178,202,237,.65)}
+[data-floating-tutor] .saidamin-glass-chat .tutor-composer{background:rgba(255,255,255,.55)!important;border-color:rgba(148,184,233,.65)}
+[data-floating-tutor] .saidamin-glass-chat :is(.text-\[\#111827\],textarea){color:var(--saidamin-ink)}
+[data-floating-tutor] .saidamin-glass-chat .text-\[\#6B7280\]{color:var(--saidamin-muted)}
+[data-floating-tutor] .saidamin-glass-chat .chat-user-message{background:linear-gradient(125deg,#2888ff,#096aff)!important;color:white}
+[data-floating-tutor] .saidamin-glass-chat .tutor-composer>button{background:#096aff;color:white}
+[data-floating-tutor] .saidamin-glass-chat textarea::placeholder{color:var(--saidamin-muted)}
+.dark [data-floating-tutor]{--saidamin-ink:#eff6ff;--saidamin-muted:#bed0eb;--saidamin-glass:rgba(20,47,78,.48);--saidamin-line:rgba(166,203,255,.35)}
+.dark [data-floating-tutor] .saidamin-glass-chat{background:rgba(17,40,68,.8)!important;box-shadow:0 20px 60px #020c3040,inset 0 1px 0 #ffffff16}
+.dark [data-floating-tutor] .saidamin-glass-chat>header,.dark [data-floating-tutor] .saidamin-glass-chat>div.shrink-0{background:rgba(31,63,98,.3)!important}
+.dark [data-floating-tutor] .saidamin-glass-chat :is(.bg-white,.bg-\[\#FAFAF8\],.tutor-composer){background:rgba(39,75,115,.5)!important;border-color:#97bde638}
+[data-floating-tutor] :is(button,textarea):focus-visible{outline:3px solid #3996ff;outline-offset:3px}
+@media(max-width:639px){[data-floating-tutor]>.saidamin-glass-launcher{padding:7px}[data-floating-tutor] .saidamin-glass-chat{width:calc(100vw - 1.5rem);max-height:calc(100dvh - 7rem)}}
+@media(prefers-reduced-motion:reduce){[data-floating-tutor] *{animation:none!important;transition:none!important}}

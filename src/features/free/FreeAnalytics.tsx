@@ -1,417 +1,47 @@
-import {ProEntry} from '@/src/features/pro/ProEntry';
-import React, { useEffect, useMemo, useState } from "react";
-import { SmartPlannerInsights } from '@/src/features/planner/SmartPlannerInsights';
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, PieChart, Pie, Cell } from "recharts";
-import { MeasuredChart } from "@/src/components/MeasuredChart";
-import { isMeaningfulSession, missionCompletion } from "@/src/lib/activityEvidence";
-import { Calendar, Zap, Brain, Clock, ShieldCheck } from "lucide-react";
-import { cn } from "@/src/lib/utils";
-import { collection, limit, onSnapshot, orderBy, query } from "firebase/firestore";
-import { db } from "@/src/lib/firebase";
-import { useAuth } from "@/src/contexts/AuthContext";
-import { calculateLevelName, getLocalDayKey } from "@/src/lib/progress";
-import { useUserActivityMetrics } from "@/src/lib/useUserActivityMetrics";
-import type { StudySession } from "@/src/types";
-import { recordDate } from "@/src/lib/recordDate";
-import { useLocale, type AppLocale } from "@/src/contexts/LocaleContext";
-import { formatAnalyticsCopy, getAnalyticsCopy } from "@/src/features/analytics/analyticsCopy";
+import React, {useMemo, useState} from 'react';
+import {Clock, CheckCircle2, Flame, Layers, ChartNoAxesColumn, Compass, ArrowRight} from 'lucide-react';
+import {useAuth} from '@/src/contexts/AuthContext';
+import {useLocale} from '@/src/contexts/LocaleContext';
+import {useUserActivityMetrics} from '@/src/lib/useUserActivityMetrics';
+import {useStudyEvidence} from '@/src/features/pro/useStudyEvidence';
+import {activityDay, actualDuration} from '@/src/features/pro/activitySummary';
+import {missionCompletion} from '@/src/lib/activityEvidence';
+import {getAnalyticsCopy} from '@/src/features/analytics/analyticsCopy';
+import './free-progress.css';
 
-const COLORS = ["#315EFB", "#5B7CFA", "#829AF8", "#A8B9F5"];
-const DAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-
-type AnalyticsStudySession = StudySession & { id: string };
-
-const timestampToIso = (value: unknown) => recordDate(value)?.toISOString() || "";
-
-const formatDuration = (seconds: number, locale: AppLocale = "en") => {
-  const minutes = Math.round(Math.max(0, seconds) / 60);
-  const hourUnit = locale === "uz" ? "soat" : locale === "ru" ? "ч" : "h";
-  const minuteUnit = locale === "uz" ? "daq" : locale === "ru" ? "мин" : "m";
-  if (minutes >= 60) {
-    const hours = Math.floor(minutes / 60);
-    const remainingMinutes = minutes % 60;
-    return remainingMinutes ? `${hours} ${hourUnit} ${remainingMinutes} ${minuteUnit}` : `${hours} ${hourUnit}`;
-  }
-  return `${minutes} ${minuteUnit}`;
-};
-
-const getWeekStart = (weekOffset = 0) => {
-  const now = new Date();
-  const mondayOffset = (now.getDay() + 6) % 7;
-  const start = new Date(now);
-  start.setHours(0, 0, 0, 0);
-  start.setDate(now.getDate() - mondayOffset + weekOffset * 7);
-  return start;
-};
-
-const buildWeeklyData = (sessions: AnalyticsStudySession[], weekOffset = 0) => {
-  const weekStart = getWeekStart(weekOffset);
-
-  return DAY_LABELS.map((name, index) => {
-    const date = new Date(weekStart);
-    date.setDate(weekStart.getDate() + index);
-    const dayKey = getLocalDayKey(date);
-    const daySessions = sessions.filter((session) => getLocalDayKey(session.timestamp) === dayKey);
-    const seconds = daySessions.reduce((total, session) => total + session.duration, 0);
-
-    return {
-      name,
-      hours: Number((seconds / 3600).toFixed(2)),
-      sessions: daySessions.length,
-      seconds,
-    };
-  });
-};
-
-const buildHeatmapData = (sessions: AnalyticsStudySession[], dailyTargetMinutes: number) => {
-  const totalsByDay = new Map<string, number>();
-  sessions.forEach((session) => {
-    const dayKey = getLocalDayKey(session.timestamp);
-    totalsByDay.set(dayKey, (totalsByDay.get(dayKey) || 0) + session.duration);
-  });
-
-  return Array.from({ length: 35 }, (_, index) => {
-    const date = new Date();
-    date.setDate(date.getDate() - 34 + index);
-    const dayKey = getLocalDayKey(date);
-    const minutes = Math.round((totalsByDay.get(dayKey) || 0) / 60);
-    const intensity = minutes <= 0 ? 0 : Math.min(4, Math.ceil((minutes / Math.max(dailyTargetMinutes, 1)) * 4));
-
-    return { dayKey, minutes, intensity };
-  });
-};
-
-const buildCategoryData = (sessions: AnalyticsStudySession[]) => {
-  const totals = new Map<string, number>();
-
-  sessions.forEach((session) => {
-    const label = session.subject || session.category || "Study";
-    totals.set(label, (totals.get(label) || 0) + session.duration);
-  });
-
-  return Array.from(totals.entries())
-    .filter(([, seconds]) => seconds > 0)
-    .map(([name, seconds]) => ({ name, value: seconds / 60 }))
-    .sort((a, b) => b.value - a.value);
-};
-
-const heatmapClass = (intensity: number) => {
-  if (intensity >= 4) return "bg-blue-600";
-  if (intensity === 3) return "bg-blue-500/75";
-  if (intensity === 2) return "bg-blue-400/55";
-  if (intensity === 1) return "bg-blue-300/35 dark:bg-blue-400/25";
-  return "bg-slate-100 dark:bg-white/5";
-};
-
-export const Analytics = ({ setActiveTab }: { setActiveTab?: (t: string) => void }) => {
-  const { user, profile } = useAuth();
-  const { locale } = useLocale();
-  const copy = useMemo(() => getAnalyticsCopy(locale), [locale]);
-  const activityMetrics = useUserActivityMetrics(user?.uid);
-  const [studySessions, setStudySessions] = useState<AnalyticsStudySession[]>([]);
-  const [weekOffset, setWeekOffset] = useState(0);
-  const [sessionError, setSessionError] = useState("");
-  const [sessionLoading, setSessionLoading] = useState(true);
-  const [sessionRevision, setSessionRevision] = useState(0);
-
-  useEffect(() => {
-    if (!user) {
-      setStudySessions([]);
-      return;
-    }
-
-    const sessionsQuery = query(
-      collection(db, "users", user.uid, "studySessions"),
-      orderBy("timestamp", "desc"),
-      limit(300)
-    );
-    setSessionLoading(true);
-    setSessionError("");
-    return onSnapshot(
-      sessionsQuery,
-      (snapshot) => {
-        setStudySessions(
-          snapshot.docs.map((doc) => {
-            const data = doc.data() as any;
-            return {
-              id: doc.id,
-              userId: data.userId || user.uid,
-              duration: Number(data.duration) || 0,
-              subject: data.subject || "Study",
-              category: data.category || "focus",
-              xpEarned: Number(data.xpEarned) || 0,
-              status: data.status,
-              timestamp: timestampToIso(data.timestamp) || timestampToIso(data.createdAt),
-            } as AnalyticsStudySession;
-          }).filter(isMeaningfulSession)
-        );
-        setSessionLoading(false);
-      },
-      (error) => {
-        console.warn("Analytics session listener failed", error);
-        setSessionError(copy.historyError);
-        setSessionLoading(false);
-      }
-    );
-  }, [copy.historyError, user?.uid, sessionRevision]);
-
-  const dailyTargetMinutes = profile?.dailyTargetMinutes || 30;
-  const weeklyData = useMemo(
-    () => buildWeeklyData(studySessions, weekOffset).map((day, index) => ({ ...day, name: copy.dayLabels[index] })),
-    [copy.dayLabels, studySessions, weekOffset],
-  );
-  const heatmapData = useMemo(() => buildHeatmapData(studySessions, dailyTargetMinutes), [studySessions, dailyTargetMinutes]);
-  const categoryData = useMemo(() => buildCategoryData(studySessions), [studySessions]);
-  const totalStudySeconds = useMemo(
-    () => studySessions.reduce((total, session) => total + session.duration, 0),
-    [studySessions]
-  );
-  const weeklyStudySeconds = weeklyData.reduce((total, day) => total + day.seconds, 0);
-  const weeklyTargetSeconds = dailyTargetMinutes * 7 * 60;
-  const weeklyGoalProgress = Math.min(100, Math.round((weeklyStudySeconds / Math.max(weeklyTargetSeconds, 1)) * 100));
-  const activeDaysThisWeek = weeklyData.filter((day) => day.seconds > 0).length;
-  const totalXp = activityMetrics.xp;
-  const latestSession = studySessions[0];
-  const reviewCoverage = missionCompletion(activityMetrics.flashcardsCreated, activityMetrics.reviewedCards);
-  const totalCategoryMinutes = categoryData.reduce((total, item) => total + item.value, 0);
-  const levelName = profile?.levelName || calculateLevelName(totalXp);
-
-  const metricCards = [
-    {
-      label: copy.recentStudyTime,
-      value: formatDuration(totalStudySeconds, locale),
-      trend: formatAnalyticsCopy(copy.completedRecords, { count: studySessions.length }),
-      icon: Clock,
-      color: "text-blue-700 dark:text-blue-300",
-      bg: "bg-blue-50 dark:bg-blue-500/10",
-    },
-    {
-      label: weekOffset === 0 ? copy.thisWeek : copy.lastWeek,
-      value: formatDuration(weeklyStudySeconds, locale),
-      trend: formatAnalyticsCopy(copy.goalPercent, { percent: weeklyGoalProgress }),
-      icon: Zap,
-      color: "text-blue-700 dark:text-blue-300",
-      bg: "bg-blue-50 dark:bg-blue-500/10",
-    },
-    {
-      label: copy.currentStreak,
-      value: formatAnalyticsCopy(copy.streakDays, { count: activityMetrics.streak, unit: activityMetrics.streak === 1 ? copy.day : copy.days }),
-      trend: formatAnalyticsCopy(copy.activeDays, { count: activeDaysThisWeek }),
-      icon: Brain,
-      color: "text-blue-700 dark:text-blue-300",
-      bg: "bg-blue-50 dark:bg-blue-500/10",
-    },
-    {
-      label: copy.reviewCoverage,
-      value: reviewCoverage === null ? copy.notMeasured : `${reviewCoverage}%`,
-      trend: copy.reviewedOnce,
-      icon: Calendar,
-      color: "text-blue-700 dark:text-blue-300",
-      bg: "bg-blue-50 dark:bg-blue-500/10",
-    },
-  ];
-
-  return (
-    <div className="space-y-8 px-0 pb-24 text-slate-950 dark:text-slate-50 sm:space-y-10">
-      <div className="flex justify-end"><ProEntry area="reports"/></div>
-      <SmartPlannerInsights />
-      {sessionLoading && <p role="status" className="text-sm font-medium text-slate-600 dark:text-slate-300">{copy.loading}</p>}
-      {(sessionError || activityMetrics.error) && <div role="alert" className="rounded-2xl border border-amber-300 bg-amber-50 p-4 text-sm font-medium text-amber-900 dark:border-amber-500/30 dark:bg-amber-950/30 dark:text-amber-100">{sessionError || activityMetrics.error} <button type="button" className="ml-2 min-h-11 font-bold underline underline-offset-4" onClick={() => { setSessionRevision((current) => current + 1); activityMetrics.retry(); }}>{copy.retry}</button></div>}
-      <header className="flex flex-col xl:flex-row xl:items-center justify-between gap-8">
-        <div className="space-y-3">
-          <div className="flex items-center gap-2">
-             <div className="w-10 h-1 bg-blue-500 rounded-full" />
-             <span className="text-[10px] font-black uppercase tracking-[0.3em] text-blue-700 dark:text-blue-300">{copy.performanceMetrics}</span>
-          </div>
-          <h2 className="text-balance font-display text-4xl font-bold leading-tight tracking-tight text-slate-950 dark:text-white sm:text-5xl">{copy.title}</h2>
-          <p className="max-w-2xl text-base leading-7 text-slate-600 dark:text-slate-300 sm:text-lg">{copy.subtitle}</p>
-        </div>
-        <div className="flex flex-wrap gap-4">
-           <div className="min-w-[140px] flex-1 rounded-2xl border border-slate-200 bg-white px-6 py-4 dark:border-slate-700 dark:bg-slate-900">
-              <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400">{copy.totalXp}</p>
-              <p className="text-xl font-bold leading-none text-slate-950 [font-variant-numeric:tabular-nums] dark:text-white sm:text-2xl">{totalXp.toLocaleString(locale)}</p>
-           </div>
-           <div className="min-w-[140px] flex-1 rounded-2xl border border-slate-200 bg-white px-6 py-4 dark:border-slate-700 dark:bg-slate-900">
-              <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400">{levelName}</p>
-              <p className="text-xl font-bold leading-none text-slate-950 [font-variant-numeric:tabular-nums] dark:text-white sm:text-2xl">{activityMetrics.level}</p>
-           </div>
-        </div>
-      </header>
-
-      {/* Hero Stats */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {metricCards.map((s) => (
-          <article key={s.label} className="relative overflow-hidden rounded-3xl border border-slate-200 bg-white p-6 dark:border-slate-700 dark:bg-slate-900">
-            <div className="relative z-10 mb-6 flex items-start justify-between gap-3">
-              <div className={cn("p-2.5 sm:p-3 rounded-xl sm:rounded-2xl", s.bg, s.color)}>
-                <s.icon size={20} aria-hidden="true" />
-              </div>
-              <span className="max-w-[11rem] text-right text-[10px] font-bold leading-4 text-slate-500 dark:text-slate-400">{s.trend}</span>
-            </div>
-            <p className="mb-2 text-[10px] font-black uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">{s.label}</p>
-            <p className="font-display text-2xl font-bold text-slate-950 [font-variant-numeric:tabular-nums] dark:text-white sm:text-3xl">{s.value}</p>
-          </article>
-        ))}
-      </div>
-
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
-        {/* Activity Chart */}
-        <section className="rounded-3xl border border-slate-200 bg-white p-6 dark:border-slate-700 dark:bg-slate-900 sm:p-8 xl:col-span-2">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6 mb-8 sm:mb-10">
-            <div className="space-y-1">
-               <h3 className="text-xl font-bold tracking-tight text-slate-950 dark:text-white sm:text-2xl">{copy.productivityFlow}</h3>
-               <p className="text-xs font-medium leading-5 text-slate-500 dark:text-slate-400">{formatAnalyticsCopy(copy.dailyStudyHours, { week: weekOffset === 0 ? copy.currentWeek.toLowerCase() : copy.lastWeek.toLowerCase() })}</p>
-            </div>
-            <select aria-label={copy.productivityFlow} value={weekOffset} onChange={(event) => setWeekOffset(Number(event.target.value))} className="min-h-11 self-start rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 outline-none focus:border-blue-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 sm:self-center">
-               <option value={0}>{copy.currentWeek}</option>
-               <option value={-1}>{copy.lastWeek}</option>
-            </select>
-          </div>
-
-          <div className="h-[250px] sm:h-[300px] w-full mt-4">
-            <MeasuredChart>
-              <AreaChart data={weeklyData}>
-                <defs>
-                  <linearGradient id="colorHours" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.4}/>
-                    <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--noviq-border)" />
-                <XAxis
-                  dataKey="name"
-                  axisLine={false}
-                  tickLine={false}
-                  tick={{ fill: "var(--noviq-muted)", fontSize: 11, fontWeight: 700 }}
-                  dy={15}
-                />
-                <YAxis
-                  axisLine={false}
-                  tickLine={false}
-                  tick={{ fill: "var(--noviq-muted)", fontSize: 11, fontWeight: 700 }}
-                  dx={-10}
-                />
-                <Tooltip
-                  formatter={(value) => [`${value}`, copy.hours]}
-                  contentStyle={{ backgroundColor: "var(--noviq-card)", color: "var(--noviq-text)", border: "1px solid var(--noviq-border)", borderRadius: "16px", padding: "12px", boxShadow: "0 12px 28px rgba(15,23,42,0.14)" }}
-                  itemStyle={{ color: "var(--noviq-accent)", fontWeight: "bold" }}
-                  cursor={{ stroke: 'var(--noviq-accent)', strokeWidth: 2 }}
-                />
-                <Area
-                  type="monotone"
-                  dataKey="hours"
-                  stroke="#3b82f6"
-                  strokeWidth={4}
-                  fillOpacity={1}
-                  fill="url(#colorHours)"
-                />
-              </AreaChart>
-            </MeasuredChart>
-          </div>
-        </section>
-
-        {/* Consistency Heatmap */}
-        <section className="flex flex-col rounded-3xl border border-slate-200 bg-white p-6 dark:border-slate-700 dark:bg-slate-900 sm:p-8">
-          <div className="space-y-1 mb-10">
-             <h3 className="text-2xl font-bold tracking-tight text-slate-950 dark:text-white">{copy.consistency}</h3>
-             <p className="text-xs font-medium leading-5 text-slate-500 dark:text-slate-400">{copy.dailyStudyMinutes}</p>
-          </div>
-
-          <div className="flex-1 grid grid-cols-7 gap-2.5">
-             {heatmapData.map((item) => (
-               <div
-                 key={item.dayKey}
-                 title={formatAnalyticsCopy(copy.minutesShort, { count: item.minutes })}
-                 role="img"
-                 aria-label={`${item.dayKey}: ${formatAnalyticsCopy(copy.minutesShort, { count: item.minutes })}`}
-                 className={cn(
-                   "aspect-square rounded-lg border border-slate-200 dark:border-white/5",
-                   heatmapClass(item.intensity)
-                 )}
-               />
-             ))}
-          </div>
-
-          <div className="mt-8 flex items-center justify-between border-t border-slate-200 pt-8 dark:border-slate-700">
-             <div className="flex flex-col">
-                <span className="mb-1 text-[10px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400">{weekOffset === 0 ? copy.currentWeekGoal : copy.lastWeekGoal}</span>
-                <span className="text-lg font-bold leading-none text-slate-950 [font-variant-numeric:tabular-nums] dark:text-white">{formatDuration(weeklyStudySeconds, locale)} / {formatDuration(weeklyTargetSeconds, locale)}</span>
-             </div>
-             <div className="w-14 h-14 rounded-full border-4 border-blue-600/20 border-t-blue-600 flex items-center justify-center">
-                <span className="text-xs font-black text-blue-700 dark:text-blue-300">{weeklyGoalProgress}%</span>
-             </div>
-          </div>
-        </section>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        {/* Category Breakdown */}
-        <section className="rounded-3xl border border-slate-200 bg-white p-6 dark:border-slate-700 dark:bg-slate-900 sm:p-8">
-          <h3 className="mb-2 text-2xl font-bold tracking-tight text-slate-950 dark:text-white">{copy.studyFocus}</h3>
-          <p className="mb-8 text-xs leading-5 text-slate-500 dark:text-slate-400">{copy.focusShare}</p>
-          {categoryData.length ? (
-            <div className="flex flex-col md:flex-row items-center gap-12">
-              <div className="w-full h-[220px]">
-                <MeasuredChart>
-                  <PieChart>
-                    <Pie
-                      data={categoryData}
-                      innerRadius={70}
-                      outerRadius={95}
-                      paddingAngle={10}
-                      dataKey="value"
-                    >
-                      {categoryData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} stroke="none" />
-                      ))}
-                    </Pie>
-                    <Tooltip contentStyle={{ backgroundColor: "var(--noviq-card)", color: "var(--noviq-text)", border: "1px solid var(--noviq-border)", borderRadius: "16px" }} />
-                  </PieChart>
-                </MeasuredChart>
-              </div>
-              <div className="space-y-5 w-full">
-                {categoryData.map((item, i) => (
-                  <div key={item.name} className="flex items-center justify-between group">
-                    <div className="flex items-center gap-4">
-                      <div className="w-3 h-3 rounded-full shadow-lg" style={{ backgroundColor: COLORS[i % COLORS.length], boxShadow: `0 0 10px ${COLORS[i % COLORS.length]}44` }} />
-                      <span className="text-sm font-bold text-slate-600 dark:text-slate-300">{item.name}</span>
-                    </div>
-                    <span className="font-display text-sm font-black text-slate-950 [font-variant-numeric:tabular-nums] dark:text-white">{Math.round((item.value / Math.max(totalCategoryMinutes, 1)) * 100)}%</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ) : (
-            <div className="flex min-h-[220px] items-center justify-center rounded-3xl border border-dashed border-slate-300 bg-slate-50 p-6 text-center text-sm font-bold text-slate-600 dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-300">
-              {copy.noSessions}
-            </div>
-          )}
-        </section>
-
-        {/* Prediction Card */}
-        <section className="relative overflow-hidden rounded-3xl border border-blue-200 bg-blue-50 p-6 dark:border-blue-500/25 dark:bg-blue-500/10 sm:p-8">
-          <div className="flex items-center gap-3 mb-8">
-             <ShieldCheck className="text-blue-700 dark:text-blue-300" size={24} aria-hidden="true" />
-             <h3 className="text-2xl font-bold tracking-tight text-slate-950 dark:text-white">{copy.recallGuidance}</h3>
-          </div>
-
-          <div className="space-y-3 mb-10">
-            <p className="font-medium leading-7 text-slate-700 dark:text-slate-200">
-              {latestSession
-                ? formatAnalyticsCopy(copy.latestGuidance, { minutes: Math.round(latestSession.duration / 60), subject: latestSession.subject })
-                : copy.noGuidance}
-            </p>
-            <p className="text-xs font-bold leading-5 text-slate-500 dark:text-slate-400">{copy.retentionNote}</p>
-          </div>
-
-          <button
-            onClick={() => setActiveTab?.('flashcards')}
-            className="min-h-12 w-full rounded-2xl bg-blue-600 px-5 py-3 text-center text-sm font-black text-white transition-colors hover:bg-blue-700 active:bg-blue-800"
-          >
-             {activityMetrics.dueCards > 0 ? formatAnalyticsCopy(copy.reviewDue, { count: activityMetrics.dueCards }) : copy.openDecks}
-          </button>
-        </section>
-      </div>
-    </div>
-  );
+const dayDate=(key:string)=>new Date(`${key}T12:00:00Z`);
+const shift=(key:string,offset:number)=>{const d=dayDate(key);d.setUTCDate(d.getUTCDate()+offset);return d.toISOString().slice(0,10);};
+export const Analytics=({setActiveTab}:{setActiveTab?:(tab:string)=>void})=>{
+ const {user,profile}=useAuth(),{locale}=useLocale(),copy=getAnalyticsCopy(locale);
+ const evidence=useStudyEvidence(user?.uid),metrics=useUserActivityMetrics(user?.uid);
+ const [period,setPeriod]=useState<'week'|'month'>('week');
+ const t=(en:string,uz:string,ru:string)=>locale==='uz'?uz:locale==='ru'?ru:en;
+ const today=activityDay(Date.now()),weekStart=shift(today,-((dayDate(today).getUTCDay()+6)%7));
+ const monthStart=`${today.slice(0,7)}-01`,daysInMonth=new Date(Date.UTC(dayDate(today).getUTCFullYear(),dayDate(today).getUTCMonth()+1,0)).getUTCDate();
+ const start=period==='week'?weekStart:monthStart,count=period==='week'?7:daysInMonth;
+ const totals=useMemo(()=>{const map=new Map<string,number>();for(const s of evidence.records){const key=activityDay(Date.parse(s.timestamp));map.set(key,(map.get(key)||0)+s.duration);}return map;},[evidence.records]);
+ const days=Array.from({length:count},(_,i)=>{const key=shift(start,i);return {key,label:period==='week'?copy.dayLabels[i]:String(i+1),seconds:totals.get(key)||0};});
+ const seconds=days.reduce((sum,d)=>sum+d.seconds,0),dailyTarget=profile?.dailyTargetMinutes||30,target=dailyTarget*count*60;
+ const ready=evidence.ready&&!evidence.error,metricReady=!metrics.loading&&!metrics.error;
+ const percent=Math.min(100,Math.round(seconds/Math.max(target,1)*100)),maxMinutes=Math.max(60,...days.map(d=>Math.ceil(d.seconds/60/30)*30));
+ const heat=Array.from({length:35},(_,i)=>{const key=shift(weekStart,i-28),value=totals.get(key)||0;return {key,value,future:key>today,intensity:value<=0?0:Math.min(4,Math.ceil(value/60/Math.max(dailyTarget,1)*4))};});
+ const recent=[...evidence.records].sort((a,b)=>Date.parse(b.timestamp)-Date.parse(a.timestamp)).slice(0,3);
+ const coverage=missionCompletion(metrics.flashcardsCreated,metrics.reviewedCards);
+ const duration=(s:number)=>actualDuration(s,locale);
+ const go=(tab:string)=>setActiveTab?setActiveTab(tab):window.location.hash=`#/${tab}`;
+ const retry=()=>{evidence.retry();metrics.retry();};
+ const stats=[{icon:Clock,value:ready?duration(seconds):'—',label:period==='week'?t('Study time this week','Shu haftadagi o‘qish vaqti','Время учёбы за неделю'):t('Study time this month','Shu oydagi o‘qish vaqti','Время учёбы за месяц')},{icon:CheckCircle2,value:metricReady?metrics.tasksDone:'—',label:t('Tasks completed · all time','Bajarilgan vazifalar · jami','Задач выполнено · всего')},{icon:Flame,value:metricReady?`${metrics.streak} ${t('days','kun','дн.')}`:'—',label:copy.currentStreak},{icon:Layers,value:metricReady&&coverage!==null?`${coverage}%`:'—',label:copy.reviewCoverage}];
+ return <div className="free-progress">
+  <header className="fp-heading"><div><h1>{t('See your progress.','Natijalaringizni kuzating.','Следите за прогрессом.')}</h1><p>{t('Every focused minute is a step forward.','Har bir diqqatli daqiqa — oldinga qadam.','Каждая минута сосредоточенности — шаг вперёд.')}</p></div><div className="fp-period" role="group" aria-label={t('Reporting period','Hisobot davri','Период отчёта')}>{(['week','month'] as const).map(p=><button key={p} type="button" aria-pressed={period===p} onClick={()=>setPeriod(p)}>{p==='week'?t('Week','Hafta','Неделя'):t('Month','Oy','Месяц')}</button>)}</div></header>
+  {!evidence.ready&&<p role="status" className="fp-notice">{copy.loading}</p>}
+  {(evidence.error||metrics.error)&&<p role="alert" className="fp-notice fp-error">{metrics.error||copy.historyError} <button onClick={retry}>{copy.retry}</button></p>}
+  {evidence.deviceSeconds>0&&<p role="status" className="fp-notice">{t('Includes recorded activity saved only on this device.','Qurilmada saqlangan faoliyat ham kiritilgan.','Включена активность, сохранённая на устройстве.')}</p>}
+  <section className="fp-stats" aria-label={t('Progress summary','Natijalar xulosasi','Сводка прогресса')}>{stats.map(({icon:Icon,value,label})=><div key={label}><Icon size={25}/><p><strong>{value}</strong><span>{label}</span></p></div>)}</section>
+  <div className="fp-top-grid"><section className="fp-panel fp-rhythm"><h2>{t('Your study rhythm','O‘qish ritmingiz','Ваш учебный ритм')}</h2><p>{t('Focus minutes','Diqqat daqiqalari','Минуты концентрации')} · {period==='week'?copy.thisWeek:t('This month','Shu oy','В этом месяце')}</p><div className="fp-chart" role="img" aria-label={ready?days.map(d=>`${d.label}: ${duration(d.seconds)}`).join(', '):copy.loading}><div className="fp-axis"><span>{maxMinutes}</span><span>{maxMinutes/2}</span><span>0</span></div><div className="fp-plot"><div className="fp-gridlines"><i/><i/><i/></div><div className="fp-bars">{days.map(d=><div key={d.key}><div className="fp-bar-space"><span style={{height:ready?`${d.seconds/60/maxMinutes*100}%`:'0%'}} title={`${d.key}: ${duration(d.seconds)}`}/></div><span className="fp-day">{d.label}</span></div>)}</div></div></div>{ready&&seconds===0&&<div className="fp-chart-empty"><ChartNoAxesColumn size={23}/><p>{t('Your first session starts the story.','Birinchi mashg‘ulotdan boshlang.','Начните историю с первого занятия.')}</p><button onClick={()=>go('focus')}>{t('Start a focus session','Fokus mashg‘ulotini boshlash','Начать фокус-сессию')}</button></div>}</section>
+  <section className="fp-panel fp-goal"><h2>{period==='week'?t('Weekly goal','Haftalik maqsad','Цель на неделю'):t('Monthly goal','Oylik maqsad','Цель на месяц')}</h2><div className="fp-ring" role="img" aria-label={ready?`${percent}%`:copy.loading} style={{background:`conic-gradient(#345cff ${ready?percent:0}%, var(--fp-tint) 0)`}}><strong>{ready?`${percent}%`:'—'}</strong></div><strong>{ready?`${Math.round(seconds/60)} / ${Math.round(target/60)} ${t('min','daq','мин')}`:'—'}</strong><p>{t('Your study time goal','O‘qish vaqti maqsadingiz','Ваша цель по времени учёбы')}</p><p className="fp-goal-hint">{t('Small, consistent steps lead to big results.','Kichik, muntazam qadamlar katta natijaga olib boradi.','Маленькие регулярные шаги ведут к большим результатам.')}</p><button className="fp-outline" onClick={()=>go('planner')}>{t('Open Planner','Plannerni ochish','Открыть планировщик')}</button></section></div>
+  <div className="fp-bottom-grid"><section className="fp-panel fp-consistency"><div className="fp-section-head"><div><h2>{t('Consistency','Muntazamlik','Регулярность')}</h2><p>{t('Last 5 weeks · a little more often.','So‘nggi 5 hafta · oz-ozdan, tez-tez.','Последние 5 недель · понемногу, но чаще.')}</p></div><div className="fp-legend"><span>{t('Less','Kam','Меньше')}</span>{[0,1,2,3,4].map(i=><i key={i} className={`fp-intensity-${i}`}/>)}<span>{t('More','Ko‘p','Больше')}</span></div></div><div className="fp-heat-labels">{copy.dayLabels.map((d,i)=><span key={i}>{d}</span>)}</div><div className="fp-heat">{heat.map(d=><div key={d.key} className={`fp-cell fp-intensity-${ready?d.intensity:0} ${d.future?'fp-future':''}`} tabIndex={0} role="img" title={`${d.key}: ${ready?duration(d.value):'—'}`} aria-label={`${d.key}: ${ready?duration(d.value):'—'}`}/>)}</div></section>
+  <section className="fp-panel fp-recent"><h2>{t('Recent activity','So‘nggi faoliyat','Недавняя активность')}</h2>{ready&&recent.length?<ul>{recent.map(s=><li key={s.id}><span className="fp-session-icon"><Clock size={18}/></span><div><strong>{s.subject||s.category}</strong><small>{new Intl.DateTimeFormat(locale,{timeZone:'Asia/Tashkent',month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}).format(new Date(s.timestamp))}</small></div><span>{duration(s.duration)}</span></li>)}</ul>:<div className="fp-recent-empty"><Clock size={60}/><h3>{ready?t('No sessions yet','Hali mashg‘ulot yo‘q','Занятий пока нет'):!evidence.ready?copy.loading:copy.historyError}</h3><p>{ready?t('Completed focus sessions will appear here.','Yakunlangan mashg‘ulotlar shu yerda ko‘rinadi.','Здесь появятся завершённые занятия.'):''}</p></div>}</section></div>
+  <section className="fp-panel fp-next"><Compass size={32}/><div><h2>{t('Your next step','Keyingi qadamingiz','Ваш следующий шаг')}</h2><p>{t('Choose one task and make room for 25 focused minutes.','Bitta vazifani tanlang va 25 diqqatli daqiqa ajrating.','Выберите задачу и выделите 25 минут концентрации.')}</p></div><button className="fp-primary" onClick={()=>go('planner')}>{t('Plan my next session','Keyingi mashg‘ulotni rejalash','Запланировать занятие')}<ArrowRight size={17}/></button></section>
+  <p className="fp-footnote">{t('Study time reflects recorded activity, not mastery.','O‘qish vaqti qayd etilgan faoliyatni ko‘rsatadi, bilim darajasini emas.','Время учёбы отражает записанную активность, а не уровень знаний.')}</p>
+ </div>;
 };

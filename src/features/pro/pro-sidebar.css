@@ -72,3 +72,9 @@
 .noviq-app.pro-sidebar-unified progress::-webkit-progress-value{transition:width 350ms var(--pro-motion-ease)}
 @media(hover:hover) and (pointer:fine){.noviq-app.pro-sidebar-unified :is(.gd-subject,.pro-profile-avatars button):hover{transform:translateY(-2px)}.noviq-app.pro-sidebar-unified .gd-button:hover{box-shadow:inset 0 1px 2px #ffffff45,0 7px 18px #136aff30}}
 @media(prefers-reduced-motion:reduce){.noviq-app.pro-sidebar-unified [data-route-content],.noviq-app.pro-sidebar-unified :is(.gd-notice,.gd-search-results,.gd-check){animation:none!important}.noviq-app.pro-environment.pro-sidebar-unified[data-pro-theme]>.app-sidebar,.noviq-app.pro-sidebar-unified :is(button,a,img,progress),.noviq-app.pro-sidebar-unified .gd-bar-track>span{transition:none!important}.noviq-app.pro-sidebar-unified progress::-webkit-progress-value{transition:none!important}}
+
+/* Floating assistant follows the shared translucent Pro material. */
+.noviq-app.pro-sidebar-unified [data-floating-tutor]>.saidamin-glass-launcher{background:rgba(239,248,255,.42)!important;border:1px solid rgba(255,255,255,.85)!important;backdrop-filter:blur(20px) saturate(140%);-webkit-backdrop-filter:blur(20px) saturate(140%);box-shadow:0 8px 26px rgba(28,69,126,.12),inset 0 1px 0 rgba(255,255,255,.65);color:#0b1b40}
+.noviq-app.pro-sidebar-unified [data-floating-tutor]>.saidamin-glass-launcher>span:last-child>span:last-child{color:#49628f}
+.noviq-app.pro-sidebar-unified.dark [data-floating-tutor]>.saidamin-glass-launcher{background:rgba(20,47,78,.48)!important;border-color:rgba(166,203,255,.35)!important;box-shadow:0 8px 26px rgba(2,12,30,.2),inset 0 1px 0 rgba(255,255,255,.12);color:#eff6ff}
+.noviq-app.pro-sidebar-unified.dark [data-floating-tutor]>.saidamin-glass-launcher>span:last-child>span:last-child{color:#bed0eb}

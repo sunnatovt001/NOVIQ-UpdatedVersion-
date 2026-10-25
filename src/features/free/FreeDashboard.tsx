@@ -4,6 +4,7 @@ import { isMeaningfulSession } from "@/src/lib/activityEvidence";
 import { useAuth } from "@/src/contexts/AuthContext";
 import { TaskStarterModal } from "@/src/components/TaskStarterModal";
 import { TodayDashboardView } from "@/src/components/Dashboard/TodayDashboardView";
+import './free-dashboard.css';
 import { motion, AnimatePresence } from "motion/react";
 import { CheckCircle2 } from "lucide-react";
 import { collection, doc, query, orderBy, limit, onSnapshot } from "firebase/firestore";
@@ -466,6 +467,7 @@ const FreeDashboard = ({ setActiveTab }: { setActiveTab: (tab: string) => void }
         </AnimatePresence>
 
         <TodayDashboardView
+          freeDesign
           firstName={firstName}
           tasks={dashboardTasks}
           tasksLoading={tasksLoading}

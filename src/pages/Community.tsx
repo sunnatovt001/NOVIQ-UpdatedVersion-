@@ -5,6 +5,7 @@ import {
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useMembership } from "@/src/features/pro/MembershipContext";
 import "@/src/features/community/community-glass.css";
+import "@/src/features/free/free-community.css";
 import {
   ChevronRight,
   CircleUserRound,
@@ -110,6 +111,7 @@ export const Community = () => {
     [email, setEmail] = useState("");
   const [groupSearch, setGroupSearch] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
+  const [freeView, setFreeView] = useState<"groups" | "discover" | "friends">("groups");
   const [workspaceView, setWorkspaceView] = useState<"groups" | "discover">("groups");
   const [draft, setDraft] = useState(""),
     [messages, setMessages] = useState<Message[]>([]),
@@ -482,16 +484,16 @@ export const Community = () => {
       </div>
     );
   return (
-    <div className={`${cinematic ? "community-glass " : ""}community-page min-h-[calc(100dvh-9rem)] rounded-[32px] border border-slate-200 bg-[#f8fbff] p-4 text-slate-900 shadow-[0_20px_70px_rgba(15,23,42,0.05)] dark:border-slate-800 dark:bg-slate-950 dark:text-slate-50 sm:p-6`}>
+    <div className={`${cinematic ? "community-glass " : "free-community "}community-page min-h-[calc(100dvh-9rem)] rounded-[32px] border border-slate-200 bg-[#f8fbff] p-4 text-slate-900 shadow-[0_20px_70px_rgba(15,23,42,0.05)] dark:border-slate-800 dark:bg-slate-950 dark:text-slate-50 sm:p-6`}>
       <header className="cg-hero rounded-[26px] border border-slate-200 bg-white px-5 py-6 shadow-sm dark:border-slate-800 dark:bg-slate-900 sm:px-7">
         <div className="flex flex-wrap items-center gap-4">
           <div className="grid h-14 w-14 place-items-center rounded-2xl bg-blue-50 text-blue-600 dark:bg-blue-500/10">
             <UsersRound size={30} aria-hidden="true" />
           </div>
           <div>
-            <h1 className="text-3xl font-black tracking-tight">{copy.title}</h1>
+            <h1 className="text-3xl font-black tracking-tight">{cinematic ? copy.title : locale === 'uz' ? 'Birga o‘rganish yaxshiroq.' : locale === 'ru' ? 'Вместе лучше.' : 'Better together.'}</h1>
             <p className="mt-1 text-sm text-slate-500 sm:text-base">
-              {copy.subtitle}
+              {cinematic ? copy.subtitle : locale === 'uz' ? 'Hamfikrlarni toping. Fikr almashing. O‘rganishda davom eting.' : locale === 'ru' ? 'Находите единомышленников. Делитесь идеями. Учитесь вместе.' : 'Find your people. Share ideas. Keep learning.'}
             </p>
           </div>
         </div>
@@ -506,6 +508,7 @@ export const Community = () => {
             <UserPlus size={18} className="text-blue-600" aria-hidden="true" /> {copy.inviteFriends}
           </span>
         </div>
+        {!cinematic && <div className="fcm-header-actions"><button type="button" onClick={() => { setFreeView('groups'); requestAnimationFrame(() => document.getElementById('community-invite-email')?.focus()); }}><Send size={17}/>{copy.inviteFriends}</button><button type="button" onClick={() => { setFreeView('groups'); setCreateOpen(true); requestAnimationFrame(() => document.getElementById('community-name')?.focus()); }}><Plus size={18}/>{copy.createGroup}</button></div>}
       </header>
       {!online && (
         <p role="status" className="rounded-xl bg-amber-50 p-3 text-amber-900">
@@ -580,7 +583,8 @@ export const Community = () => {
         <button type="button" aria-pressed={workspaceView === "discover"} onClick={() => setWorkspaceView("discover")}>{copy.discoverGroups}</button>
         <button type="button" className="cg-create" onClick={() => { setWorkspaceView("groups"); setCreateOpen(true); requestAnimationFrame(() => document.getElementById("community-name")?.focus()); }}><Plus size={17}/>{copy.createGroup}</button>
       </nav>}
-      <div data-view={workspaceView} className="cg-workspace mt-5 grid gap-5 xl:grid-cols-[minmax(250px,0.72fr)_minmax(0,1.6fr)_minmax(270px,0.8fr)]">
+      {!cinematic && <nav className="fcm-tabs" aria-label={copy.title}><button type="button" aria-pressed={freeView === 'groups'} onClick={() => setFreeView('groups')}>{copy.myGroups}</button><button type="button" aria-pressed={freeView === 'discover'} onClick={() => setFreeView('discover')}>{copy.discoverGroups}</button><button type="button" aria-pressed={freeView === 'friends'} onClick={() => setFreeView('friends')}>{copy.friends}</button></nav>}
+      <div data-free-view={freeView} data-view={workspaceView} className="cg-workspace mt-5 grid gap-5 xl:grid-cols-[minmax(250px,0.72fr)_minmax(0,1.6fr)_minmax(270px,0.8fr)]">
         <aside className="cg-groups space-y-5">
           <section className="cg-panel cg-my-groups rounded-[26px] border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
             <div className="flex items-center justify-between gap-3">
@@ -680,7 +684,7 @@ export const Community = () => {
                     className="mx-auto mb-2 text-slate-300"
                     size={28}
                   />
-                  {copy.noJoinedGroups}
+                  {cinematic ? copy.noJoinedGroups : <div className="fcm-library-empty"><h3>{locale === 'uz' ? 'O‘quv davrangiz shu yerdan boshlanadi.' : 'Your study circle starts here.'}</h3><p>{locale === 'uz' ? 'Guruhga qo‘shiling yoki o‘zingiz yarating.' : 'Join a group or create your own.'}</p><button type="button" onClick={() => setFreeView('discover')}>{copy.discoverGroups}<ChevronRight size={16}/></button></div>}
                 </div>
               ) : !visibleJoined.length ? (
                 <p className="py-5 text-center text-sm text-slate-500">
@@ -897,9 +901,7 @@ export const Community = () => {
                   className="mx-auto mb-3 text-slate-300"
                   size={34}
                 />
-                {active
-                  ? copy.noMessages
-                  : copy.conversationPlaceholder}
+                {active ? copy.noMessages : cinematic ? copy.conversationPlaceholder : <div className="fcm-chat-empty"><h3>{locale === 'uz' ? 'Ajoyib g‘oyalar suhbatdan boshlanadi.' : locale === 'ru' ? 'Отличные идеи начинаются с разговора.' : 'Great ideas start with a conversation.'}</h3><p>{locale === 'uz' ? 'Savol berish, manba ulashish va birga o‘rganish uchun guruhga qo‘shiling.' : locale === 'ru' ? 'Вступайте в учебную группу, задавайте вопросы и делитесь материалами.' : 'Join a study group to ask questions, share resources and learn together.'}</p><button type="button" onClick={() => setFreeView('discover')}>{copy.discoverGroups}</button></div>}
               </div>
             ) : (
               allMessages.map((m) => (
@@ -1026,6 +1028,7 @@ export const Community = () => {
             <label className="text-sm">
               <span className="sr-only">{copy.friendEmail}</span>
               <input
+                id="community-invite-email"
                 className={`${field} my-2`}
                 type="email"
                 placeholder={copy.friendEmail}
@@ -1122,7 +1125,7 @@ export const Community = () => {
                 </p>
               ))
             ) : socialState.friends === "ready" ? (
-              <p className="text-sm text-slate-500">{copy.noFriends}</p>
+              <div className="fcm-friends-empty"><UsersRound size={42}/><p className="text-sm text-slate-500">{copy.noFriends}</p></div>
             ) : null}
           </section>
         </aside>

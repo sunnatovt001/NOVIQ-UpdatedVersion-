@@ -7,6 +7,7 @@ import { generateDefinitionSuggestions } from '@/src/lib/gemini';
 import { isReadOnlyAudit } from '@/src/lib/auditMode';
 import { cardValid, emptyCard, normalizeCard, normalizeAnswer, parseImport, parseSuggestions, type Card, type Deck } from './model';
 type Props = {
+    importInitiallyOpen?: boolean;
     uid: string;
     deck: Deck;
     cards: Card[];
@@ -14,7 +15,7 @@ type Props = {
     save: (cards: Card[]) => void;
     close: () => void;
 };
-export function Editor({ uid, deck, cards, uz, save, close }: Props) {
+export function Editor({ uid, deck, cards, uz, save, close, importInitiallyOpen = false }: Props) {
     const t = (en: string, u: string) => uz ? u : en, key = `noviq:${uid}:flashcardDraft:${deck.id}`;
     const [initial] = useState(() => { try {
         const value = loadLocalDataStrict<unknown>(key, null);
@@ -170,7 +171,7 @@ export function Editor({ uid, deck, cards, uz, save, close }: Props) {
         })}</fieldset>
     {removed && <button className="fc-button" onClick={() => { patch(removed.id, { deleted: removed.deleted }); setRemoved(null); }}>{t('Undo deletion', 'O‘chirishni bekor qilish')}</button>}
     <div className="fc-pagination"><button className="fc-button" disabled={page === 0} onClick={() => setPage(p => p - 1)}>{t('Previous', 'Oldingi')}</button><span>{page + 1} / {Math.max(1, Math.ceil(rows.length / 30))}</span><button className="fc-button" disabled={(page + 1) * 30 >= rows.length} onClick={() => setPage(p => p + 1)}>{t('Next', 'Keyingi')}</button></div>
-    <details className="fc-import"><summary>{t('Import cards · CSV, TSV, JSON or term — definition', 'Import · CSV, TSV, JSON yoki atama — izoh')}</summary><label>{t('Paste cards for preview', 'Ko‘rish uchun kartochkalarni joylang')}<textarea value={importText} onChange={e => setImportText(e.target.value)} placeholder={'front\tback\ntenacious\tVery determined'}/></label><input aria-label={t('Import file', 'Fayl import qilish')} type="file" accept=".csv,.tsv,.json,.txt" onChange={async (e) => { const f = e.target.files?.[0]; if (f && f.size <= 1000000)
+    <details className="fc-import" open={importInitiallyOpen || undefined}><summary>{t('Import cards · CSV, TSV, JSON or term — definition', 'Import · CSV, TSV, JSON yoki atama — izoh')}</summary><label>{t('Paste cards for preview', 'Ko‘rish uchun kartochkalarni joylang')}<textarea value={importText} onChange={e => setImportText(e.target.value)} placeholder={'front\tback\ntenacious\tVery determined'}/></label><input aria-label={t('Import file', 'Fayl import qilish')} type="file" accept=".csv,.tsv,.json,.txt" onChange={async (e) => { const f = e.target.files?.[0]; if (f && f.size <= 1000000)
         setImportText(await f.text());
     else
         setStatus(t('Maximum 1 MB', 'Maksimum 1 MB')); }}/><button className="fc-button" onClick={importRows} disabled={!importText.trim()}>{t('Preview in editor', 'Tahrirlashda ko‘rish')}</button></details>

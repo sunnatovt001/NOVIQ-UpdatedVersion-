@@ -1,4 +1,5 @@
 import {FocusReflection} from '@/src/features/pro/FocusReflection';
+import './free-focus.css';
 import {
   loadLocalData,
   trySaveLocalData as saveLocalData,
@@ -454,21 +455,19 @@ export const Focus = () => {
   return (
     <div
       className={cn(
-        "min-h-[calc(100dvh-9rem)] rounded-[32px] border border-slate-200/90 bg-[#f8fbff] p-3 text-slate-900 shadow-[0_20px_70px_rgba(15,23,42,0.05)] sm:p-4 dark:border-slate-800 dark:bg-slate-950",
+        "free-focus min-h-[calc(100dvh-9rem)] rounded-[32px] border border-slate-200/90 bg-[#f8fbff] p-3 text-slate-900 shadow-[0_20px_70px_rgba(15,23,42,0.05)] sm:p-4 dark:border-slate-800 dark:bg-slate-950",
         deepWork && "dark:bg-black",
       )}
     >
       <audio ref={audioRef} loop />
-      <div className="mx-auto grid w-full max-w-none gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(360px,0.9fr)]">
-        <section className="rounded-[28px] border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900 sm:p-5 lg:p-6">
-          <header className="flex flex-wrap items-center justify-between gap-4">
+          <header className="ff-heading flex flex-wrap items-center justify-between gap-4">
             <div className="flex items-center gap-4">
               <div className="grid h-14 w-14 place-items-center rounded-2xl bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10">
                 <TimerReset size={31} />
               </div>
               <div>
                 <h1 className="text-3xl font-black tracking-tight">
-                  {copy.title}
+                  {locale==='uz'?'Fokus uchun vaqt ajrating.':locale==='ru'?'Время сосредоточиться.':'Make room for focus.'}
                 </h1>
                 <p className="mt-1 text-sm text-slate-500">
                   {copy.subtitle}
@@ -485,6 +484,9 @@ export const Focus = () => {
               <Lightbulb size={16} /> {copy.howItWorks}
             </button>
           </header>
+      <div className="mx-auto grid w-full max-w-none gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(360px,0.9fr)]">
+        <section className="rounded-[28px] border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900 sm:p-5 lg:p-6">
+
           {helpOpen && (
             <p
               id="focus-help"
@@ -494,7 +496,7 @@ export const Focus = () => {
             </p>
           )}
 
-          <div className="mt-7 grid grid-cols-3 rounded-2xl border border-slate-200 bg-slate-50 p-1.5 dark:border-slate-700 dark:bg-slate-800">
+          <div className="ff-modes mt-7 grid grid-cols-3 rounded-2xl border border-slate-200 bg-slate-50 p-1.5 dark:border-slate-700 dark:bg-slate-800">
             {[
               {
                 label: copy.focus,
@@ -524,6 +526,7 @@ export const Focus = () => {
               return (
                 <button
                   key={item.label}
+                  aria-pressed={item.active}
                   type="button"
                   onClick={() => {
                     if (item.duration !== FOCUS_DURATION)
@@ -576,8 +579,8 @@ export const Focus = () => {
           )}
 
           <div
-            className="mx-auto mt-6 grid h-[clamp(270px,31vw,340px)] w-[clamp(270px,31vw,340px)] place-items-center rounded-full bg-[conic-gradient(var(--focus-ring)_0%,#e8eff9_var(--focus-ring)_100%)] p-3 shadow-[0_0_0_16px_rgba(37,99,235,0.05)]"
-            style={{ "--focus-ring": `${progress}%` } as React.CSSProperties}
+            className="ff-dial mx-auto mt-6 grid h-[clamp(270px,31vw,340px)] w-[clamp(270px,31vw,340px)] place-items-center rounded-full bg-[conic-gradient(var(--focus-ring)_0%,#e8eff9_var(--focus-ring)_100%)] p-3 shadow-[0_0_0_16px_rgba(37,99,235,0.05)]"
+            style={{ background: `conic-gradient(#345cff ${progress}%, #e3ebfc 0)` }}
           >
             <div className="grid h-full w-full place-items-center rounded-full bg-white text-center shadow-inner dark:bg-slate-900">
               <div>
@@ -613,7 +616,7 @@ export const Focus = () => {
             </div>
           </div>
 
-          <div className="mt-6 grid grid-cols-[minmax(0,1fr)_minmax(8.5rem,1.7fr)_minmax(0,1fr)] items-center gap-2 sm:flex sm:justify-center sm:gap-7">
+          <div className="ff-controls mt-6 grid grid-cols-[minmax(0,1fr)_minmax(8.5rem,1.7fr)_minmax(0,1fr)] items-center gap-2 sm:flex sm:justify-center sm:gap-7">
             <button
               type="button"
               aria-label={copy.resetTimer}
@@ -761,7 +764,7 @@ export const Focus = () => {
               </p>
             )}
           </section>
-          <section className="grid grid-cols-3 gap-3">
+          <section className="ff-stats grid grid-cols-3 gap-3">
             <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
               <span className="grid h-10 w-10 place-items-center rounded-xl bg-emerald-50 text-emerald-600">
                 <Check size={22} />

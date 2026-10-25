@@ -43,6 +43,7 @@ import { useAuth } from "@/src/contexts/AuthContext";
 import { cn } from "@/src/lib/utils";
 import { useUserActivityMetrics } from "@/src/lib/useUserActivityMetrics";
 import { ClientErrorMonitor } from "@/src/components/ClientErrorMonitor";
+import '@/src/features/admin/glass-admin.css';
 
 import {
   type RangeKey,
@@ -85,6 +86,8 @@ import { EmptyState, MetricCard, StatusBadge, Section, AdminChartTooltip } from 
 export const Admin = ({ setActiveTab }: { setActiveTab?: (t: string) => void }) => {
   const { profile, isAdmin } = useAuth();
   const [dateRange, setDateRange] = useState<RangeKey>("7d");
+  const [adminView, setAdminView] = useState('overview');
+  const [chartSeries, setChartSeries] = useState<'users'|'events'>('users');
   const [search, setSearch] = useState("");
   const [planFilter, setPlanFilter] = useState<PlanFilter>("all");
   const [goalFilter, setGoalFilter] = useState("all");
@@ -635,7 +638,7 @@ export const Admin = ({ setActiveTab }: { setActiveTab?: (t: string) => void }) 
       .slice(0, 12);
 
     return (
-      <div className="admin-dashboard space-y-7 pb-24">
+      <div className="admin-dashboard admin-glass ag-detail space-y-7 pb-24">
         <header className="admin-hero flex flex-col gap-5 rounded-[2rem] border p-6 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <button
@@ -818,24 +821,23 @@ export const Admin = ({ setActiveTab }: { setActiveTab?: (t: string) => void }) 
   }
 
   return (
-    <div className="admin-dashboard space-y-6 pb-24">
-      <ClientErrorMonitor />
+    <div data-admin-view={adminView} className="admin-dashboard admin-glass space-y-6 pb-24">
       <header className="admin-hero relative overflow-hidden rounded-[2rem] border p-6 sm:p-8">
         <div className="relative z-10 flex flex-col gap-7 xl:flex-row xl:items-end xl:justify-between">
           <div className="max-w-3xl">
             <div className="flex flex-wrap items-center gap-3">
               <span className="text-[10px] font-extrabold uppercase tracking-[0.28em] text-indigo-600 dark:text-indigo-300">
-                Founder control center
+                Workspace / Admin
               </span>
               <StatusBadge tone={errorEntries.length ? "warn" : "good"}>
                 {errorEntries.length ? `${errorEntries.length} data warning` : "Live Firestore"}
               </StatusBadge>
             </div>
             <h2 className="mt-4 font-display text-4xl font-bold tracking-[-0.055em] text-[var(--admin-heading)] sm:text-5xl">
-              Noviq Admin
+              Admin overview
             </h2>
             <p className="mt-3 max-w-2xl text-sm leading-6 text-[var(--admin-body)] sm:text-base">
-              Users, learning activity, AI usage, subscriptions, and platform health in one operational view.
+              A clear view of your learning platform.
             </p>
           </div>
 
@@ -870,8 +872,10 @@ export const Admin = ({ setActiveTab }: { setActiveTab?: (t: string) => void }) 
         </div>
       </header>
 
+      <nav className="ag-tabs" aria-label="Admin sections">{[['overview','Overview'],['users','Users'],['subscriptions','Subscriptions'],['ai','AI usage'],['health','System health']].map(([id,label])=><button type="button" key={id} aria-pressed={adminView===id} onClick={()=>setAdminView(id)}>{label}</button>)}</nav>
+
       {errorEntries.length > 0 && (
-        <div className="rounded-[1.5rem] border border-amber-200 bg-amber-50 p-5 text-amber-900 dark:border-amber-400/20 dark:bg-amber-400/10 dark:text-amber-100">
+        <div className="ag-warning rounded-[1.5rem] border border-amber-200 bg-amber-50 p-5 text-amber-900 dark:border-amber-400/20 dark:bg-amber-400/10 dark:text-amber-100">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-start gap-3">
               <AlertCircle size={18} className="mt-0.5 shrink-0" />
@@ -903,7 +907,7 @@ export const Admin = ({ setActiveTab }: { setActiveTab?: (t: string) => void }) 
         </div>
       )}
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="ag-metrics grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <MetricCard
           label="Total users"
           value={formatCompactNumber(rows.length)}
@@ -935,72 +939,38 @@ export const Admin = ({ setActiveTab }: { setActiveTab?: (t: string) => void }) 
         />
       </div>
 
-      <div className="grid gap-6 xl:grid-cols-12">
+      <div className="ag-overview-grid grid gap-6 xl:grid-cols-12">
         <Section
-          title="Activity overview"
+          title="Platform activity"
           eyebrow={`${rangeLabel} trend`}
           className="xl:col-span-8"
-          action={<StatusBadge tone="info">Realtime</StatusBadge>}
+          action={<div className="ag-chart-switch" role="group" aria-label="Activity chart"><button type="button" aria-pressed={chartSeries==='users'} onClick={()=>setChartSeries('users')}>Active users</button><button type="button" aria-pressed={chartSeries==='events'} onClick={()=>setChartSeries('events')}>Product events</button></div>}
         >
-          <div className="mb-5 flex flex-wrap gap-5 text-xs font-semibold text-[var(--admin-muted)]">
+          <div className="ag-chart-legend mb-5 flex flex-wrap gap-5 text-xs font-semibold text-[var(--admin-muted)]">
             <span className="flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-full bg-indigo-600" />Active users</span>
             <span className="flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-full bg-cyan-400" />Product events</span>
           </div>
           <div className="h-[310px] w-full">
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={activityTrend} margin={{ top: 8, right: 8, left: -18, bottom: 0 }}>
+              <BarChart data={activityTrend} margin={{ top: 8, right: 8, left: -18, bottom: 0 }}>
                 <CartesianGrid stroke="var(--admin-chart-grid)" strokeDasharray="4 6" vertical={false} />
                 <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{ fill: "var(--admin-muted)", fontSize: 11 }} minTickGap={22} />
                 <YAxis allowDecimals={false} axisLine={false} tickLine={false} tick={{ fill: "var(--admin-muted)", fontSize: 11 }} />
                 <Tooltip content={<AdminChartTooltip />} cursor={{ stroke: "#A5B4FC", strokeDasharray: "4 4" }} />
-                <Area type="monotone" dataKey="events" name="Events" stroke="#22C7D9" strokeWidth={2.2} fill="#22C7D9" fillOpacity={0.08} />
-                <Area type="monotone" dataKey="users" name="Active users" stroke="#4F46E5" strokeWidth={3} fill="#4F46E5" fillOpacity={0.12} />
-              </AreaChart>
+                <Bar dataKey={chartSeries} name={chartSeries==='users'?'Active users':'Product events'} fill="#2585ff" radius={[5,5,0,0]} maxBarSize={44} isAnimationActive={false}/>
+              </BarChart>
             </ResponsiveContainer>
           </div>
         </Section>
 
-        <Section title="Plan mix" eyebrow="Subscriptions" className="xl:col-span-4">
-          <div className="relative mx-auto h-[235px] max-w-[290px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={rows.length ? planDistribution : [{ name: "No users", value: 1, color: "#E5E7EB" }]}
-                  dataKey="value"
-                  innerRadius={67}
-                  outerRadius={94}
-                  paddingAngle={4}
-                  stroke="transparent"
-                >
-                  {(rows.length ? planDistribution : [{ name: "No users", value: 1, color: "#E5E7EB" }]).map((entry) => (
-                    <Cell key={entry.name} fill={entry.color} />
-                  ))}
-                </Pie>
-                <Tooltip content={<AdminChartTooltip />} />
-              </PieChart>
-            </ResponsiveContainer>
-            <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
-              <span className="font-display text-3xl font-bold tracking-[-0.05em] text-[var(--admin-heading)]">{rows.length}</span>
-              <span className="text-[10px] font-extrabold uppercase tracking-[0.16em] text-[var(--admin-muted)]">accounts</span>
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            {planDistribution.map((item) => (
-              <div key={item.name} className="admin-soft-surface rounded-2xl border p-3">
-                <div className="flex items-center gap-2 text-xs font-semibold text-[var(--admin-muted)]">
-                  <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: item.color }} />
-                  {item.name}
-                </div>
-                <p className="mt-2 text-xl font-bold text-[var(--admin-heading)]">{item.value}</p>
-              </div>
-            ))}
-          </div>
+        <Section title="Subscriptions" eyebrow="Subscriptions" className="ag-plan-mix xl:col-span-4" action={<button type="button" className="ag-text-action" onClick={()=>setAdminView('subscriptions')}>Manage subscriptions →</button>}>
+          <div className="ag-plan-bars">{[{name:'Free',count:freeUsers.length},{name:'Pro',count:proUsers.length}].map(plan=><div key={plan.name}><span>{plan.name}</span><progress aria-label={`${plan.name} accounts`} value={plan.count} max={Math.max(rows.length,1)}/><strong>{plan.count}</strong></div>)}<footer><span>Pending requests</span><strong>{pendingSubscriptionDocs.length}</strong></footer></div>
         </Section>
       </div>
 
-      <div className="grid gap-6 xl:grid-cols-12">
+      <div className="ag-product-grid grid gap-6 xl:grid-cols-12">
         <Section title="Feature usage" eyebrow="Product analytics" className="xl:col-span-7">
-          {hasFeatureUsage ? (
+          {hasFeatureUsage && adminView === 'ai' ? (
             <div className="h-[310px]">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={featureChartData} layout="vertical" margin={{ top: 0, right: 18, left: 8, bottom: 0 }}>
@@ -1042,6 +1012,7 @@ export const Admin = ({ setActiveTab }: { setActiveTab?: (t: string) => void }) 
 
       <Section
         title="User management"
+        className="ag-users"
         eyebrow="Accounts"
         action={<StatusBadge tone="info">{filteredRows.length} shown</StatusBadge>}
       >
@@ -1052,19 +1023,20 @@ export const Admin = ({ setActiveTab }: { setActiveTab?: (t: string) => void }) 
               value={search}
               onChange={(event) => setSearch(event.target.value)}
               placeholder="Search name, email, goal, or UID"
+              aria-label="Search users"
               className="admin-input w-full rounded-2xl border py-3 pl-11 pr-4 text-sm outline-none transition"
             />
           </div>
-          <select value={planFilter} onChange={(event) => setPlanFilter(event.target.value as PlanFilter)} className="admin-input rounded-2xl border px-4 py-3 text-sm font-semibold outline-none">
+          <select aria-label="Filter by plan" value={planFilter} onChange={(event) => setPlanFilter(event.target.value as PlanFilter)} className="admin-input rounded-2xl border px-4 py-3 text-sm font-semibold outline-none">
             <option value="all">All plans</option>
             <option value="free">Free</option>
             <option value="pro">Pro</option>
           </select>
-          <select value={goalFilter} onChange={(event) => setGoalFilter(event.target.value)} className="admin-input rounded-2xl border px-4 py-3 text-sm font-semibold outline-none">
+          <select aria-label="Filter by goal" value={goalFilter} onChange={(event) => setGoalFilter(event.target.value)} className="admin-input rounded-2xl border px-4 py-3 text-sm font-semibold outline-none">
             <option value="all">All goals</option>
             {goalOptions.map((goal) => <option key={goal} value={goal}>{goal}</option>)}
           </select>
-          <select value={activityFilter} onChange={(event) => setActivityFilter(event.target.value as ActivityFilter)} className="admin-input rounded-2xl border px-4 py-3 text-sm font-semibold outline-none">
+          <select aria-label="Filter by activity" value={activityFilter} onChange={(event) => setActivityFilter(event.target.value as ActivityFilter)} className="admin-input rounded-2xl border px-4 py-3 text-sm font-semibold outline-none">
             <option value="all">All activity</option>
             <option value="online">Online now</option>
             <option value="active_today">Active today</option>
@@ -1089,7 +1061,7 @@ export const Admin = ({ setActiveTab }: { setActiveTab?: (t: string) => void }) 
                 </tr>
               </thead>
               <tbody className="divide-y divide-[var(--admin-border)]">
-                {filteredRows.map((row) => (
+                {(adminView==='overview'?filteredRows.slice(0,3):filteredRows).map((row) => (
                   <tr key={row.id} onClick={() => setSelectedUserId(row.id)} className="admin-table-row cursor-pointer transition">
                     <td className="px-4 py-4">
                       <div className="flex items-center gap-3">
@@ -1136,8 +1108,10 @@ export const Admin = ({ setActiveTab }: { setActiveTab?: (t: string) => void }) 
         )}
       </Section>
 
-      <div className="grid gap-6 xl:grid-cols-12">
-        <Section title="Payment operations" eyebrow="Subscriptions" className="xl:col-span-5" action={<StatusBadge tone={pendingSubscriptionDocs.length ? "warn" : "good"}>{pendingSubscriptionDocs.length ? "Review needed" : "Healthy"}</StatusBadge>}>
+      {adminView==='overview'&&<div className="ag-users-footer"><span>Showing {Math.min(filteredRows.length,3)} of {filteredRows.length} matching accounts</span><button type="button" onClick={()=>setAdminView('users')}>View all users →</button></div>}
+
+      <div className="ag-operations grid gap-6 xl:grid-cols-12">
+        <Section title="Payment operations" eyebrow="Subscriptions" className="ag-payments xl:col-span-5" action={<StatusBadge tone={pendingSubscriptionDocs.length ? "warn" : "neutral"}>{pendingSubscriptionDocs.length ? "Review needed" : "No pending requests"}</StatusBadge>}>
           <MetricCard
             label="Verified revenue"
             value={verifiedRevenue ? `${verifiedRevenue.toLocaleString()} UZS` : "Not tracked"}
@@ -1166,7 +1140,7 @@ export const Admin = ({ setActiveTab }: { setActiveTab?: (t: string) => void }) 
           </div>
         </Section>
 
-        <Section title="AI usage" eyebrow={rangeLabel} className="xl:col-span-4">
+        <Section title="AI usage" eyebrow={rangeLabel} className="ag-ai xl:col-span-4">
           <MetricCard label="Total interactions" value={formatCompactNumber(totalAiInteractions)} icon={Sparkles} tone="indigo" detail={`${mostUsedFeature?.label || "No feature"} is currently the most used AI surface`} />
           <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
             <MetricCard label="Tutor today" value={String(tutorMessagesToday)} icon={MessageSquare} tone="cyan" />
@@ -1176,7 +1150,7 @@ export const Admin = ({ setActiveTab }: { setActiveTab?: (t: string) => void }) 
           </div>
         </Section>
 
-        <Section title="Security" eyebrow="Access control" className="xl:col-span-3" action={<ShieldCheck size={20} className="text-emerald-600" />}>
+        <Section title="Security" eyebrow="Access control" className="ag-security xl:col-span-3" action={<ShieldCheck size={20} className="text-emerald-600" />}>
           <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 dark:border-emerald-400/20 dark:bg-emerald-400/10">
             <p className="font-bold text-emerald-800 dark:text-emerald-200">Admin-only route active</p>
             <p className="mt-1 text-xs leading-5 text-emerald-700/80 dark:text-slate-300">Custom claim resolves before this dashboard renders.</p>
@@ -1203,6 +1177,7 @@ export const Admin = ({ setActiveTab }: { setActiveTab?: (t: string) => void }) 
           </div>
         </Section>
       </div>
+      <section className="ag-health"><header><h3>System health</h3><button type="button" onClick={()=>setAdminView(adminView==='health'?'overview':'health')}>{adminView==='health'?'Back to overview':'View reports'}</button></header><ClientErrorMonitor compact={adminView!=='health'}/></section>
     </div>
   );
 };

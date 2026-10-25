@@ -33,11 +33,10 @@
 .noviq-app.pro-liquid .app-sidebar-card {background:var(--liquid-surface);border-color:var(--liquid-border);box-shadow:none}
 .noviq-app.pro-environment.pro-liquid>main {border:1px solid var(--liquid-border)!important;border-radius:26px;background:rgba(255,255,255,.23)!important;box-shadow:var(--liquid-shadow);min-width:0}
 .noviq-app.pro-liquid.dark>main {background:rgba(10,23,44,.2)!important}
-.noviq-app.pro-liquid [data-pro-shell-header] {height:76px;padding:14px 28px;gap:16px}
+.noviq-app.pro-liquid [data-pro-shell-header] {height:70px;padding:12px 25px;gap:16px}
 .noviq-app.pro-liquid [data-pro-shell-header] h2 {font-size:20px;font-weight:650;letter-spacing:-.5px}
 .noviq-app.pro-liquid [data-pro-shell-header] .text-right,.noviq-app.pro-liquid [data-pro-shell-header] .w-px {display:none}
 .noviq-app.pro-liquid [data-pro-shell-header]>div:last-child {gap:0}
-.noviq-app.pro-liquid [data-pro-shell-header] button {height:38px;width:38px;min-height:36px;border-radius:13px;background:var(--liquid-surface);border-color:var(--liquid-border)}
 .noviq-app.pro-liquid [data-pro-shell-header] :is(.text-\[\#111827\],.text-\[\#6B7280\]) {color:var(--noviq-text)}
 .noviq-app.pro-environment.pro-liquid [data-page-scroll] {padding:8px 26px 26px;scrollbar-width:thin;scrollbar-color:#abc5ea transparent}
 .noviq-app.pro-liquid [data-route-content] {max-width:1500px}

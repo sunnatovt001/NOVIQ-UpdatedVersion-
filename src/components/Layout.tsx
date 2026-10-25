@@ -510,9 +510,10 @@ export const Layout: React.FC<{
           initial={{ opacity: 0, y: 10, scale: 0.98 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
           exit={{ opacity: 0, y: 10, scale: 0.98 }}
+          data-notification-panel
           className="noviq-popover-viewport absolute right-0 top-[calc(100%+0.75rem)] z-[500] flex max-h-[min(72vh,520px)] w-[min(92vw,420px)] flex-col overflow-hidden rounded-3xl border border-[#E5E7EB] bg-white text-[#111827] shadow-[0_28px_90px_rgba(17,24,39,0.22)]"
         >
-          <div className="flex items-center justify-between border-b border-[#E5E7EB] p-4">
+          <div className="flex shrink-0 items-center justify-between gap-4 border-b border-[#E5E7EB] p-4">
             <div>
               <h3 className="text-sm font-black uppercase tracking-[0.2em] text-[#111827]">{t("shell.notifications")}</h3>
               <p className="mt-1 text-xs text-[#6B7280]">{unreadCount} unread updates</p>
@@ -526,14 +527,14 @@ export const Layout: React.FC<{
             </button>
           </div>
 
-          <div className="CustomScrollbar flex-1 overflow-y-auto p-3">
+          <div className="CustomScrollbar min-h-0 flex-1 overflow-y-auto p-3">
             {visibleNotifications.map((notification) => (
               <button
                 key={notification.id}
                 type="button"
                 onClick={() => markNotificationRead(notification)}
                 className={cn(
-                  "mb-2 flex w-full gap-3 rounded-2xl border p-3 text-left transition",
+                  "notification-item mb-2 flex h-auto w-full shrink-0 items-start gap-3 rounded-2xl border p-3 text-left transition",
                   notification.read
                     ? "border-transparent bg-[#FAFAF8] opacity-70 hover:opacity-100"
                     : "border-[var(--noviq-accent)]/20 bg-[var(--noviq-soft)]"
@@ -561,7 +562,7 @@ export const Layout: React.FC<{
             )}
           </div>
 
-          <div className="border-t border-[#E5E7EB] p-3">
+          <div className="shrink-0 border-t border-[#E5E7EB] p-3">
             <button
               type="button"
               onClick={requestPushPermission}
