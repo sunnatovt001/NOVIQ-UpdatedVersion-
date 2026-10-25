@@ -109,6 +109,17 @@ const AppContent = () => {
     delete document.documentElement.dataset.routePending;
   }, [membership.cinematic, user?.uid]);
 
+  // Login and membership updates can cancel a route that is still preloading.
+  // The hash may already say /dashboard, so no second hashchange will arrive.
+  // Resume that destination once authentication has settled.
+  useEffect(() => {
+    if (!user || loading) return;
+    const requested = readTab();
+    if (requested !== 'landing' && requested !== activeTabRef.current) {
+      void navigate(requested, false);
+    }
+  }, [user?.uid, loading, navigate, activeTab]);
+
   useEffect(() => {
     if (loading) return;
 

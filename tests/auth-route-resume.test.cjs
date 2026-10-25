@@ -1,0 +1,8 @@
+const test=require('node:test');const assert=require('node:assert/strict');const fs=require('node:fs');const ts=require('typescript');const vm=require('node:vm');
+const source=fs.readFileSync('src/App.tsx','utf8'),tree=ts.createSourceFile('App.tsx',source,ts.ScriptTarget.Latest,true,ts.ScriptKind.TSX);let body;
+function visit(n){if(ts.isCallExpression(n)&&n.expression.getText(tree)==='useEffect'&&n.arguments[0]?.getText(tree).includes("const requested = readTab()"))body=n.arguments[0].getText(tree);ts.forEachChild(n,visit);}visit(tree);assert.ok(body);
+function run({user={uid:'account'},loading=false,requested='dashboard',current='landing'}={}){const calls=[];const c={exports:{},user,loading,readTab:()=>requested,activeTabRef:{current},navigate:(...args)=>calls.push(args)};vm.runInNewContext(ts.transpileModule('exports.resume='+body,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS}}).outputText,c);c.exports.resume();return calls;}
+test('login resumes a dashboard destination cancelled while its module was loading',()=>assert.deepEqual(run(),[['dashboard',false]]));
+test('membership changes resume the requested protected page without rewriting history',()=>assert.deepEqual(run({requested:'planner',current:'landing'}),[['planner',false]]));
+test('auth route recovery waits for an authenticated settled account',()=>{assert.deepEqual(run({user:null}),[]);assert.deepEqual(run({loading:true}),[]);});
+test('auth route recovery preserves public home and does not duplicate committed navigation',()=>{assert.deepEqual(run({requested:'landing'}),[]);assert.deepEqual(run({current:'dashboard'}),[]);});
