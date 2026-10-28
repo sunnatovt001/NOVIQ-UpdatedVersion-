@@ -34,11 +34,13 @@ test("Planner task icons do not load a motion runtime or wait for outgoing anima
   assert.ok(planner.includes('complete ? <CheckCircle2 size={22} /> : <Icon size={22} />'));
 });
 
-test("onboarding advances without artificial delays or blur transitions", () => {
+test("onboarding avoids artificial delays and respects reduced motion", () => {
   const source = read("src/components/Onboarding.tsx");
-  assert.doesNotMatch(source, /setTimeout|motion\/react|AnimatePresence|blur\(8px\)/);
-  assert.match(source, /headingRef\.current\?\.focus\(\)/);
-  assert.match(source, /if \(submittingRef\.current\) return/);
+  assert.doesNotMatch(source, /setTimeout|blur\(8px\)/);
+  assert.match(source, /useReducedMotion\(\)/);
+  assert.match(source, /duration: reduceMotion \? 0 : 0\.18/);
+  assert.match(source, /heading\.current\?\.focus\(\)/);
+  assert.match(source, /if \(lock\.current \|\| !selected\) return/);
   assert.match(source, /role="alert"/);
 });
 
