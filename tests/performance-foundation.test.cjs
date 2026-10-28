@@ -218,7 +218,7 @@ test("Profile uses localized paired surfaces and an accessible avatar dialog", (
 
 test("PRO membership uses the existing pricing route, localized copy and accessible selection states",()=>{
  const route=read('src/pages/Pricing.tsx'),page=read('src/features/pro/ProMembership.tsx'),copy=read('src/features/pro/proCopy.ts');
- assert.match(route,/ProMembership/);assert.match(page,/useProCopy/);assert.match(page,/aria-pressed=\{cycle\s*===\s*v\}/);assert.match(page,/select value=\{provider\}/);assert.match(page,/disabled=\{checkoutBusy\s*\|\|\s*!access.billing\?\.providersConfigured\}/);assert.match(copy,/Sizning shaxsiy/);assert.match(copy,/Ваш персональный/);assert.match(page,/config.prices\[cycle\]/);
+ assert.match(route,/ProMembership/);assert.match(page,/useProCopy/);assert.match(page,/aria-pressed=\{cycle\s*===\s*v\}/);assert.match(page,/select value=\{provider\}/);assert.match(page,/disabled=\{checkoutBusy\s*\|\|\s*promoBusy\s*\|\|\s*\(!access.billing\?\.providersConfigured\s*&&\s*promo\?\.amount!==0\)\}/);assert.match(copy,/Sizning shaxsiy/);assert.match(copy,/Ваш персональный/);assert.match(page,/config.prices\[cycle\]/);
 });
 
 test("Community separates its member dialog and localizes the social workspace", () => {

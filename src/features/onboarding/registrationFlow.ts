@@ -8,7 +8,7 @@ export function setRegistrationOnboarding(uid: string | null) {
   } catch { /* The explicit onboarding route still works without storage. */ }
 }
 
-export function isRegistrationOnboarding(uid: string, hash: string) {
-  if (hash === '#/onboarding') return true;
+export function isRegistrationOnboarding(uid: string, route: string) {
+  if (route === '/onboarding' || route === '#/onboarding') return true;
   try { return sessionStorage.getItem(KEY) === uid; } catch { return false; }
 }

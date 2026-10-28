@@ -143,11 +143,13 @@ export const recordCheckout = async ({
   billingCycle,
   provider,
   amount,
+  promoCode,
 }: {
   userId: string;
   billingCycle: BillingCycle;
   provider: PaymentProvider;
   amount: number;
+  promoCode?: string;
 }) => {
   void userId;
   void amount; // Price is selected on the server.
@@ -156,10 +158,10 @@ export const recordCheckout = async ({
     import("@/src/lib/firebase"),
   ]);
   const createCheckout = httpsCallable<
-    { billingCycle: BillingCycle; provider: PaymentProvider },
-    { checkoutId: string; checkoutUrl: string }
+    { billingCycle: BillingCycle; provider: PaymentProvider; promoCode?: string },
+    { checkoutId: string; checkoutUrl?: string; activated?: boolean }
   >(functions, "createSubscriptionCheckout");
-  const result = await createCheckout({ billingCycle, provider });
+  const result = await createCheckout({ billingCycle, provider, ...(promoCode ? {promoCode} : {}) });
   return result.data;
 };
 

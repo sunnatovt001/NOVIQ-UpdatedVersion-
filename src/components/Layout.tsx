@@ -694,7 +694,7 @@ export const Layout: React.FC<{
         </nav>
 
         <div className={cn("sidebar-footer space-y-2.5 px-6 pb-5 pt-3", isSidebarCollapsed && "lg:px-4 lg:pb-6")}>
-          {membership.cinematic && <a className="pro-sidebar-profile" href="#/profile" aria-label={t('nav.profile')}><img className="pro-sidebar-avatar" src={getProfileAvatar(profile, membership.access.entitled)} alt=""/><span className={cn(isSidebarCollapsed && 'lg:hidden')}><strong>{firstName}</strong><small>NOVIQ PRO</small></span></a>}
+          {membership.cinematic && <a className="pro-sidebar-profile" href="/profile" aria-label={t('nav.profile')}><img className="pro-sidebar-avatar" src={getProfileAvatar(profile, membership.access.entitled)} alt=""/><span className={cn(isSidebarCollapsed && 'lg:hidden')}><strong>{firstName}</strong><small>NOVIQ PRO</small></span></a>}
           <div
             className={cn(
               "app-sidebar-card sidebar-momentum hidden rounded-xl border border-[#E5E7EB] bg-white px-3.5 py-3 lg:block",

@@ -83,6 +83,7 @@ function focusHarness({
       const slot = index++;
       return (slots[slot] ||= { current: initial });
     },
+    useCallback(fn) { return fn; },
     useMemo(factory) {
       return factory();
     },
@@ -101,6 +102,7 @@ function focusHarness({
     },
   };
   const modules = {
+    "@/src/lib/useVerifiedFocusSession": {useVerifiedFocusSession() {}},
     "@/src/features/pro/useStudyEvidence": {useStudyEvidence:()=>({records:(storage.get('noviq-focus-history-user')||[]).map(record=>({...record,userId:'user',category:'focus',xpEarned:0})),ready:true,error:false,deviceSeconds:0,retry:()=>{}})},
     "@/src/features/pro/activitySummary": {activityDay:value=>new Date(value).toISOString().slice(0,10),actualDuration:value=>String(value)},
     "@/src/features/planner/useSmartPlanner": {

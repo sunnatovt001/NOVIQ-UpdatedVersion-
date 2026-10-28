@@ -1,3 +1,4 @@
+import { navigateToPage } from '@/src/lib/navigation';
 import { useEffect, useRef, useState, type MouseEvent } from "react";
 import { ArrowRight, BookOpen, CalendarDays, ChartNoAxesColumn, Check, Layers, Menu, MessagesSquare, Music, Sparkles, X } from "lucide-react";
 import { useLocale } from "@/src/contexts/LocaleContext";
@@ -48,7 +49,7 @@ export const Landing = () => {
     setAuthMode(mode);
   };
   const openFeature = (route: typeof landingFeatureRoutes[number]) => {
-    window.location.hash = `/${route}`;
+    navigateToPage(`/${route}`);
     openAuth("signup");
   };
   const goToSection = () => setMenuOpen(false);

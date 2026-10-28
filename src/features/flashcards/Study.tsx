@@ -1,3 +1,4 @@
+import { useRecallRewards } from '@/src/features/progression/useRecallRewards';
 import {useMembership} from '@/src/features/pro/MembershipContext';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft, Lightbulb, Volume2, RotateCcw } from 'lucide-react';
@@ -22,6 +23,7 @@ const names: Record<Mode, [
 export const modeName = (mode: Mode, uz: boolean) => names[mode][uz ? 1 : 0];
 export function Study({ cards, session: initial, uz, vocabulary, getReview, save, close, complete }: Props) {
     const {cinematic} = useMembership();
+    const rewards = useRecallRewards(initial);
     const t = (en: string, u: string) => uz ? u : en;
     const [session, setSession] = useState(initial), [flipped, setFlipped] = useState(false), [answer, setAnswer] = useState(''), [result, setResult] = useState<boolean | null>(null), [hintCount, setHintCount] = useState(0), [error, setError] = useState('');
     const [strict, setStrict] = useState(false), [caseSensitive, setCaseSensitive] = useState(!vocabulary), [level, setLevel] = useState<'easy' | 'medium' | 'hard'>('medium'), [reverse, setReverse] = useState(false);
@@ -69,6 +71,7 @@ export function Study({ cards, session: initial, uz, vocabulary, getReview, save
             // Match/choice recognition never advances recall confidence like unaided typing.
             const assisted = hints + (['match', 'choice'].includes(mode) ? 1 : 0);
             save(next, schedule(getReview(card), rating, assisted));
+            rewards.record(next.attempts[next.attempts.length - 1]);
             sessionRef.current = next;
             setSession(next);
             if (next.completed)
@@ -128,6 +131,7 @@ export function Study({ cards, session: initial, uz, vocabulary, getReview, save
     <header className="fc-study-header"><button onClick={pause} className="fc-button"><ArrowLeft size={18}/>{t('Save & exit', 'Saqlash va chiqish')}</button><div><strong>{modeName(session.mode, uz)}</strong><p>{session.attempts.length} / {selected.length} {t('reviewed', 'takrorlandi')}</p></div><button className="fc-button" onClick={() => setHintCount(n => Math.min(n + 1, mode === 'match' ? 3 : hintList.length))} disabled={session.completed} aria-label={t('Show hint', 'Yordam ko‘rsatish')}><Lightbulb size={20}/>{t('Hint', 'Yordam')}</button></header>
     <progress max={Math.max(1, selected.length)} value={session.attempts.length} aria-label={t('Session progress', 'Mashg‘ulot jarayoni')}/>
     <div className="fc-study-content">
+      <p role="status" aria-live="polite">{rewards.status}{rewards.retryable && <button className="fc-button" onClick={rewards.retry}>{t('Retry XP verification', 'XP tasdig‘ini qayta urinish')}</button>}</p>
       {error && <p role="alert" className="fc-feedback">{error}</p>}
       {session.completed ? <section className="fc-results"><span className="fc-eyebrow">{t('SESSION COMPLETE', 'MASHG‘ULOT TUGADI')}</span><h2>{t('A little stronger, every review.', 'Har takrorlash bilan bilim mustahkamlanadi.')}</h2><p>{session.attempts.filter(a => a.correct).length} / {session.attempts.length} {t('correct', 'to‘g‘ri')} · {session.attempts.filter(a => a.hints > 0).length} {t('assisted', 'yordam bilan')} · {Math.ceil(elapsed.current / 60)} {t('active minutes', 'faol daqiqa')}</p><p>{t('Practice accuracy is not a long-term retention estimate.', 'Mashq aniqligi uzoq muddatli eslab qolish bahosi emas.')}</p><button className="fc-primary" onClick={close}>{t('Back to deck', 'To‘plamga qaytish')}</button></section> : mode === 'match' ? <>
         <p className="fc-muted">{t('Select a question, then its answer. Correct pairs are marked ✓.', 'Savolni, keyin unga mos javobni tanlang. To‘g‘ri juftliklar ✓ bilan belgilanadi.')}</p>

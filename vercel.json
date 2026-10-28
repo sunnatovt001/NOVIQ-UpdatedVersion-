@@ -2,7 +2,7 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "vite",
   "installCommand": "npm ci && npm ci --prefix functions && npm ci --prefix server",
-  "buildCommand": "npm run verify && npm --prefix server test && node scripts/register-telegram-webhook.mjs",
+  "buildCommand": "npm run verify && npm --prefix server test",
   "outputDirectory": "dist",
   "functions": {
     "api/rpc.js": { "maxDuration": 120 },

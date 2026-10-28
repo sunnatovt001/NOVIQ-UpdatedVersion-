@@ -6,27 +6,27 @@ export const NOVIQ_XP = {
     login: 5,
     dailyGoal: 20,
     streak7: 50,
-    streak30: 300,
+    streak30: 150,
   },
   learning: {
-    lessonComplete: 15,
-    testSubmit: 20,
-    score80Bonus: 10,
-    score90Bonus: 20,
+    lessonComplete: 0,
+    testSubmit: 0,
+    score80Bonus: 0,
+    score90Bonus: 0,
   },
   memory: {
     revision: 15,
-    relearnForgottenTopic: 25,
+    relearnForgottenTopic: 0,
   },
   productivity: {
-    planFollowedDay: 20,
-    allDailyTasksComplete: 30,
-    dailyMissionComplete: 500,
+    planFollowedDay: 0,
+    allDailyTasksComplete: 0,
+    dailyMissionComplete: 0,
   },
   bonus: {
-    firstTextbookUpload: 30,
-    inviteFriend: 100,
-    monthlyGoalsComplete: 500,
+    firstTextbookUpload: 0,
+    inviteFriend: 0,
+    monthlyGoalsComplete: 0,
   },
 } as const;
 
@@ -43,14 +43,8 @@ export const XP_KEYS = {
   monthlyGoalsComplete: (monthKey: string) => `bonus:monthly-goals:${monthKey}`,
 } as const;
 
-export const LEVELS = [
-  { level: 1, minXp: 0, name: "Novice Student" },
-  { level: 2, minXp: 100, name: "Active Student" },
-  { level: 3, minXp: 250, name: "Knowledge Builder" },
-  { level: 4, minXp: 500, name: "Scholar" },
-  { level: 5, minXp: 1000, name: "Master Scholar" },
-  { level: 10, minXp: 5000, name: "Academic Legend" },
-] as const;
+import { calculateLevel, calculateLevelInfo, calculateLevelName } from './levels';
+export { LEVELS, calculateLevel, calculateLevelInfo, calculateLevelName, levelProgress } from './levels';
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
@@ -98,24 +92,9 @@ export const calculateSessionXp = (
   category: StudySessionPayload["category"] = "focus",
   durationSeconds = 0,
 ) => {
-  if (category === "revision") return NOVIQ_XP.memory.revision;
-  if (category === "quiz") return NOVIQ_XP.learning.testSubmit;
-  return durationSeconds > 0
-    ? Math.min(20, Math.max(1, Math.round(durationSeconds / 60)))
-    : 0;
+  if (category !== 'focus' || durationSeconds < 300) return 0;
+  return Math.min(20, Math.floor(durationSeconds / 60));
 };
-
-export const calculateLevelInfo = (xp: number) => {
-  const safeXp = Math.max(0, xp);
-  return LEVELS.reduce<(typeof LEVELS)[number]>(
-    (current, level) => (safeXp >= level.minXp ? level : current),
-    LEVELS[0],
-  );
-};
-
-export const calculateLevel = (xp: number) => calculateLevelInfo(xp).level;
-
-export const calculateLevelName = (xp: number) => calculateLevelInfo(xp).name;
 
 export const createInitialXpState = (activeAt = new Date()) => {
   void activeAt;

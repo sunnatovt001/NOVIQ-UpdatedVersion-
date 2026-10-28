@@ -23,19 +23,20 @@ const sessionReward = (session, now = Date.now()) => {
     ended < now - 7 * 86400000
   )
     return null;
-  const xp =
-    session.category === "quiz"
-      ? 20
-      : session.category === "revision"
-        ? 15
-        : Math.min(20, Math.floor(duration / 60));
+  const xp = session.category === 'focus' && duration >= 300 ? Math.min(20, Math.floor(duration / 60)) : 0;
   return { xp, duration, ended, started: ended - duration * 1000 };
 };
 const validCheckout = (checkout) =>
   checkout?.plan === "pro" &&
   ["click", "payme", "card"].includes(checkout.provider) &&
   Object.hasOwn(PRICES, checkout.billingCycle) &&
-  checkout.amount === PRICES[checkout.billingCycle] &&
+  (checkout.promo
+    ? Number.isSafeInteger(checkout.baseAmount) && checkout.baseAmount > 0 &&
+      ['percent','fixed'].includes(checkout.promo.type) && Number.isSafeInteger(checkout.promo.value) && checkout.promo.value > 0 &&
+      (checkout.promo.type !== 'percent' || checkout.promo.value <= 100) &&
+      checkout.discountAmount === Math.min(checkout.baseAmount, checkout.promo.type === 'percent' ? Math.floor(checkout.baseAmount * checkout.promo.value / 100) : checkout.promo.value) &&
+      checkout.amount === checkout.baseAmount - checkout.discountAmount
+    : checkout.amount === PRICES[checkout.billingCycle]) &&
   checkout.currency === "UZS";
 const nextBillingDate = (cycle, from = new Date()) => {
   const result = new Date(from);

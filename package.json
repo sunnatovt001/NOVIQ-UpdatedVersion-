@@ -29,7 +29,7 @@
     "lint": "tsc --noEmit",
     "verify": "npm run lint && npm --prefix functions run lint && npm test && npm run build",
     "test": "node --test tests/*.test.cjs && npm --prefix functions test",
-    "test:rules": "npx firebase-tools@15.32.1 emulators:exec --project demo-noviq --config firebase.emulators.json --only firestore \"node --test tests/firestore.rules.cjs tests/metrics.firestore.cjs\"",
+    "test:rules": "npx firebase-tools@15.32.1 emulators:exec --project demo-noviq --config firebase.emulators.json --only firestore \"node --test tests/firestore.rules.cjs tests/metrics.firestore.cjs tests/progression.firestore.cjs\"",
     "deploy:hosting": "npm run verify && npm run release:check:live && npx --yes firebase-tools@15.32.1 deploy --only hosting --project gen-lang-client-0937997111",
     "deploy": "npm run verify && npm run release:check:live && npx --yes firebase-tools@15.32.1 deploy --only hosting,firestore:ai-studio-b3129ca2-3cf9-4d3f-bf24-5a6d266fe7a1 --project gen-lang-client-0937997111",
     "deploy:full": "npm run verify && npm run release:check && npx --yes firebase-tools@15.32.1 deploy --only hosting,functions,firestore:ai-studio-b3129ca2-3cf9-4d3f-bf24-5a6d266fe7a1,storage --project gen-lang-client-0937997111 && npm run release:check:live",

@@ -1,3 +1,4 @@
+import { navigateToPage } from '@/src/lib/navigation';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft, ArrowRight, CalendarDays, Check, ChevronDown, Download, History, LockKeyhole, PanelRightClose, PanelRightOpen, Play, Plus, Settings2, X } from 'lucide-react';
 import { useAuth } from '@/src/contexts/AuthContext';
@@ -170,7 +171,7 @@ function PlannerWorkspace({ uid, onLegacy, referenceAppearance }: {
         saveLocalData(focusContextKey(uid), { taskId: t.id, title: t.title, subject: plan?.subjects.find(s => s.id === t.subjectId)?.name || t.title });
         saveLocalData(`noviq-focus-task-${uid}`, t.title);
         saveLocalData(`noviq-focus-task-done-${uid}`, false);
-        location.hash = '/focus';
+        navigateToPage('/focus');
     }
     catch {
         setProblem(c.draftError);
@@ -235,7 +236,7 @@ function PlannerWorkspace({ uid, onLegacy, referenceAppearance }: {
         </aside>}
       </div>
       {!referenceAppearance && <section className="sp-assignment-list"><div className="sp-section-heading"><div><span className="sp-eyebrow">{c.yourWork}</span><h2>{c.allTasks}</h2></div><button className="sp-button" onClick={() => inspect('new')}><Plus size={16}/>{c.addTask}</button></div>{!plan.tasks.length && <p className="sp-empty">{c.empty}</p>}{plan.tasks.map(t => <article className={`sp-assignment-row ${t.completed ? 'sp-completed' : ''}`} key={t.id}><button className="sp-icon" aria-label={`${t.completed ? c.undo : c.done}: ${t.title}`} aria-pressed={!!t.completed} onClick={() => complete(t.id)}><Check size={17}/></button><button className="sp-assignment-name" onClick={() => inspect(t.id)}><strong>{t.title}</strong><small>{plan.subjects.find(s => s.id === t.subjectId)?.name} · {t.minutes} {c.minutes}{t.deadline ? ' · ' + format(t.deadline) : ''}{t.deadline && t.deadline < now && !t.completed ? ' · ' + c.overdue : ''}</small></button><span className="sp-assignment-time">{Math.round(actual(t.id))} / {t.minutes} {c.minutes}</span><button className="sp-text" onClick={() => inspect(t.id)}>{c.edit}</button></article>)}</section>}
-      <footer className="sp-links"><button className="sp-text" onClick={onLegacy}>{c.legacy}</button><a href="#/notes">{c.notes}</a><a href="#/flashcards">{c.flashcards}</a><a href="#/tutor">{c.tutorLink}</a></footer>
+      <footer className="sp-links"><button className="sp-text" onClick={onLegacy}>{c.legacy}</button><a href="/notes">{c.notes}</a><a href="/flashcards">{c.flashcards}</a><a href="/tutor">{c.tutorLink}</a></footer>
     </>}
     </div>
   </div>;

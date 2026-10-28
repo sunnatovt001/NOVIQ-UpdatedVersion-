@@ -31,6 +31,12 @@ const mockFirestore = `
    queueMicrotask(() => {
      if (!active || service() === 'pending') return;
      if (service() === 'unavailable') return callbacks[1]?.(fail());
+     if(new URLSearchParams(location.search).has('testXp')) {
+       const key=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Tashkent',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+       const value=target.path?.endsWith('/trusted/progress') ? {xp:1300,level:5,streak:3,counters:{studyEvents:1,focusSeconds:1800},achievements:{A01:{unlockedAt:'2026-10-26T10:00:00Z',tier:'Bronze',xp:20}}} : target.path?.includes('/xpDays/') ? {ordinaryXp:40,bonusXp:20} : null;
+       const docs=target.path?.endsWith('/progressEvents') ? [{id:'fixture-xp',data:()=>({source:'focus',dayKey:key,xpDelta:60,createdAt:new Date().toISOString()})}] : [];
+       if(value || docs.length) {callbacks[0]({exists:()=>!!value,data:()=>value,docs,metadata:{fromCache:false,hasPendingWrites:false}});return;}
+     }
      const docs=historyDocs(target);
      callbacks[0]({exists:()=>false, data:()=>undefined, docs, size:docs.length, metadata:{fromCache:false,hasPendingWrites:false}});
    });
@@ -86,10 +92,29 @@ const server = await createServer({
      if(id.replaceAll('\\','/').endsWith('/src/contexts/AuthContext.tsx')) return `
        import React from 'react';
        const signedIn = new URLSearchParams(location.search).has('testUser');
-       const value = {user:signedIn?{uid:new URLSearchParams(location.search).get('testUid')||'isolated-browser-user'}:null,profile:signedIn&&!new URLSearchParams(location.search).has('testMissingProfile')?{displayName:'Browser Test',onboarded:true,onboardingAnswers:{mainGoal:'IELTS',userType:'student',struggle:'focus'},goals:[],xp:0,settings:{}}:null,loading:new URLSearchParams(location.search).has('testAuthLoading'),authError:new URLSearchParams(location.search).get('testAccountError')||'',isAdmin:signedIn&&new URLSearchParams(location.search).has('testAdmin'),signOut:async()=>{},completeOnboarding:async()=>{},updateLocalProfile:()=>{}};
+       const value = {user:signedIn?{uid:new URLSearchParams(location.search).get('testUid')||'isolated-browser-user'}:null,profile:signedIn&&!new URLSearchParams(location.search).has('testMissingProfile')?{displayName:'Browser Test',onboarded:true,onboardingAnswers:{mainGoal:'IELTS',userType:'student',struggle:'focus'},goals:[],xp:new URLSearchParams(location.search).has('testXp')?1300:0,settings:{}}:null,loading:new URLSearchParams(location.search).has('testAuthLoading'),authError:new URLSearchParams(location.search).get('testAccountError')||'',isAdmin:signedIn&&new URLSearchParams(location.search).has('testAdmin'),signOut:async()=>{},completeOnboarding:async()=>{},updateLocalProfile:()=>{}};
        export const useAuth = () => value;
        export const AuthProvider = ({children}) => children;
      `;
+     if(id.replaceAll('\\','/').endsWith('/src/lib/promo.ts')) return code.replace('export const promoCall =', 'const actualPromoCall =') + `
+       const promos=[];
+       export const promoCall=async(name,data)=>{
+         if(!new URLSearchParams(location.search).has('testPromo'))return actualPromoCall(name,data);
+         if(name==='validatePromoCode'){
+           window.__promoCalls=(window.__promoCalls||0)+1;
+           const code=data.code.trim().toUpperCase();
+           await new Promise(r=>setTimeout(r,code==='SLOW'?900:80));
+           if(code==='NETWORK')throw new Error('offline');
+           if(code==='EXPIRED')throw {details:{reason:'expired'}};
+           if(!['NOVIQ20','FREE100','SLOW'].includes(code))throw {details:{reason:'invalid'}};
+           const baseAmount=data.billingCycle==='yearly'?299000:39000,discountAmount=code==='FREE100'?baseAmount:Math.floor(baseAmount*.2);
+           return {code,baseAmount,discountAmount,amount:baseAmount-discountAmount,currency:'UZS'};
+         }
+         if(name==='adminListPromoCodes')return {items:[...promos],nextCursor:null};
+         if(name==='adminCreatePromoCode'){promos.push({...data,active:true,usedCount:0});return {ok:true};}
+         if(name==='adminDisablePromoCode'){promos.find(p=>p.code===data.code).active=false;return {ok:true};}
+         throw new Error('Unsupported isolated operation');
+       }`;
      if(id.replaceAll('\\','/').endsWith('/src/lib/analytics.ts')) return `export const trackSiteVisit=async()=>{},trackUserEvent=async()=>{};`;
    }
  }]

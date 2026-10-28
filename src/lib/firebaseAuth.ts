@@ -1,3 +1,4 @@
+import { navigateToPage } from '@/src/lib/navigation';
 import {
   browserLocalPersistence,
   browserSessionPersistence,
@@ -91,7 +92,7 @@ export const loginWithSocialProvider = async (providerId: SocialAuthProviderId, 
     const result = await signInWithPopup(auth, createSocialProvider(providerId));
     const isNew = getAdditionalUserInfo(result)?.isNewUser === true;
     setRegistrationOnboarding(isNew ? result.user.uid : null);
-    window.location.hash = isNew ? '/onboarding' : '/dashboard';
+    navigateToPage(isNew ? '/onboarding' : '/dashboard');
     return result.user;
   } catch (error) {
     console.error("Social login failed", error);
@@ -105,7 +106,7 @@ export const loginWithEmail = async (email: string, password: string, remember =
   await applyAuthPersistence(remember);
   const result = await signInWithEmailAndPassword(auth, email.trim(), password);
   setRegistrationOnboarding(null);
-  window.location.hash = '/dashboard';
+  navigateToPage('/dashboard');
   return result.user;
 };
 
@@ -129,6 +130,6 @@ export const registerWithEmail = async (
   // AuthProvider owns initial profile creation; a second full write here raced
   // against its listener and attempted to overwrite protected fields.
   setRegistrationOnboarding(result.user.uid);
-  window.location.hash = '/onboarding';
+  navigateToPage('/onboarding');
   return result.user;
 };

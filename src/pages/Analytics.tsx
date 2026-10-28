@@ -1,3 +1,4 @@
+import { ProgressionPanel } from '@/src/features/progression/ProgressionPanel';
 import {useStudyEvidence,type StudyEvidence} from '@/src/features/pro/useStudyEvidence';
 import { useMembership } from '@/src/features/pro/MembershipContext';
 import { GlassProgress } from '@/src/features/analytics/GlassProgress';
@@ -14,7 +15,7 @@ import { cn } from "@/src/lib/utils";
 import { collection, limit, onSnapshot, orderBy, query } from "firebase/firestore";
 import { db } from "@/src/lib/firebase";
 import { useAuth } from "@/src/contexts/AuthContext";
-import { calculateLevelName, getLocalDayKey } from "@/src/lib/progress";
+import { calculateLevel, calculateLevelName, getLocalDayKey } from "@/src/lib/progress";
 import { useUserActivityMetrics } from "@/src/lib/useUserActivityMetrics";
 import type { StudySession } from "@/src/types";
 import { recordDate } from "@/src/lib/recordDate";
@@ -122,11 +123,11 @@ export const Analytics = ({ setActiveTab }: { setActiveTab?: (t: string) => void
   const weeklyTargetSeconds = dailyTargetMinutes * 7 * 60;
   const weeklyGoalProgress = Math.min(100, Math.round((weeklyStudySeconds / Math.max(weeklyTargetSeconds, 1)) * 100));
   const activeDaysThisWeek = weeklyData.filter((day) => day.seconds > 0).length;
-  const totalXp = activityMetrics.xp;
+  const totalXp = profile?.xp ?? activityMetrics.xp;
   const latestSession = studySessions[0];
   const reviewCoverage = missionCompletion(activityMetrics.flashcardsCreated, activityMetrics.reviewedCards);
   const totalCategoryMinutes = categoryData.reduce((total, item) => total + item.value, 0);
-  const levelName = profile?.levelName || calculateLevelName(totalXp);
+  const levelName = calculateLevelName(totalXp);
 
   const metricCards = [
     {
@@ -168,6 +169,7 @@ export const Analytics = ({ setActiveTab }: { setActiveTab?: (t: string) => void
   return (
     <div className="pro-analytics-workspace space-y-8 px-0 pb-24 text-slate-950 dark:text-slate-50 sm:space-y-10">
       <div className="flex justify-end"><ProEntry area="reports"/></div>
+      <ProgressionPanel details />
       <SmartPlannerInsights />
       {evidence.deviceSeconds>0 && <p role="status">{locale==='uz'?'Qurilmada saqlangan faoliyat ham kiritilgan.':locale==='ru'?'Включена активность, сохранённая на устройстве.':'Includes activity saved only on this device.'}</p>}
       {sessionLoading && <p role="status" className="text-sm font-medium text-slate-600 dark:text-slate-300">{copy.loading}</p>}
@@ -188,7 +190,7 @@ export const Analytics = ({ setActiveTab }: { setActiveTab?: (t: string) => void
            </div>
            <div className="min-w-[140px] flex-1 rounded-2xl border border-slate-200 bg-white px-6 py-4 dark:border-slate-700 dark:bg-slate-900">
               <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400">{levelName}</p>
-              <p className="text-xl font-bold leading-none text-slate-950 [font-variant-numeric:tabular-nums] dark:text-white sm:text-2xl">{activityMetrics.loading||activityMetrics.error?'—':activityMetrics.level}</p>
+              <p className="text-xl font-bold leading-none text-slate-950 [font-variant-numeric:tabular-nums] dark:text-white sm:text-2xl">{calculateLevel(totalXp)}</p>
            </div>
         </div>
       </header>

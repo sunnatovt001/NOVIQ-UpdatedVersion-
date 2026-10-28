@@ -89,7 +89,8 @@ module.exports = ({db,onCall,onDocumentWritten,onDocumentCreated,HttpsError,Fiel
   api.onMetricsUserCreated=onDocumentCreated({document:'users/{userId}',database,retry:true,timeoutSeconds:540,maxInstances:2},event=>backfillUser(event.params.userId));
   api.getActivityMetrics=onCall({timeoutSeconds:60,memory:'256MiB',maxInstances:2},async request=>{
     if (!request.auth?.uid) throw new HttpsError('unauthenticated','Sign in first.');
-    const {start,end}=request.data || {};
+    const {start,end,xpDayKey}=request.data || {};
+    if(xpDayKey!==undefined && (typeof xpDayKey!=='string' || !/^\d{4}-\d{2}-\d{2}$/.test(xpDayKey) || !Number.isFinite(Date.parse(xpDayKey)))) throw new HttpsError('invalid-argument','Invalid XP calendar day.');
     const scoped=start!==undefined || end!==undefined;
     if (scoped && (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start>=end || end-start>27*3600000 || Math.abs(start)>8640000000000000 || Math.abs(end)>8640000000000000)) throw new HttpsError('invalid-argument','Invalid statistics date range.');
     const uid=request.auth.uid;
@@ -109,7 +110,10 @@ module.exports = ({db,onCall,onDocumentWritten,onDocumentCreated,HttpsError,Fiel
         count(target('card').where('reviewed','==',true)),
       ]);
       const totals=sessions.data();
-      return {focusMinutes:Math.round(totals.seconds/60),notesCreated:notes,sourcesUploaded:sources,notebookMessages:notebook,tutorMessages:tutor,decksCreated:decks,tasksDone:roadmap,flashcardsCreated:created,dueCards:due,reviewedCards:reviewed,...(scoped?{xp:totals.xp}:{}),asOf:Date.now()};
+      const xpDay=scoped ? (await db.doc(`users/${uid}/xpDays/${xpDayKey||require('./policy').dayKey(new Date(start))}`).get()).data() : null;
+      // Preserve recorded pre-v2 history without importing it into trusted XP.
+      const dailyXp=xpDay ? (Number(xpDay.ordinaryXp)||0)+(Number(xpDay.bonusXp)||0) : totals.xp;
+      return {focusMinutes:Math.round(totals.seconds/60),notesCreated:notes,sourcesUploaded:sources,notebookMessages:notebook,tutorMessages:tutor,decksCreated:decks,tasksDone:roadmap,flashcardsCreated:created,dueCards:due,reviewedCards:reviewed,...(scoped?{xp:dailyXp}:{}),asOf:Date.now()};
     } catch (error) {logger.error('Activity aggregation failed',{code:error.code,userId:uid});throw new HttpsError('unavailable','Statistics temporarily unavailable. Please retry.');}
   });
   return {api,backfillUser,projectCurrent};

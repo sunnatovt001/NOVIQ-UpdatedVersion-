@@ -7,7 +7,7 @@ const vm = require('node:vm');
 function load(path, dependencies = {}) {
   const exports = {};
   const code = ts.transpileModule(fs.readFileSync(path, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
-  vm.runInNewContext(code, { exports, require: (name) => dependencies[name] || {}, Date, setTimeout, clearTimeout, Map });
+  vm.runInNewContext(code, { exports, require: (name) => dependencies[name] || (name === './levels' ? load('src/lib/levels.ts', {'../../functions/xp-catalog.json': {default: require('../functions/xp-catalog.json')}}) : {}), Date, setTimeout, clearTimeout, Map });
   return exports;
 }
 const evidence = load('src/lib/activityEvidence.ts', { './recordDate': load('src/lib/recordDate.ts') });
@@ -107,7 +107,7 @@ test('Planner input labels are localized and selection controls expose their sta
 test('pure progress math has no runtime service imports and preserves level, streak and award calculations', () => {
   const source=fs.readFileSync('src/lib/progressMath.ts','utf8');
   const compiled=ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.CommonJS}}).outputText;
-  assert.doesNotMatch(compiled,/require\(/);
+  assert.doesNotMatch(compiled.replace(/require\(["']\.\/levels["']\)/g, ''),/require\(/);
   const math=load('src/lib/progressMath.ts');
   for(const [xp,level] of [[-5,1],[0,1],[100,2],[250,3],[500,4],[1000,5],[5000,10]])assert.equal(math.calculateLevel(xp),level);
   assert.equal(math.createInitialXpState().xp,0);

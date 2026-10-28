@@ -1,0 +1,13 @@
+.noviq-progression progress {
+  appearance: none;
+  height: 0.5rem;
+  overflow: hidden;
+  border: 0;
+  border-radius: 999px;
+  background: var(--noviq-soft, #e2e8f0);
+}
+.noviq-progression progress::-webkit-progress-bar { background: var(--noviq-soft, #e2e8f0); border-radius: 999px; }
+.noviq-progression progress::-webkit-progress-value { background: var(--noviq-accent, #2563eb); border-radius: 999px; }
+.noviq-progression progress::-moz-progress-bar { background: var(--noviq-accent, #2563eb); border-radius: 999px; }
+.noviq-progression button:focus-visible,
+.noviq-progression a:focus-visible { outline: 2px solid var(--noviq-accent, #2563eb); outline-offset: 3px; }

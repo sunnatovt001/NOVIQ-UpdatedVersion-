@@ -33,7 +33,6 @@ service cloud.firestore {
         "onboardingCompletedAt",
         "goals",
         "currentLevel",
-        "dailyTargetMinutes",
         "showActionButtons",
         "settings"
       ];
@@ -237,6 +236,16 @@ service cloud.firestore {
       }
     }
 
+    // Server-owned progression evidence and immutable daily snapshots.
+    match /users/{userId}/xpDays/{dayId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow write: if false;
+    }
+    match /users/{userId}/recallEvidence/{cardId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow write: if false;
+    }
+
     // Private review state is separate from card content. Non-destructive v2 additions.
     match /users/{userId}/decks/{deckId}/reviews/{cardId} {
       allow read: if isOwner(userId) || isAdmin();
@@ -304,6 +313,14 @@ service cloud.firestore {
     match /users/{userId}/trusted/{docId} {
       allow read: if isOwner(userId) || isAdmin();
       allow create, update, delete: if false;
+    }
+
+    match /promoCodes/{codeId} {
+      allow read, write: if false;
+      match /audit/{auditId} { allow read, write: if false; }
+    }
+    match /users/{userId}/promoUsages/{codeId} {
+      allow read, write: if false;
     }
 
     match /users/{userId}/subscriptionCheckouts/{checkoutId} {

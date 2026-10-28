@@ -4,6 +4,7 @@ import type { StudySession, UserProfile } from "@/src/types";
 import { httpsCallable } from "@/src/lib/callable";
 import { functions } from "@/src/lib/firebase";
 import { isReadOnlyAudit } from "./auditMode";
+import { updateStudySessionState, type XpReceipt } from './verifiedProgress';
 import { NOVIQ_XP, studySessionsKey, buildDailyActivityPatch, buildXpAwardPatch, getLocalDayKey } from "./progressMath";
 export * from "./progressMath";
 
@@ -172,21 +173,28 @@ export const persistStudySession = async (
   fallbackProfile?: UserProfile | null,
   awards: XpAward[] = [],
   verifiedSessionId?: string,
+  onReceipt?: (receipt: XpReceipt) => void,
 ) => {
   void fallbackProfile;
   void awards;
   if (isReadOnlyAudit) throw new Error("Session completion is disabled in read-only audit mode.");
   if (!verifiedSessionId)
     throw new Error("Start an online study session before recording progress.");
+  await updateStudySessionState(verifiedSessionId, 'pause').catch(error => {
+    // A pre-upgrade proof can still save its history as explicitly unverified.
+    if ((error as {code?: string})?.code !== 'functions/failed-precondition') throw error;
+  });
   const complete = httpsCallable<
     { sessionId: string; duration: number; subject: string },
-    { sessionId: string }
+    XpReceipt & { sessionId: string }
   >(functions, "completeStudySession");
-  return (
+  const receipt = (
     await complete({
       sessionId: verifiedSessionId,
       duration: session.duration,
       subject: session.subject,
     })
-  ).data.sessionId;
+  ).data;
+  onReceipt?.(receipt);
+  return receipt.sessionId;
 };

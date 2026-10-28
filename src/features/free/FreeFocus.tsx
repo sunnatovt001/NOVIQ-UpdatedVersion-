@@ -1,10 +1,12 @@
+import { useVerifiedFocusSession } from '@/src/lib/useVerifiedFocusSession';
+import type { XpReceipt } from '@/src/lib/verifiedProgress';
 import {FocusReflection} from '@/src/features/pro/FocusReflection';
 import './free-focus.css';
 import {
   loadLocalData,
   trySaveLocalData as saveLocalData,
 } from "@/src/lib/localStore";
-import React, { useState, useEffect, useMemo, useRef } from "react";
+import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useAuth } from "@/src/contexts/AuthContext";
 import { useLocale } from "@/src/contexts/LocaleContext";
 import { trackUserEvent } from "@/src/lib/analytics";
@@ -144,6 +146,9 @@ export const Focus = () => {
   const [verifying, setVerifying] = useState(false);
   const localIdRef = useRef(validCache ? cached.localId : undefined);
   const generationRef = useRef(0);
+  const [xpReceipt, setXpReceipt] = useState<XpReceipt | null>(null);
+  const verificationWarning = useCallback(() => setSessionError(locale === 'uz' ? 'XP tasdig‘i kutilmoqda. Taymer ishlashda davom etadi.' : locale === 'ru' ? 'Ожидается подтверждение XP. Таймер продолжает работать.' : 'XP verification is pending. Your timer is still running.'), [locale]);
+  useVerifiedFocusSession(sessionIdRef, isActive && mode === 'focus', localOnly, verifying, verificationWarning);
 
   useEffect(
     () => () => {
@@ -214,6 +219,7 @@ export const Focus = () => {
       return false;
     }
 
+    setXpReceipt(null);
     const completedAt = new Date();
     const xpEarned = calculateSessionXp("focus", sessionDuration);
     const sessionData = {
@@ -255,12 +261,13 @@ export const Focus = () => {
     }
 
     try {
+      let confirmedReceipt: XpReceipt | undefined;
       const recordedId = await withFocusTimeout(
         () =>
-          persistStudySession(sessionData, profile, [], sessionIdRef.current),
+          persistStudySession(sessionData, profile, [], sessionIdRef.current, receipt => { confirmedReceipt = receipt; setXpReceipt(receipt); }),
         10000,
       );
-      try { recordPlannerFocus(user.uid, recordedId, sessionDuration, completedAt.getTime(), true, plannerContext); } catch { setSessionError(copy.localSaveFailed); }
+      try { recordPlannerFocus(user.uid, recordedId, confirmedReceipt?.duration ?? sessionDuration, completedAt.getTime(), confirmedReceipt?.status !== 'unverified', plannerContext); } catch { setSessionError(copy.localSaveFailed); }
       sessionIdRef.current = undefined;
       setFocusHistory((current) =>
         [
@@ -460,6 +467,8 @@ export const Focus = () => {
       )}
     >
       <audio ref={audioRef} loop />
+      {xpReceipt?.duration !== undefined && xpReceipt.recordedDuration !== undefined && xpReceipt.recordedDuration > xpReceipt.duration && <p role="status" className="mb-3 text-sm">{locale === 'uz' ? 'Qayd etilgan vaqt' : locale === 'ru' ? 'Записанное время' : 'Recorded time'}: {formatTime(xpReceipt.recordedDuration)} · {locale === 'uz' ? 'server tasdiqlagan' : locale === 'ru' ? 'подтверждено сервером' : 'server verified'}: {formatTime(xpReceipt.duration)}</p>}
+      {xpReceipt && <p role="status" aria-live="polite" className="mb-3 rounded-xl border border-[var(--noviq-border)] p-3 text-sm">{xpReceipt.status === 'unverified' ? (locale === 'uz' ? 'Saqlandi · tasdiqlanmagan' : locale === 'ru' ? 'Сохранено · не подтверждено' : 'Saved · unverified') : (locale === 'uz' ? 'Tasdiqlandi' : locale === 'ru' ? 'Подтверждено' : 'Verified')} +{xpReceipt.xpDelta} XP{xpReceipt.capReached ? (locale === 'uz' ? ' · Kunlik XP chegarasi. O‘qish vaqti saqlanadi.' : locale === 'ru' ? ' · Дневной лимит XP. Время учёбы сохраняется.' : ' · Daily XP cap reached. Study time is still saved.') : xpReceipt.sourceXp === 0 ? (locale === 'uz' ? ' · XP uchun kamida 5 tasdiqlangan daqiqa kerak.' : locale === 'ru' ? ' · Для XP нужно минимум 5 подтверждённых минут.' : ' · At least 5 verified minutes are needed for Focus XP.') : ''}</p>}
           <header className="ff-heading flex flex-wrap items-center justify-between gap-4">
             <div className="flex items-center gap-4">
               <div className="grid h-14 w-14 place-items-center rounded-2xl bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10">

@@ -1007,7 +1007,7 @@ export const Community = () => {
                   "createFriendInvite",
                   { email },
                 );
-                const link = `${window.location.origin}${window.location.pathname}?invite=${result.token}#/community`;
+                const link = `${window.location.origin}/community?invite=${result.token}`;
                 setEmail("");
                 setStatus(copy.inviteCreated);
                 try {
@@ -1062,7 +1062,7 @@ export const Community = () => {
                 !!invite.expiresAt &&
                 Date.parse(invite.expiresAt) <= Date.now();
               const link = invite.token
-                ? `${window.location.origin}${window.location.pathname}?invite=${invite.token}#/community`
+                ? `${window.location.origin}/community?invite=${invite.token}`
                 : "";
               return (
                 <div key={invite.id} className="mb-4">

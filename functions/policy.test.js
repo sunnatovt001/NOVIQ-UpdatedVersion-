@@ -46,7 +46,7 @@ test("session XP is derived from duration, ignoring forged XP", () => {
       },
       now,
     ).xp,
-    2,
+    0,
   );
   for (const duration of [0, -1, NaN, Infinity, 28801]) {
     assert.equal(

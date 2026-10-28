@@ -25,8 +25,8 @@ function ActivityRail() {
   return <aside className="pro-activity-rail">
     <header><button aria-label={locale === 'uz' ? 'Oldingi hafta' : locale === 'ru' ? 'Предыдущая неделя' : 'Previous week'} onClick={() => setOffset(v => v - 1)}><ArrowLeft size={19}/></button><strong>{format(day, { month: 'long', year: 'numeric' })}</strong><button aria-label={locale === 'uz' ? 'Keyingi hafta' : locale === 'ru' ? 'Следующая неделя' : 'Next week'} onClick={() => setOffset(v => v + 1)}><ArrowRight size={19}/></button></header>
     <div className="pro-activity-days">{days.map(d => <button key={d} aria-pressed={d === day} onClick={() => setSelected(d)}><small>{format(d, { weekday: 'short' })}</small><span>{d.slice(-2)}</span></button>)}</div>
-    <div className="pro-activity-items">{!known || error ? <p role="status">{error ? c.loadError : c.loading}</p> : sessions.length ? sessions.map(s => <a href="#/planner" key={s.id || s.taskId + ':' + s.start}><strong>{plan?.tasks.find(t => t.id === s.taskId)?.title || c.plan}</strong><span>{plan?.subjects.find(subject => subject.id === plan.tasks.find(t => t.id === s.taskId)?.subjectId)?.name}</span><time><Clock3 size={14}/>{new Intl.DateTimeFormat(locale, { hour: '2-digit', minute: '2-digit', timeZone: zone }).format(s.start)}</time></a>) : <p>{c.empty}</p>}</div>
-    <a className="pro-activity-create" href="#/planner"><Plus size={18}/>{c.plan}</a>
+    <div className="pro-activity-items">{!known || error ? <p role="status">{error ? c.loadError : c.loading}</p> : sessions.length ? sessions.map(s => <a href="/planner" key={s.id || s.taskId + ':' + s.start}><strong>{plan?.tasks.find(t => t.id === s.taskId)?.title || c.plan}</strong><span>{plan?.subjects.find(subject => subject.id === plan.tasks.find(t => t.id === s.taskId)?.subjectId)?.name}</span><time><Clock3 size={14}/>{new Intl.DateTimeFormat(locale, { hour: '2-digit', minute: '2-digit', timeZone: zone }).format(s.start)}</time></a>) : <p>{c.empty}</p>}</div>
+    <a className="pro-activity-create" href="/planner"><Plus size={18}/>{c.plan}</a>
     <div className="pro-activity-brand"><strong>NOVIQ PRO</strong><span>{c.flow}</span></div>
   </aside>;
 }

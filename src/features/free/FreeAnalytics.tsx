@@ -1,3 +1,5 @@
+import { navigateToPage } from '@/src/lib/navigation';
+import { ProgressionPanel } from '@/src/features/progression/ProgressionPanel';
 import React, {useMemo, useState} from 'react';
 import {Clock, CheckCircle2, Flame, Layers, ChartNoAxesColumn, Compass, ArrowRight} from 'lucide-react';
 import {useAuth} from '@/src/contexts/AuthContext';
@@ -28,11 +30,12 @@ export const Analytics=({setActiveTab}:{setActiveTab?:(tab:string)=>void})=>{
  const recent=[...evidence.records].sort((a,b)=>Date.parse(b.timestamp)-Date.parse(a.timestamp)).slice(0,3);
  const coverage=missionCompletion(metrics.flashcardsCreated,metrics.reviewedCards);
  const duration=(s:number)=>actualDuration(s,locale);
- const go=(tab:string)=>setActiveTab?setActiveTab(tab):window.location.hash=`#/${tab}`;
+ const go=(tab:string)=>setActiveTab?setActiveTab(tab):navigateToPage(`/${tab}`);
  const retry=()=>{evidence.retry();metrics.retry();};
  const stats=[{icon:Clock,value:ready?duration(seconds):'—',label:period==='week'?t('Study time this week','Shu haftadagi o‘qish vaqti','Время учёбы за неделю'):t('Study time this month','Shu oydagi o‘qish vaqti','Время учёбы за месяц')},{icon:CheckCircle2,value:metricReady?metrics.tasksDone:'—',label:t('Tasks completed · all time','Bajarilgan vazifalar · jami','Задач выполнено · всего')},{icon:Flame,value:metricReady?`${metrics.streak} ${t('days','kun','дн.')}`:'—',label:copy.currentStreak},{icon:Layers,value:metricReady&&coverage!==null?`${coverage}%`:'—',label:copy.reviewCoverage}];
  return <div className="free-progress">
   <header className="fp-heading"><div><h1>{t('See your progress.','Natijalaringizni kuzating.','Следите за прогрессом.')}</h1><p>{t('Every focused minute is a step forward.','Har bir diqqatli daqiqa — oldinga qadam.','Каждая минута сосредоточенности — шаг вперёд.')}</p></div><div className="fp-period" role="group" aria-label={t('Reporting period','Hisobot davri','Период отчёта')}>{(['week','month'] as const).map(p=><button key={p} type="button" aria-pressed={period===p} onClick={()=>setPeriod(p)}>{p==='week'?t('Week','Hafta','Неделя'):t('Month','Oy','Месяц')}</button>)}</div></header>
+  <ProgressionPanel details />
   {!evidence.ready&&<p role="status" className="fp-notice">{copy.loading}</p>}
   {(evidence.error||metrics.error)&&<p role="alert" className="fp-notice fp-error">{metrics.error||copy.historyError} <button onClick={retry}>{copy.retry}</button></p>}
   {evidence.deviceSeconds>0&&<p role="status" className="fp-notice">{t('Includes recorded activity saved only on this device.','Qurilmada saqlangan faoliyat ham kiritilgan.','Включена активность, сохранённая на устройстве.')}</p>}

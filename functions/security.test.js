@@ -77,6 +77,7 @@ function harness(env = {}, overrides = {}) {
     return result;
   };
   const ref = (path) => ({
+    id: path.split("/").at(-1),
     path,
     collection: (name) => collection(`${path}/${name}`),
     get: async () => snapshot(path),
@@ -206,7 +207,10 @@ function harness(env = {}, overrides = {}) {
     },
     "firebase-functions/v2/scheduler": { onSchedule: handler },
     "node:crypto": crypto,
+    "./promo": require("./promo"),
     "./policy": require("./policy"),
+    "./progression": require("./progression"),
+    "./progressionStore": require("./progressionStore"),
     "./telegramNotifications": require("./telegramNotifications"),
     "./community": require("./community"),
     "./metrics": require("./metrics"),
@@ -369,29 +373,18 @@ test("forged XP awards do not earn raw XP or invented bonuses", async () => {
   await h.functions.onProgressEventCreated({
     params: { userId: "u1", eventId: "e1" },
   });
-  assert.equal(h.records.get("users/u1").xp, 5);
+  assert.equal(h.records.get("users/u1").xp, 0);
   h.records.set("users/u1/progressEvents/e2", { type: "xp_award", rawXp: 30 });
   await h.functions.onProgressEventCreated({
     params: { userId: "u1", eventId: "e2" },
   });
-  assert.equal(h.records.get("users/u1").xp, 5);
+  assert.equal(h.records.get("users/u1").xp, 0);
 });
 test("study session completion requires a server-issued start and caps elapsed time", async () => {
   const h = harness();
-  const sessionId = "a".repeat(32);
-  await assert.rejects(
-    h.functions.completeStudySession({
-      auth,
-      data: { sessionId, duration: 3600, subject: "Math" },
-    }),
-    { code: "failed-precondition" },
-  );
-  h.records.set("users/u1/trusted/activeSession", {
-    id: sessionId,
-    category: "focus",
-    startedAt: h.stamp(Date.now() - 120000),
-    completed: false,
-  });
+  await assert.rejects(h.functions.completeStudySession({ auth, data: { sessionId: 'a'.repeat(32), duration: 3600, subject: 'Math' } }), { code: 'failed-precondition' });
+  const { sessionId } = await h.functions.startStudySession({auth,data:{category:'focus',context:'focus'}});
+  h.records.get(`users/u1/trusted/start-${sessionId}`).seenAt=Date.now()-120000;
   const request = {
     auth,
     data: { sessionId, duration: 3600, subject: "Math" },
@@ -405,10 +398,10 @@ test("study session completion requires a server-issued start and caps elapsed t
   );
   assert.equal(
     h.records.get(`users/u1/studySessions/${sessionId}`).xpEarned,
-    2,
+    0,
   );
 });
-test("valid session triggers can arrive out of order without losing or duplicating XP", async () => {
+test("legacy triggers retain their records without replaying historical rewards", async () => {
   const h = harness();
   const now = Date.now();
   for (const [id, ended] of [
@@ -433,12 +426,10 @@ test("valid session triggers can arrive out of order without losing or duplicati
       params: { userId: "u1", eventId: `session-${id}` },
     });
   }
-  assert.equal(h.records.get("users/u1").xp, 7);
-  assert.equal(h.records.get("users/u1").totalStudySeconds, 120);
-  assert.equal(
-    h.records.get("users/u1").lastStudySessionAt,
-    new Date(now - 120000).toISOString(),
-  );
+  assert.equal(h.records.get('users/u1').xp,0);
+  assert.equal(h.records.get('users/u1/progressEvents/session-early').status,'rejected');
+  assert.ok(h.records.has('users/u1/studySessions/early'));
+  assert.ok(h.records.has('users/u1/studySessions/late'));
 });
 test("unconfigured online payments fail before creating a checkout", async () => {
   const h = harness();
@@ -697,7 +688,7 @@ test("Cross-account Telegram data isolation, switching confirmation and task own
   const taskDoneB = await sendCallback("task_done:task-B");
   assert.equal(taskDoneB.body.taskCompleted, "task-B");
   assert.equal(h.records.get("users/test-user-B/planner/smart-v2").tasks[0].completed, true);
-  assert.equal(h.records.get("users/test-user-B").xp, 920, "Account B must receive +20 XP");
+  assert.equal(h.records.get("users/test-user-B").xp, 900, "Manual Planner completion must preserve XP");
 
   // 10. Verify unlinking B does NOT restore Account A
   const unlinkRes = await sendCallback("unlink_confirm");
@@ -733,6 +724,7 @@ test("independent study contexts resume and survive another task starting", asyn
     h.stamp(Date.now() - 240000);
   h.records.get(`users/u1/trusted/start-${planner.sessionId}`).startedAt =
     h.stamp(Date.now() - 240000);
+  for (const id of [focus.sessionId,planner.sessionId]) Object.assign(h.records.get(`users/u1/trusted/start-${id}`), {verifiedSeconds:120,running:false});
   await h.functions.completeStudySession({
     auth,
     data: { sessionId: focus.sessionId, duration: 120, subject: "Focus" },
@@ -761,24 +753,12 @@ test("parallel timers cannot credit more time than the server wall clock", async
       }),
     ),
   );
-  for (const start of starts)
-    h.records.get(`users/u1/trusted/start-${start.sessionId}`).startedAt =
-      h.stamp(Date.now() - 120000);
-  await h.functions.completeStudySession({
-    auth,
-    data: { sessionId: starts[0].sessionId, duration: 120, subject: "Focus" },
-  });
-  await assert.rejects(
-    h.functions.completeStudySession({
-      auth,
-      data: {
-        sessionId: starts[1].sessionId,
-        duration: 120,
-        subject: "Planner",
-      },
-    }),
-    { code: "failed-precondition" },
-  );
+  for (const start of starts) h.records.get(`users/u1/trusted/start-${start.sessionId}`).startedAt=h.stamp(Date.now()-120000);
+  await assert.rejects(h.functions.completeStudySession({auth,data:{sessionId:starts[0].sessionId,duration:120,subject:'Focus'}}),{code:'failed-precondition'});
+  h.records.get(`users/u1/trusted/start-${starts[1].sessionId}`).seenAt=Date.now()-120000;
+  await h.functions.completeStudySession({auth,data:{sessionId:starts[1].sessionId,duration:120,subject:'Planner'}});
+  assert.ok(h.records.get(`users/u1/studySessions/${starts[1].sessionId}`).duration<=90);
+  assert.equal(h.records.has(`users/u1/studySessions/${starts[0].sessionId}`),false);
 });
 test("community membership writes are atomic and repeat joins/leaves preserve counts", async () => {
   const h = harness();

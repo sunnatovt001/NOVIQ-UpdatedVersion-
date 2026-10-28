@@ -1,3 +1,5 @@
+import { navigateToPage } from '@/src/lib/navigation';
+import { ProgressionPanel } from '@/src/features/progression/ProgressionPanel';
 import React, { useMemo, useState } from 'react';
 import { ArrowRight, BookOpen, CheckCircle2, Flame, Sparkles } from 'lucide-react';
 import { useLocale } from '@/src/contexts/LocaleContext';
@@ -36,11 +38,12 @@ export function GlassProgress({sessions, ready, loading, error, deviceSeconds, r
   const heatStart=shift(weekStart,-28);
   const heat=Array.from({length:35},(_,i)=>{const key=shift(heatStart,i),minutes=(totals.get(key)||0)/60;return {key,minutes,future:key>today,intensity:minutes<=0?0:Math.min(4,Math.ceil(minutes/Math.max(dailyTargetMinutes,1)*4))};});
   const recent=[...sessions].sort((a,b)=>Date.parse(b.timestamp)-Date.parse(a.timestamp)).slice(0,3);
-  const go=(tab:string)=>navigate?navigate(tab):window.location.hash=`#/${tab}`;
+  const go=(tab:string)=>navigate?navigate(tab):navigateToPage(`/${tab}`);
   const duration=(value:number)=>actualDuration(value,locale);
   const metricReady=!metrics.loading&&!metrics.error;
   return <div className="gp-page">
     <header className="gp-heading"><div><p className="gp-breadcrumb">{text.workspace}<span>/</span>{text.progress}</p><h1>{text.title}</h1><p>{text.subtitle}</p></div><div className="gp-period" role="group" aria-label={copy.productivityFlow}>{(['week','month'] as const).map(p=><button type="button" key={p} aria-pressed={period===p} onClick={()=>setPeriod(p)}>{text[p]}</button>)}</div></header>
+    <ProgressionPanel details />
     {loading&&<p role="status" className="gp-notice">{copy.loading}</p>}
     {(error||metrics.error)&&<p role="alert" className="gp-notice gp-error">{error||metrics.error} <button type="button" onClick={retry}>{copy.retry}</button></p>}
     {deviceSeconds>0&&<p role="status" className="gp-notice">{text.device}</p>}

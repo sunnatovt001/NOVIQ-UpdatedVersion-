@@ -6,7 +6,7 @@
   },
   "main": "index.js",
   "scripts": {
-    "lint": "node --check index.js && node --check policy.js && node --check membership.js && node --check community.js && node --check metrics.js && node --check appUrl.js && node --check telegramNotifications.js",
+    "lint": "node --check progression.js && node --check progressionStore.js && node --check index.js && node --check policy.js && node --check membership.js && node --check community.js && node --check metrics.js && node --check appUrl.js && node --check telegramNotifications.js && node --check promo.js",
     "test": "node --test *.test.js"
   },
   "dependencies": {

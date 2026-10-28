@@ -59,8 +59,21 @@ test("protected fields cannot be added or modified", async () => {
     { subscription: { plan: "pro" } },
     { telegramId: "123456" },
     { usage: { aiTutor: {} } },
+    { dailyTargetMinutes: 5 },
   ]) {
     await assertFails(updateDoc(doc(owner, "users/u1"), patch));
+  }
+});
+
+test('XP daily snapshots, recall evidence and trusted proofs are isolated and server-owned',async()=>{
+  const other=environment.authenticatedContext('u2').firestore();
+  for(const path of ['users/u1/xpDays/2026-10-26','users/u1/recallEvidence/card-proof','users/u1/trusted/progress']) {
+    await environment.withSecurityRulesDisabled(context=>setDoc(doc(context.firestore(),path),{xp:100,ordinaryXp:20}));
+    await assertSucceeds(getDoc(doc(owner,path)));
+    await assertFails(getDoc(doc(other,path)));
+    await assertFails(updateDoc(doc(owner,path),{xp:9999,ordinaryXp:0}));
+    await assertFails(setDoc(doc(other,path),{xp:9999}));
+    await assertFails(getDoc(doc(environment.unauthenticatedContext().firestore(),path)));
   }
 });
 test("private profiles are isolated between accounts", async () => {
@@ -214,4 +227,15 @@ test('PRO trials and audit events are server-owned while personal onboarding and
  await assertFails(setDoc(doc(owner,'users/u1/proEvents/forged'),{type:'trial_started'}));
  const path='users/u1/proExperience/onboarding';await assertSucceeds(setDoc(doc(owner,path),{step:2,completed:false}));await assertFails(getDoc(doc(other,path)));await assertFails(setDoc(doc(other,path),{completed:true}));
  const note='users/u1/notebookNotes/pro-created';await assertSucceeds(setDoc(doc(owner,note),{title:'My reflection',content:'My own saved work',tags:[],kind:'focus-reflection'}));await assertSucceeds(getDoc(doc(owner,note)));await assertFails(getDoc(doc(other,note)));
+});
+
+test('promotions and redemption records are server owned even for administrators',async()=>{
+  const admin=environment.authenticatedContext('promo-admin',{admin:true}).firestore();
+  await environment.withSecurityRulesDisabled(async context=>{await setDoc(doc(context.firestore(),'promoCodes/fixture'),{code:'TEST',active:true});await setDoc(doc(context.firestore(),'users/u1/promoUsages/fixture'),{status:'used'});});
+  for(const client of [owner,environment.authenticatedContext('u2').firestore(),environment.unauthenticatedContext().firestore(),admin]){
+    for(const path of ['promoCodes/fixture','users/u1/promoUsages/fixture']){
+      await assertFails(getDoc(doc(client,path)));
+      await assertFails(setDoc(doc(client,path),{amount:0}));
+    }
+  }
 });

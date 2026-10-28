@@ -130,8 +130,8 @@ const buildTrustedProgressPatch = (data: Record<string, unknown>): Partial<UserP
 
 const withCurrentProgressDisplay = (profile: UserProfile): UserProfile => ({
   ...profile,
-  level: profile.level || calculateLevel(profile.xp || 0),
-  levelName: profile.levelName || calculateLevelName(profile.xp || 0),
+  level: calculateLevel(profile.xp || 0),
+  levelName: calculateLevelName(profile.xp || 0),
   streak: getCurrentStreak(profile.streak || 0, profile.lastActive),
 });
 
@@ -319,6 +319,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       unsubscribeAuth?.();
     };
   }, []);
+
+  useEffect(() => {
+    if (!user || !profile || profile.uid !== user.uid || isReadOnlyAudit) return;
+    let disposed = false, checkedDay = '';
+    const check = () => {
+      const day = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Tashkent', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+      if (checkedDay === day || !navigator.onLine) return;
+      checkedDay = day;
+      void import('@/src/lib/verifiedProgress').then(api => api.checkInProgress()).catch(() => { if (!disposed) checkedDay = ''; });
+    };
+    check();
+    const timer = window.setInterval(check, 60000);
+    window.addEventListener('online', check);
+    return () => { disposed = true; window.clearInterval(timer); window.removeEventListener('online', check); };
+  }, [user?.uid, profile?.uid]);
 
   const signOut = () => auth.signOut();
 

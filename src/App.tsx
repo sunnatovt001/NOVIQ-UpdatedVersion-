@@ -1,3 +1,4 @@
+import { writePagePath } from '@/src/lib/navigation';
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
@@ -65,7 +66,7 @@ const AppContent = () => {
     "onboarding",
   ];
   const readTab = () => {
-    const requested = (window.location.hash || window.location.pathname).replace(/^#?\/?/, "").replace(/\/$/, "");
+    const requested = (window.location.pathname).replace(/^#?\/?/, "").replace(/\/$/, "");
     if (validTabs.includes(requested)) return requested;
     return new URLSearchParams(window.location.search).has("invite")
       ? "community"
@@ -74,11 +75,11 @@ const AppContent = () => {
   const [activeTab, updateActiveTab] = useState(readTab);
   const activeTabRef = useRef(activeTab), navigationId = useRef(0);
   activeTabRef.current = activeTab;
-  const navigate = useCallback(async (tab: string, changeHash: boolean) => {
+  const navigate = useCallback(async (tab: string, changePath: boolean) => {
     if (tab === activeTabRef.current) {
       navigationId.current++;
       delete document.documentElement.dataset.routePending;
-      if (changeHash) window.location.hash = `/${tab}`;
+      if (changePath) writePagePath(tab);
       return;
     }
     const id = ++navigationId.current;
@@ -94,15 +95,15 @@ const AppContent = () => {
     transitionRoute(() => {
       if (id !== navigationId.current) return;
       activeTabRef.current = tab;
-      if (changeHash) window.location.hash = `/${tab}`;
+      if (changePath) writePagePath(tab);
       updateActiveTab(tab);
     });
   }, [membership.cinematic, user?.uid]);
   const setActiveTab = useCallback((tab: string) => { void navigate(tab, true); }, [navigate]);
   useEffect(() => {
     const onNavigate = () => { void navigate(readTab(), false); };
-    window.addEventListener("hashchange", onNavigate);
-    return () => window.removeEventListener("hashchange", onNavigate);
+    window.addEventListener("popstate", onNavigate);
+    return () => window.removeEventListener("popstate", onNavigate);
   }, [navigate]);
   useEffect(() => () => {
     navigationId.current++;
@@ -110,7 +111,7 @@ const AppContent = () => {
   }, [membership.cinematic, user?.uid]);
 
   // Login and membership updates can cancel a route that is still preloading.
-  // The hash may already say /dashboard, so no second hashchange will arrive.
+  // The URL may already say /dashboard, so no second navigation event will arrive.
   // Resume that destination once authentication has settled.
   useEffect(() => {
     if (!user || loading) return;
@@ -127,7 +128,7 @@ const AppContent = () => {
     trackSiteVisit(pageName, user?.uid).catch(() => undefined);
   }, [activeTab, loading, user]);
 
-  const needsOnboarding = Boolean(user && !hasCompletedOnboarding(profile) && isRegistrationOnboarding(user.uid, window.location.hash));
+  const needsOnboarding = Boolean(user && !hasCompletedOnboarding(profile) && isRegistrationOnboarding(user.uid, window.location.pathname));
 
   // The public homepage remains reachable even when an account is signed in.
   if (activeTab === 'landing') return <Landing />;
@@ -184,7 +185,7 @@ const AppContent = () => {
         onComplete: async (answers: OnboardingAnswers) => {
           await completeOnboarding(answers);
           setRegistrationOnboarding(null);
-          if (window.location.hash !== '#/dashboard') setActiveTab('dashboard');
+          if (window.location.pathname !== '/dashboard') setActiveTab('dashboard');
         },
       }} />
     );

@@ -40,14 +40,8 @@ setGlobalOptions({ region: REGION, maxInstances: 10 });
 
 const db = getFirestore(FIRESTORE_DATABASE);
 
-const LEVELS = [
-  { level: 1, minXp: 0, name: "Novice Student" },
-  { level: 2, minXp: 100, name: "Active Student" },
-  { level: 3, minXp: 250, name: "Knowledge Builder" },
-  { level: 4, minXp: 500, name: "Scholar" },
-  { level: 5, minXp: 1000, name: "Master Scholar" },
-  { level: 10, minXp: 5000, name: "Academic Legend" },
-];
+const {levelInfo: calculateLevelInfo} = require('./progression');
+const progression = require('./progressionStore')({db,onCall,HttpsError,FieldValue,Timestamp});
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 const telegramDateFormatter = new Intl.DateTimeFormat("en-CA", {
@@ -407,21 +401,6 @@ const getNextStreak = (
   return distance === 1 ? currentStreak + 1 : 1;
 };
 
-const calculateLevelInfo = (xp) =>
-  LEVELS.reduce(
-    (current, level) => (xp >= level.minXp ? level : current),
-    LEVELS[0],
-  );
-
-const xpForAwardKey = (key) => {
-  if (!key || typeof key !== "string") return 0;
-  if (key.startsWith("daily-login:")) return 5;
-  if (key.startsWith("daily-goal:")) return 20;
-  if (key.startsWith("streak-7:")) return 50;
-  if (key.startsWith("streak-30:")) return 300;
-  return 0;
-};
-
 const buildSubscription = ({
   billingCycle = "monthly",
   provider = "card",
@@ -460,394 +439,10 @@ const assertAdmin = async (request) => {
   throw new HttpsError("permission-denied", "Admin access required.");
 };
 
-const processProgressEvent = async (userId, eventId) => {
-  const userRef = db.doc(`users/${userId}`);
-  const eventRef = userRef.collection("progressEvents").doc(eventId);
-  const trustedProgressRef = userRef.collection("trusted").doc("progress");
+const promos = require('./promo').register({exports,db,onCall,HttpsError,FieldValue,assertAdmin,PRICES,buildSubscription,nextBillingDate});
 
-  logger.info("Processing progress event", { userId, eventId });
-
-  await db.runTransaction(async (transaction) => {
-    const eventSnap = await transaction.get(eventRef);
-    if (!eventSnap.exists) {
-      logger.warn("Progress event missing during processing", {
-        userId,
-        eventId,
-      });
-      return;
-    }
-
-    const eventData = eventSnap.data() || {};
-    if (eventData.processedAt) {
-      logger.info("Progress event already processed", { userId, eventId });
-      return;
-    }
-
-    if (
-      !["daily_activity", "xp_award", "study_session"].includes(eventData.type)
-    ) {
-      logger.warn("Rejected progress event with invalid type", {
-        userId,
-        eventId,
-        type: eventData.type,
-      });
-      transaction.set(
-        eventRef,
-        {
-          status: "rejected",
-          rejectedAt: FieldValue.serverTimestamp(),
-          rejectionReason: "invalid_type",
-          processedBy: "noviq-functions",
-        },
-        { merge: true },
-      );
-      return;
-    }
-
-    const userSnap = await transaction.get(userRef);
-    const user = userSnap.exists ? userSnap.data() || {} : {};
-    const trustedProgressSnap = await transaction.get(trustedProgressRef);
-    const trustedProgress = trustedProgressSnap.exists
-      ? trustedProgressSnap.data() || {}
-      : {};
-
-    let rawXp = 0;
-    let totalStudySecondsDelta = 0;
-    let activeAt = toDate(eventData.createdAt) || new Date();
-    let sessionId = eventData.sessionId;
-    let shouldUpdateLastStudySession = false;
-    let claimedSessionEnd = null;
-    const today = dayKey();
-    const dailySeconds =
-      trustedProgress.dayKey === today
-        ? Number(trustedProgress.dailyStudySeconds) || 0
-        : 0;
-
-    if (eventData.type === "study_session" && sessionId) {
-      const sessionRef = userRef
-        .collection("studySessions")
-        .doc(String(sessionId));
-      const sessionSnap = await transaction.get(sessionRef);
-      const session = sessionSnap.exists ? sessionSnap.data() || {} : {};
-      if (
-        !sessionSnap.exists ||
-        session.userId !== userId ||
-        session.verified !== true ||
-        eventId !== `session-${sessionId}`
-      ) {
-        logger.warn("Rejected progress event with invalid session", {
-          userId,
-          eventId,
-          sessionId,
-          sessionExists: sessionSnap.exists,
-          sessionUserId: session.userId,
-        });
-        transaction.set(
-          eventRef,
-          {
-            status: "rejected",
-            rejectedAt: FieldValue.serverTimestamp(),
-            processedAt: FieldValue.serverTimestamp(),
-            rejectionReason: "invalid_session",
-            processedBy: "noviq-functions",
-          },
-          { merge: true },
-        );
-        return;
-      }
-      const reward = sessionReward(session);
-      // Canonical event IDs and server-issued sessions deduplicate each reward.
-      // Firestore triggers can arrive out of order, so never reject older valid
-      // sessions just because a later session was processed first.
-      if (!reward || dailySeconds + reward.duration > 28800) {
-        transaction.set(
-          eventRef,
-          {
-            status: "rejected",
-            processedAt: FieldValue.serverTimestamp(),
-            rejectionReason: "invalid_session_or_daily_cap",
-          },
-          { merge: true },
-        );
-        return;
-      }
-      rawXp = reward.xp;
-      totalStudySecondsDelta = reward.duration;
-      claimedSessionEnd = new Date(reward.ended);
-      activeAt = new Date();
-      shouldUpdateLastStudySession = true;
-    } else if (eventData.type === "xp_award") {
-      // Arbitrary client raw XP and award names are never trusted.
-      // A flashcard review can earn one bounded daily reward when a deck exists.
-      if (eventData.activity === "flashcard_review") {
-        const decks = await transaction.get(
-          userRef.collection("decks").limit(1),
-        );
-        if (!decks.empty) rawXp = 15;
-      }
-    }
-
-    const xpAwarded = { ...(user.xpAwarded || {}) };
-    let awardXp = 0;
-    activeAt = new Date();
-    const nextDailySeconds = dailySeconds + totalStudySecondsDelta;
-    const serverAwards = [`daily-login:${today}`];
-    const serverStreak = getNextStreak(
-      Number(trustedProgress.streak) || 0,
-      trustedProgress.lastActive,
-      activeAt,
-    );
-    if (serverStreak === 7) serverAwards.push(`streak-7:${today}`);
-    if (serverStreak === 30) serverAwards.push(`streak-30:${today}`);
-    if (nextDailySeconds >= clamp(user.dailyTargetMinutes || 30, 1, 480) * 60)
-      serverAwards.push(`daily-goal:${today}`);
-    if (eventData.activity === "flashcard_review") {
-      const reviewKey = `flashcard-review:${today}`;
-      if (xpAwarded[reviewKey]) rawXp = 0;
-      else if (rawXp > 0) xpAwarded[reviewKey] = true;
-    }
-    for (const key of serverAwards) {
-      if (xpAwarded[key]) continue;
-      const value = xpForAwardKey(key);
-      if (value <= 0) continue;
-      xpAwarded[key] = true;
-      awardXp += value;
-    }
-
-    const xpDelta = rawXp + awardXp;
-    const currentXp = Math.max(0, Number(trustedProgress.xp ?? user.xp) || 0);
-    const nextXp = currentXp + xpDelta;
-    const levelInfo = calculateLevelInfo(nextXp);
-    const currentTotalStudySeconds = Math.max(
-      0,
-      Number(trustedProgress.totalStudySeconds ?? user.totalStudySeconds) || 0,
-    );
-    const currentStreak = Number(trustedProgress.streak ?? user.streak) || 0;
-    const currentLastActive = trustedProgress.lastActive ?? user.lastActive;
-    const lastActive = toDate(currentLastActive);
-    const nextLastActive =
-      !lastActive || activeAt.getTime() >= lastActive.getTime()
-        ? activeAt
-        : lastActive || activeAt;
-    const nextStreak =
-      !lastActive || activeAt.getTime() >= lastActive.getTime()
-        ? getNextStreak(currentStreak, currentLastActive, activeAt)
-        : currentStreak;
-    const existingSessionEnd = toDate(
-      trustedProgress.lastStudySessionAt ?? user.lastStudySessionAt,
-    );
-    const nextLastStudySessionAt = shouldUpdateLastStudySession
-      ? new Date(
-          Math.max(
-            claimedSessionEnd.getTime(),
-            existingSessionEnd?.getTime() || 0,
-          ),
-        )
-      : toDate(trustedProgress.lastStudySessionAt ?? user.lastStudySessionAt);
-    const trustedPatch = {
-      xp: nextXp,
-      level: levelInfo.level,
-      levelName: levelInfo.name,
-      streak: nextStreak,
-      totalStudySeconds: currentTotalStudySeconds + totalStudySecondsDelta,
-      dayKey: today,
-      dailyStudySeconds: nextDailySeconds,
-      lastActive: Timestamp.fromDate(nextLastActive),
-      lastStudySessionAt: nextLastStudySessionAt
-        ? Timestamp.fromDate(nextLastStudySessionAt)
-        : null,
-      updatedAt: FieldValue.serverTimestamp(),
-    };
-    const userProgressMirror = {
-      xp: trustedPatch.xp,
-      level: trustedPatch.level,
-      levelName: trustedPatch.levelName,
-      xpAwarded,
-      streak: trustedPatch.streak,
-      totalStudySeconds: trustedPatch.totalStudySeconds,
-      lastActive: nextLastActive.toISOString(),
-      lastStudySessionAt: nextLastStudySessionAt
-        ? nextLastStudySessionAt.toISOString()
-        : null,
-      updatedAt: FieldValue.serverTimestamp(),
-    };
-
-    transaction.set(trustedProgressRef, trustedPatch, { merge: true });
-    transaction.set(userRef, userProgressMirror, { merge: true });
-    transaction.set(
-      eventRef,
-      {
-        status: "processed",
-        processedAt: FieldValue.serverTimestamp(),
-        processedBy: "noviq-functions",
-        xpDelta,
-        rawXpApplied: rawXp,
-        awardXpApplied: awardXp,
-        syncStatus: "synced",
-      },
-      { merge: true },
-    );
-
-    logger.info("Trusted progress updated", {
-      userId,
-      eventId,
-      eventType: eventData.type,
-      xpDelta,
-      rawXp,
-      awardXp,
-      nextXp,
-      level: levelInfo.level,
-      streak: trustedPatch.streak,
-      totalStudySeconds: trustedPatch.totalStudySeconds,
-      trustedPath: `users/${userId}/trusted/progress`,
-    });
-  });
-};
-
-exports.startStudySession = onCall(async (request) => {
-  if (!request.auth?.uid)
-    throw new HttpsError("unauthenticated", "Sign in first.");
-  const category = request.data?.category;
-  if (!["focus", "revision", "quiz"].includes(category))
-    throw new HttpsError("invalid-argument", "Invalid session category.");
-  const context = request.data?.context || "focus";
-  if (typeof context !== "string" || context.length > 200)
-    throw new HttpsError("invalid-argument", "Invalid session context.");
-  const key = createHash("sha256").update(context).digest("hex");
-  const ref = db.doc(`users/${request.auth.uid}/trusted/session-${key}`);
-  const rateRef = db.doc(`users/${request.auth.uid}/trusted/sessionRate`);
-  return db.runTransaction(async (transaction) => {
-    const [snapshot, userSnap, rateSnap] = await Promise.all([
-      transaction.get(ref),
-      transaction.get(db.doc(`users/${request.auth.uid}`)),
-      transaction.get(rateRef),
-    ]);
-    if (!userSnap.exists)
-      throw new HttpsError("failed-precondition", "Create your profile first.");
-    const prior = snapshot.data() || {};
-    const rate = rateSnap.data() || {};
-    const count = rate.dayKey === dayKey() ? Number(rate.count) || 0 : 0;
-    if (
-      !request.data?.restart &&
-      prior.id &&
-      !prior.completed &&
-      prior.category === category &&
-      Date.now() - (toDate(prior.startedAt)?.getTime() || 0) < 8 * 3600000
-    )
-      return { sessionId: prior.id, resumed: true };
-    if (count >= 100)
-      throw new HttpsError(
-        "resource-exhausted",
-        "Daily session limit reached. Try again tomorrow.",
-      );
-    const id = randomBytes(16).toString("hex");
-    const proof = {
-      id,
-      category,
-      startedAt: Timestamp.now(),
-      completed: false,
-      contextKey: key,
-    };
-    transaction.set(ref, proof);
-    transaction.create(
-      db.doc(`users/${request.auth.uid}/trusted/start-${id}`),
-      proof,
-    );
-    transaction.set(rateRef, { dayKey: dayKey(), count: count + 1 });
-    return { sessionId: id, resumed: false };
-  });
-});
-
-exports.completeStudySession = onCall(async (request) => {
-  if (!request.auth?.uid)
-    throw new HttpsError("unauthenticated", "Sign in first.");
-  const { sessionId, duration, subject } = request.data || {};
-  if (
-    !/^[a-f0-9]{32}$/.test(sessionId) ||
-    !Number.isFinite(duration) ||
-    duration < 60 ||
-    duration > 28800 ||
-    typeof subject !== "string" ||
-    subject.length > 200
-  )
-    throw new HttpsError("invalid-argument", "Invalid study session.");
-  const userRef = db.doc(`users/${request.auth.uid}`);
-  let activeRef = userRef.collection("trusted").doc(`start-${sessionId}`);
-  const sessionRef = userRef.collection("studySessions").doc(sessionId);
-  await db.runTransaction(async (transaction) => {
-    let [activeSnap, sessionSnap] = await Promise.all([
-      transaction.get(activeRef),
-      transaction.get(sessionRef),
-    ]);
-    if (sessionSnap.exists) return;
-    if (!activeSnap.exists) {
-      activeRef = userRef.collection("trusted").doc("activeSession");
-      activeSnap = await transaction.get(activeRef);
-    }
-    const pointerRef = activeSnap.data()?.contextKey
-      ? userRef
-          .collection("trusted")
-          .doc(`session-${activeSnap.data().contextKey}`)
-      : null;
-    const pointerSnap = pointerRef ? await transaction.get(pointerRef) : null;
-    const clockRef = userRef.collection("trusted").doc("sessionClock");
-    const clockSnap = await transaction.get(clockRef);
-    const clock = clockSnap.data() || {};
-    const active = activeSnap.data() || {};
-    const started = toDate(active.startedAt)?.getTime();
-    const now = Date.now();
-    if (
-      active.id !== sessionId ||
-      active.completed ||
-      !started ||
-      now - started > 8 * 3600000
-    ) {
-      throw new HttpsError(
-        "failed-precondition",
-        "Start a new study session first.",
-      );
-    }
-    const clockStart =
-      clock.dayKey === dayKey()
-        ? Math.min(started, Number(clock.startedAt) || started)
-        : started;
-    const credited =
-      clock.dayKey === dayKey() ? Number(clock.creditedSeconds) || 0 : 0;
-    const seconds = Math.min(
-      Math.floor(duration),
-      Math.floor((now - started) / 1000),
-      Math.max(0, Math.floor((now - clockStart) / 1000) - credited),
-    );
-    if (seconds < 60)
-      throw new HttpsError(
-        "failed-precondition",
-        seconds < 60 && now - started >= 60000
-          ? "Another timer has already recorded this time. Continue studying for at least one more minute."
-          : "Study for at least one minute before completing.",
-      );
-    const session = {
-      userId: request.auth.uid,
-      duration: seconds,
-      subject,
-      category: active.category,
-      timestamp: new Date(now).toISOString(),
-      createdAt: FieldValue.serverTimestamp(),
-      syncStatus: "synced",
-      verified: true,
-    };
-    session.xpEarned = sessionReward(session, now).xp;
-    transaction.set(clockRef, {
-      dayKey: dayKey(),
-      startedAt: clockStart,
-      creditedSeconds: credited + seconds,
-    });
-    transaction.create(sessionRef, session);
-    transaction.update(activeRef, { completed: true });
-    if (pointerRef && pointerSnap.data()?.id === sessionId)
-      transaction.update(pointerRef, { completed: true });
-  });
-  return { sessionId };
-});
+const processProgressEvent = progression.processLegacyEvent;
+Object.assign(exports, progression.api);
 
 exports.onStudySessionCreated = onDocumentCreated(
   {
@@ -1004,21 +599,33 @@ exports.onAnalyticsEventCreated = onDocumentCreated(
 exports.createSubscriptionCheckout = onCall(async (request) => {
   if (!request.auth?.uid)
     throw new HttpsError("unauthenticated", "Sign in first.");
-  const { billingCycle, provider } = request.data || {};
+  const { billingCycle, provider, promoCode } = request.data || {};
   if (
     !Object.hasOwn(PRICES, billingCycle) ||
     !["click", "payme", "card"].includes(provider)
   ) {
     throw new HttpsError("invalid-argument", "Invalid billing options.");
   }
+  if(promoCode) {
+    await promos.throttle(request.auth.uid);
+    const r=promos.refs(request.auth.uid,promos.codeOf(promoCode));
+    const u=await r.usage.get();
+    if(u.data()?.status==='pending') {
+      const previous=await db.doc(`users/${request.auth.uid}/subscriptionCheckouts/${u.data().checkoutId}`).get();
+      const saved=previous.data();
+      if(saved?.checkoutUrl && saved.billingCycle===billingCycle && saved.provider===provider)
+        return {checkoutId:u.data().checkoutId,checkoutUrl:saved.checkoutUrl};
+      throw new HttpsError('failed-precondition','pending',{reason:'pending'});
+    }
+  }
   const endpoint = process.env.PAYMENT_CHECKOUT_URL;
   const secret = process.env.PAYMENT_CHECKOUT_SECRET;
-  if (!endpoint || !secret)
+  if ((!endpoint || !secret) && !promoCode)
     throw new HttpsError(
       "failed-precondition",
       "Online payments are not configured yet. Please contact support.",
     );
-  if (new URL(endpoint).protocol !== "https:")
+  if (endpoint && new URL(endpoint).protocol !== "https:")
     throw new HttpsError(
       "failed-precondition",
       "Invalid payment configuration.",
@@ -1048,9 +655,21 @@ exports.createSubscriptionCheckout = onCall(async (request) => {
         "resource-exhausted",
         "Please wait before trying another payment.",
       );
+    if (promoCode) {
+      const pricing = await promos.read(transaction,request.auth.uid,promos.codeOf(promoCode),billingCycle);
+      Object.assign(checkout,{baseAmount:pricing.baseAmount,discountAmount:pricing.discountAmount,amount:pricing.amount,promo:pricing.promo});
+      if (checkout.amount > 0 && (!endpoint || !secret)) throw new HttpsError('failed-precondition','Online payments are not configured.');
+      transaction.set(pricing.refs.usage,{status:checkout.amount===0?'used':'pending',checkoutId:checkoutRef.id,createdAt:new Date().toISOString()});
+      if(checkout.amount===0) {
+        checkout.status='verified'; checkout.verificationStatus='promo';checkout.verifiedAt=FieldValue.serverTimestamp();
+        transaction.set(pricing.refs.promo,{usedCount:FieldValue.increment(1)},{merge:true});
+        transaction.set(userRef,{subscription:promos.subscription(userSnap.data().subscription||{},checkout,checkoutRef.id),updatedAt:FieldValue.serverTimestamp()},{merge:true});
+      }
+    }
     transaction.set(rateRef, { lastRequest: Date.now() });
     transaction.create(checkoutRef, checkout);
   });
+  if(checkout.amount===0) return {checkoutId:checkoutRef.id,activated:true,amount:0};
   try {
     const providerResponse = await fetch(endpoint, {
       method: "POST",
@@ -1070,8 +689,11 @@ exports.createSubscriptionCheckout = onCall(async (request) => {
       }),
       signal: AbortSignal.timeout(15000),
     });
-    if (!providerResponse.ok)
+    if (!providerResponse.ok) {
+      // Only an explicit rejection can safely release a promotion reservation.
+      if(checkout.promo && providerResponse.status >= 400 && providerResponse.status < 500 && ![408,409,425,429].includes(providerResponse.status)) await db.runTransaction(async t=>{const r=promos.refs(request.auth.uid,checkout.promo.code).usage;const u=await t.get(r);if(u.data()?.checkoutId===checkoutRef.id && u.data()?.status==='pending')t.set(r,{status:'failed',checkoutId:checkoutRef.id});});
       throw new Error("Payment provider rejected checkout.");
+    }
     const data = await providerResponse.json();
     const url = new URL(data.checkoutUrl);
     const allowedHosts = (process.env.PAYMENT_ALLOWED_HOSTS || "")
@@ -1107,14 +729,14 @@ exports.onSubscriptionCheckoutCreated = onDocumentCreated(
     database: FIRESTORE_DATABASE,
   },
   async (event) => {
-    await event.data?.ref.set(
-      {
-        serverStatus: "received",
-        verificationStatus: "waiting_for_payment_webhook",
-        serverReceivedAt: FieldValue.serverTimestamp(),
-      },
-      { merge: true },
-    );
+    if(!event.data) return;
+    await db.runTransaction(async transaction=>{
+      const current=await transaction.get(event.data.ref);
+      if(!current.exists || current.data().status==='verified') return;
+      transaction.set(event.data.ref,{
+        serverStatus:'received',verificationStatus:'waiting_for_payment_webhook',serverReceivedAt:FieldValue.serverTimestamp()
+      },{merge:true});
+    });
   },
 );
 
@@ -1219,6 +841,7 @@ exports.paymentWebhook = onRequest(async (request, response) => {
       if (checkout.status === "verified") return;
       if (paymentSnap.exists)
         throw new HttpsError("already-exists", "Payment was already used.");
+      await promos.consume(transaction,userId,checkout,checkoutId);
       const prior = userSnap.data().subscription || {};
       const subscription = {...buildSubscription({billingCycle:checkout.billingCycle,provider:checkout.provider,checkoutId}), trialUsed:!!(prior.trialUsed || prior.trialStartedAt), ...(prior.trialStartedAt?{trialStartedAt:prior.trialStartedAt,trialEndsAt:prior.trialEndsAt}:{}), autoRenew:false};
       const paidThrough = prior.status !== 'trialing' ? Date.parse(prior.currentPeriodEnd || '') : 0;
@@ -1293,11 +916,8 @@ exports.verifySubscriptionManually = onCall(async (request) => {
     if (!validCheckout(checkout))
       throw new HttpsError("invalid-argument", "Invalid checkout.");
     if (checkout.status === "verified") return;
-    const subscription = buildSubscription({
-      billingCycle: checkout.billingCycle,
-      provider: checkout.provider,
-      checkoutId,
-    });
+    await promos.consume(transaction,userId,checkout,checkoutId);
+    const subscription = promos.subscription(userSnap.data().subscription||{},checkout,checkoutId);
     transaction.set(
       userRef,
       { subscription, updatedAt: FieldValue.serverTimestamp() },
@@ -1781,10 +1401,10 @@ exports.telegramWebhook = onRequest(async (request, response) => {
             return;
           }
 
-          // 3. Award XP (+20) and update user stats in Firestore
+          // 3. Preserve task statistics without awarding self-reported XP
           await db.doc(`users/${userDoc.id}`).set(
             {
-              xp: FieldValue.increment(20),
+              // Planner completion is self-reported; it does not award XP.
               lastActive: FieldValue.serverTimestamp(),
               lastStudySessionAt: FieldValue.serverTimestamp(),
               updatedAt: FieldValue.serverTimestamp(),
@@ -1792,8 +1412,8 @@ exports.telegramWebhook = onRequest(async (request, response) => {
             { merge: true },
           );
 
-          await answerTelegramCallback(callbackId, "Vazifa bajarildi! (+20 XP)");
-          await sendTelegramMessage(chatId, "✅ Vazifa bajarildi! (+20 XP)");
+          await answerTelegramCallback(callbackId, "Vazifa bajarildi!");
+          await sendTelegramMessage(chatId, "✅ Vazifa bajarildi!");
           response.json({ ok: true, taskCompleted: taskId });
           return;
         } else if (data === "unlink_confirm") {

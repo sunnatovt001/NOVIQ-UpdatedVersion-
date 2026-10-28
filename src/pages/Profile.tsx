@@ -1,3 +1,5 @@
+import { ProgressionPanel } from '@/src/features/progression/ProgressionPanel';
+import { setDailyGoalTarget } from '@/src/lib/verifiedProgress';
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "@/src/contexts/AuthContext";
 import {
@@ -191,11 +193,11 @@ export const Profile = () => {
     const profilePatch = {
       displayName: formData.displayName.trim(),
       currentLevel: formData.currentLevel,
-      dailyTargetMinutes: formData.dailyTargetMinutes,
       showActionButtons: formData.showActionButtons,
     };
 
     try {
+      if (formData.dailyTargetMinutes !== profile?.dailyTargetMinutes) await setDailyGoalTarget(formData.dailyTargetMinutes);
       const syncStatus = await writeDocWithQueue({ userId: user.uid, path: ["users", user.uid], kind: "update", data: profilePatch });
       updateLocalProfile(profilePatch);
       setEditing(false);
@@ -487,6 +489,7 @@ export const Profile = () => {
         </div>
       )}
 
+      <ProgressionPanel details />
       <div className="pf-grid grid gap-8 lg:grid-cols-12">
         <aside className="pf-aside space-y-6 lg:col-span-4">
           <section className="pf-identity relative overflow-hidden rounded-3xl border border-slate-200 bg-white p-6 text-center dark:border-slate-700 dark:bg-slate-900 sm:p-8">
@@ -554,8 +557,8 @@ export const Profile = () => {
             </div>
           </section>
 
-          {!cinematic&&<section className="fpf-upsell"><Crown size={24}/><h3>{locale==='uz'?'O‘sish uchun ko‘proq imkoniyat.':locale==='ru'?'Больше возможностей для роста.':'A little more room to grow.'}</h3><p>{locale==='uz'?'NOVIQ PRO bilan kengroq yordamni sinab ko‘ring.':locale==='ru'?'Откройте больше поддержки с NOVIQ PRO.':'Explore more learning support with NOVIQ PRO.'}</p><a href="#/pricing">{locale==='uz'?'Rejalarni taqqoslash':locale==='ru'?'Сравнить планы':'Compare plans'}<ArrowRight size={16}/></a></section>}
-          {cinematic && <section className="pf-membership"><span><Crown size={28}/></span><div><h3>NOVIQ PRO</h3><p>{ui.subtitle}</p><a href="#/pricing">{ui.plan}<ArrowRight size={16}/></a></div></section>}
+          {!cinematic&&<section className="fpf-upsell"><Crown size={24}/><h3>{locale==='uz'?'O‘sish uchun ko‘proq imkoniyat.':locale==='ru'?'Больше возможностей для роста.':'A little more room to grow.'}</h3><p>{locale==='uz'?'NOVIQ PRO bilan kengroq yordamni sinab ko‘ring.':locale==='ru'?'Откройте больше поддержки с NOVIQ PRO.':'Explore more learning support with NOVIQ PRO.'}</p><a href="/pricing">{locale==='uz'?'Rejalarni taqqoslash':locale==='ru'?'Сравнить планы':'Compare plans'}<ArrowRight size={16}/></a></section>}
+          {cinematic && <section className="pf-membership"><span><Crown size={28}/></span><div><h3>NOVIQ PRO</h3><p>{ui.subtitle}</p><a href="/pricing">{ui.plan}<ArrowRight size={16}/></a></div></section>}
 
           {cinematic && connectionsPanel}
         </aside>

@@ -1,0 +1,34 @@
+{
+  "version": 2,
+  "limits": { "ordinary": 180, "focus": 80, "recall": 30 },
+  "levels": [
+    { "level": 1, "minXp": 0, "name": "Novice Student" },
+    { "level": 2, "minXp": 100, "name": "Active Student" },
+    { "level": 3, "minXp": 250, "name": "Knowledge Builder" },
+    { "level": 4, "minXp": 500, "name": "Scholar" },
+    { "level": 5, "minXp": 1000, "name": "Master Scholar" },
+    { "level": 6, "minXp": 1600, "name": "Focus Expert" },
+    { "level": 7, "minXp": 2300, "name": "Study Champion" },
+    { "level": 8, "minXp": 3100, "name": "Knowledge Expert" },
+    { "level": 9, "minXp": 4000, "name": "Elite Scholar" },
+    { "level": 10, "minXp": 5000, "name": "Academic Legend" }
+  ],
+  "achievements": [
+    { "id": "A01", "name": "First Steps", "metric": "studyEvents", "target": 1, "tier": "Bronze", "xp": 20 },
+    { "id": "A02", "name": "First Focus", "metric": "longFocusSessions", "target": 1, "tier": "Bronze", "xp": 20 },
+    { "id": "A03", "name": "Focus Builder", "metric": "focusSeconds", "target": 18000, "tier": "Silver", "xp": 50 },
+    { "id": "A04", "name": "Focus Master", "metric": "focusSeconds", "target": 36000, "tier": "Gold", "xp": 100 },
+    { "id": "A05", "name": "Deep Work Elite", "metric": "focusSeconds", "target": 90000, "tier": "Platinum", "xp": 150 },
+    { "id": "A06", "name": "Marathon Learner", "metric": "focusSeconds", "target": 180000, "tier": "Platinum", "xp": 250 },
+    { "id": "A07", "name": "First Recall", "metric": "recallBlocks", "target": 1, "tier": "Bronze", "xp": 20 },
+    { "id": "A08", "name": "Recall Builder", "metric": "uniqueRecallCards", "target": 100, "tier": "Silver", "xp": 50 },
+    { "id": "A09", "name": "Memory Keeper", "metric": "uniqueRecallCards", "target": 500, "tier": "Gold", "xp": 100 },
+    { "id": "A10", "name": "Memory Legend", "metric": "uniqueRecallCards", "target": 2000, "tier": "Platinum", "xp": 200 },
+    { "id": "A11", "name": "Consistency 7", "metric": "bestStreak", "target": 7, "tier": "Silver", "xp": 50 },
+    { "id": "A12", "name": "Consistency 30", "metric": "bestStreak", "target": 30, "tier": "Gold", "xp": 150 },
+    { "id": "A13", "name": "Goal Starter", "metric": "goalDays", "target": 5, "tier": "Bronze", "xp": 30 },
+    { "id": "A14", "name": "Goal Keeper", "metric": "goalDays", "target": 20, "tier": "Silver", "xp": 75 },
+    { "id": "A15", "name": "Goal Champion", "metric": "goalDays", "target": 50, "tier": "Gold", "xp": 150 },
+    { "id": "A16", "name": "Balanced Learner", "metric": "balancedDays", "target": 10, "tier": "Gold", "xp": 80 }
+  ]
+}

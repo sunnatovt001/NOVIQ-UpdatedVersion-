@@ -1,0 +1,12 @@
+import { httpsCallable } from '@/src/lib/callable';
+import { functions } from '@/src/lib/firebase';
+export type PromoQuote = {code:string;baseAmount:number;discountAmount:number;amount:number;currency:string};
+export type PromoRecord = {code:string;type:'percent'|'fixed';value:number;cycles:string[];startsAt:string;endsAt:string;active:boolean;usedCount:number};
+export const promoCall = async <T,>(name:string,data:unknown):Promise<T> => (await httpsCallable<unknown,T>(functions,name)(data)).data;
+const messages = {
+ uz:{label:'Promokod',apply:'Qo‘llash',remove:'Olib tashlash',success:'Promokod qabul qilindi',free:'Bepul PRO olish',invalid:'Promokod noto‘g‘ri',expired:'Amal qilish muddati tugagan',not_started:'Hali faollashmagan',wrong_plan:'Bu tarifga mos emas',used:'Siz bu koddan foydalangansiz',disabled:'Promokod faolsizlantirilgan',pending:'Oldingi to‘lov hali yakunlanmagan. To‘lov havolasidan davom eting yoki yordam xizmatiga murojaat qiling.',network:'Tekshirish amalga oshmadi. Qayta urinib ko‘ring.',loading:'Tekshirilmoqda…',activated:'PRO faollashtirildi',discount:'Chegirma',total:'Jami'},
+ ru:{label:'Промокод',apply:'Применить',remove:'Убрать',success:'Промокод принят',free:'Получить PRO бесплатно',invalid:'Неверный промокод',expired:'Срок действия истёк',not_started:'Ещё не действует',wrong_plan:'Не подходит для этого тарифа',used:'Вы уже использовали этот код',disabled:'Промокод отключён',pending:'Предыдущий платёж ещё не завершён. Продолжите по платёжной ссылке или обратитесь в поддержку.',network:'Не удалось проверить. Попробуйте снова.',loading:'Проверяем…',activated:'PRO активирован',discount:'Скидка',total:'Итого'},
+ en:{label:'Promo code',apply:'Apply',remove:'Remove',success:'Promo code accepted',free:'Get PRO free',invalid:'Invalid promo code',expired:'Promo code has expired',not_started:'Not active yet',wrong_plan:'Not valid for this plan',used:'You have already used this code',disabled:'Promo code disabled',pending:'A previous payment is still pending. Continue using its payment link or contact support.',network:'Could not verify. Please try again.',loading:'Checking…',activated:'PRO activated',discount:'Discount',total:'Total'}
+};
+export const promoCopy=(locale:string)=>messages[locale as keyof typeof messages]||messages.en;
+export function promoError(error:unknown,locale:string){const c=promoCopy(locale);const reason=(error as {details?:{reason?:string}})?.details?.reason;return reason&&reason in c?c[reason as keyof typeof c]:c.network;}

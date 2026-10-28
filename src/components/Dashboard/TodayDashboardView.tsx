@@ -1,3 +1,4 @@
+import { ProgressionPanel } from '@/src/features/progression/ProgressionPanel';
 import React from "react";
 import {
   ArrowRight,
@@ -175,6 +176,7 @@ export const TodayDashboardView = ({
         </div>
       )}
 
+      <ProgressionPanel />
       <div className="ft-grid grid gap-5 xl:grid-cols-[minmax(0,1.65fr)_minmax(300px,0.75fr)]">
         <div className="space-y-5">
           <section className="today-next-card overflow-hidden rounded-[1.75rem] p-6 sm:p-8">

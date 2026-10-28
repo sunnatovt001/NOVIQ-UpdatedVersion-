@@ -1,3 +1,4 @@
+import { AdminPromos } from '@/src/features/admin/AdminPromos';
 import React, { useEffect, useMemo, useState } from "react";
 import { collection, collectionGroup, limit, onSnapshot, orderBy, query } from "firebase/firestore";
 import { httpsCallable } from "@/src/lib/callable";
@@ -1177,6 +1178,7 @@ export const Admin = ({ setActiveTab }: { setActiveTab?: (t: string) => void }) 
           </div>
         </Section>
       </div>
+      {(adminView==='overview'||adminView==='subscriptions')&&<AdminPromos/>}
       <section className="ag-health"><header><h3>System health</h3><button type="button" onClick={()=>setAdminView(adminView==='health'?'overview':'health')}>{adminView==='health'?'Back to overview':'View reports'}</button></header><ClientErrorMonitor compact={adminView!=='health'}/></section>
     </div>
   );

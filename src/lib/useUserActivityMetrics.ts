@@ -6,6 +6,7 @@ import {
   getCountFromServer,
   getAggregateFromServer,
   getDocsFromServer,
+  getDocFromServer,
   sum,
   query,
   where,
@@ -369,7 +370,7 @@ export const useUserActivityMetrics = (
       const requestDeadline = lastRefreshAt + 15000;
       try {
         if (serverMetricsEnabled) {
-          const summary=await withDeadline(getCloudMetrics(dayScope?.start.getTime(),dayScope?.end.getTime()),15000);
+          const summary=await withDeadline(getCloudMetrics(dayScope?.start.getTime(),dayScope?.end.getTime(),dayScope?.key),15000);
           roadmapDone=summary.tasksDone;
           update({...summary,tasksDone:roadmapDone+plannerDone});
           settled("statistics");
@@ -444,21 +445,14 @@ export const useUserActivityMetrics = (
             return results;
           })(),
           dayScope
-            ? withIndexFallback(
-                async () =>
-                  toNumber(
-                    (
-                      await getAggregateFromServer(sessions, {
-                        xp: sum("xpEarned"),
-                      })
-                    ).data().xp,
-                  ),
-                async () =>
-                  (await readRecords(sessions)).docs.reduce(
-                    (total, entry) => total + toNumber(entry.data().xpEarned),
-                    0,
-                  ),
-              )
+            ? getDocFromServer(doc(db, 'users', uid, 'xpDays', dayScope.key)).then(async snapshot => {
+                if (!snapshot.exists()) return withIndexFallback(
+                  async () => toNumber((await getAggregateFromServer(sessions, {xp: sum('xpEarned')})).data().xp),
+                  async () => (await readRecords(sessions)).docs.reduce((total,entry) => total + toNumber(entry.data().xpEarned),0),
+                );
+                const day = snapshot.data() || {};
+                return toNumber(day.ordinaryXp) + toNumber(day.bonusXp);
+              })
             : Promise.resolve(null),
         ]), 15000);
         roadmapDone = roadmap;
@@ -493,10 +487,10 @@ export const useUserActivityMetrics = (
         xp = toNumber(data.xp);
       update({
         ...(!dayScope ? { xp } : {}),
-        level: toNumber(data.level) || calculateLevel(xp),
+        level: calculateLevel(xp),
         streak: getCurrentStreak(
           toNumber(data.streak),
-          typeof data.lastActive === "string" ? data.lastActive : undefined,
+          toDate(data.lastActive)?.toISOString(),
         ),
       });
     };
