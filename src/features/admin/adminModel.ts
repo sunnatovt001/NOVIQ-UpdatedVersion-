@@ -87,7 +87,8 @@ export const RANGE_OPTIONS: { id: RangeKey; label: string }[] = [
   { id: "30d", label: "30 days" },
 ];
 
-export const MAX_ADMIN_DOCS = 1500;
+// Keep admin queries within the MongoDB data API's 1000-document limit.
+export const MAX_ADMIN_DOCS = 1000;
 export const ONLINE_WINDOW_MS = 5 * 60 * 1000;
 
 export const makeLoadState = (value: boolean) =>
