@@ -39,11 +39,11 @@ function harness(online = true, audit = false) {
     setTimeout: fn => { timers.set(++timerId, fn); return timerId; },
     clearTimeout: id => timers.delete(id),
     require: (name) => {
-      if (name === "firebase/firestore" || name.endsWith("/firebase")) {
+      if (name === "@/src/lib/dataStore" || name.endsWith("/firebase")) {
         backendLoads.push(name);
         if (backendError) throw backendError;
       }
-      return name === "firebase/firestore"
+      return name === "@/src/lib/dataStore"
         ? firebase
         : name === "react"
           ? { useEffect() {} }

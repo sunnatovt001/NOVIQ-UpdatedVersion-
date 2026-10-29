@@ -22,6 +22,21 @@ service cloud.firestore {
         );
     }
 
+    function isSafeDailyVisit() {
+      let today = int((request.time.toMillis() + 18000000) / 86400000);
+      let previousDay = resource.data.get("lastVisitDay", -1);
+      let previous = resource.data.get("visitStreak", 0);
+      let best = resource.data.get("bestVisitStreak", 0);
+      let expected = previousDay == today ? previous : (previousDay == today - 1 ? previous + 1 : 1);
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(["visitStreak", "bestVisitStreak", "lastVisitDay", "lastVisitAt"])
+        && request.resource.data.lastVisitDay == today
+        && request.resource.data.lastVisitAt == request.time
+        && request.resource.data.visitStreak is int
+        && request.resource.data.visitStreak == expected
+        && request.resource.data.bestVisitStreak is int
+        && request.resource.data.bestVisitStreak == (best > expected ? best : expected);
+    }
+
     function clientProfileMutableKeys() {
       return [
         "displayName",
@@ -169,7 +184,7 @@ service cloud.firestore {
     match /users/{userId} {
       allow create: if isSafeProfileCreate(userId) || isAdmin();
       allow read: if isOwner(userId) || isAdmin();
-      allow update: if (isOwner(userId) && isSafeProfileUpdate()) || isAdmin();
+      allow update: if (isOwner(userId) && (isSafeProfileUpdate() || isSafeDailyVisit())) || isAdmin();
       allow delete: if isAdmin();
     }
 

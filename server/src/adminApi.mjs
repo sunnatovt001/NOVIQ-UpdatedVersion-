@@ -17,6 +17,28 @@ export function createAdminApi(db, sessions) {
       await requireAdmin(cookieToken(request.headers.cookie));
       if (request.method !== 'GET') return send(405, { error: 'Method not allowed.' });
       const pathname = new URL(request.url, 'http://localhost').pathname;
+      if (pathname === '/api/admin/notebook-notes') {
+        const url = new URL(request.url, 'http://localhost');
+        if ([...url.searchParams.keys()].some(key => !['after','userId'].includes(key)) ||
+            url.searchParams.getAll('after').length > 1 || url.searchParams.getAll('userId').length > 1) return send(400, { error: 'Invalid query.' });
+        const userId = url.searchParams.get('userId'), after = url.searchParams.get('after');
+        if (userId !== null && (!userId || userId.length > 128)) return send(400, { error: 'Invalid user.' });
+        let cursor;
+        if (after !== null) {
+          if (!/^[A-Za-z0-9_-]{1,1024}$/.test(after)) return send(400, { error: 'Invalid cursor.' });
+          try {
+            cursor = Buffer.from(after, 'base64url').toString('utf8');
+            const parts = JSON.parse(cursor);
+            if (!Array.isArray(parts) || parts.length !== 2 || parts.some(p => typeof p !== 'string' || !p || p.length > 128) || JSON.stringify(parts) !== cursor) throw new Error();
+          } catch { return send(400, { error: 'Invalid cursor.' }); }
+        }
+        const rows = await db.collection('notebook_notes').find({ deleted: false, ...(userId !== null ? { userId } : {}), ...(cursor ? { _id: { $gt: cursor } } : {}) }, {
+          projection: { _id: 1, userId: 1, id: 1, title: 1, content: 1, tags: 1, revision: 1, createdAt: 1, updatedAt: 1 },
+        }).sort({ _id: 1 }).limit(51).maxTimeMS(5000).toArray();
+        const notes = rows.slice(0,50).map(row => ({ userId: row.userId, id: row.id, title: row.title,
+          content: row.content, tags: row.tags, revision: row.revision, createdAt: row.createdAt, updatedAt: row.updatedAt }));
+        return send(200, { notes, nextCursor: rows.length > 50 ? Buffer.from(rows[49]._id).toString('base64url') : null });
+      }
       if (pathname === '/api/admin/users') {
         const url = new URL(request.url, 'http://localhost');
         const cursor = url.searchParams.get('after');

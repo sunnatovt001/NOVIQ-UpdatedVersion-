@@ -2,7 +2,7 @@
 const loopback = (address) => ["127.0.0.1", "::1", "::ffff:127.0.0.1"].includes(address);
 const safeError = (status) => status === 401 || status === 403 ? "AI_KEY_OR_PERMISSION" : status === 429 ? "AI_QUOTA_OR_RATE_LIMIT" : status === 404 ? "AI_MODEL_UNAVAILABLE" : status === 400 ? "AI_REQUEST_REJECTED" : "AI_PROVIDER_UNAVAILABLE";
 const TUTOR_MODEL = "gemini-3.5-flash-lite";
-module.exports = function localAi({ apiKey: configuredApiKey, getApiKey, firebaseApiKey, fetchImpl = fetch, logger = console, models = ["gemini-3.5-flash", "gemini-3.1-flash-lite"] }) {
+module.exports = function localAi({ apiKey: configuredApiKey, getApiKey, remoteRpcUrl, firebaseApiKey, fetchImpl = fetch, logger = console, models = ["gemini-3.5-flash", "gemini-3.1-flash-lite"] }) {
   const usage = new Map();
   return async (req, res, next) => {
     if (req.url !== "/__local-ai") return next();
@@ -13,10 +13,44 @@ module.exports = function localAi({ apiKey: configuredApiKey, getApiKey, firebas
     // Read rotated development credentials for each request instead of retaining
     // the key that happened to exist when Vite started.
     const apiKey = getApiKey ? getApiKey() : configuredApiKey;
-    if (!apiKey) return send(503, { error: "MISSING_GEMINI_API_KEY" });
+    if (!apiKey && !remoteRpcUrl) return send(503, { error: "MISSING_GEMINI_API_KEY" });
     const token = /^Bearer (\S+)$/.exec(req.headers.authorization || "")?.[1];
     if (!token) return send(401, { error: "unauthenticated" });
     try {
+      // Without a local provider key, use the project's existing authenticated
+      // backend. It verifies Firebase identity and enforces the normal quotas;
+      // production secrets stay on that server.
+      if (!apiKey) {
+        const endpoint = new URL(remoteRpcUrl);
+        if (endpoint.protocol !== "https:" || endpoint.username || endpoint.password) return send(503, { error: "AI_BACKEND_UNAVAILABLE" });
+        let raw = "", size = 0;
+        for await (const chunk of req) { size += chunk.length; if (size > 8 * 1024 * 1024) return send(413, { error: "AI_REQUEST_REJECTED" }); raw += chunk.toString(); }
+        let input;
+        try { input = JSON.parse(raw); } catch { return send(400, { error: "AI_REQUEST_REJECTED" }); }
+        if (input.feature === 'notebook' && typeof input.config?.sourceUrl === 'string') {
+          const verified = await fetchImpl(`https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${firebaseApiKey}`, {
+            method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({idToken:token}),signal:AbortSignal.timeout(10000),
+          });
+          const account = await verified.json();
+          if (!verified.ok || !account.users?.[0]?.localId || account.users[0].disabled) return send(401,{error:'unauthenticated'});
+          try { return send(200,{text:await require('../functions/websiteSource').readWebsiteText(input.config.sourceUrl)}); }
+          catch { return send(422,{error:'SOURCE_UNAVAILABLE'}); }
+        }
+        const response = await fetchImpl(endpoint.href, {
+          method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ data: { contents: input.contents, config: input.config, feature: input.feature || "tutor", retries: input.retries, premiumMode: input.premiumMode, depth: input.depth } }),
+          redirect: "error", signal: AbortSignal.timeout(40000),
+        });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok || payload.error) {
+          const code = payload.error?.details?.reason || payload.error?.message;
+          const allowed = ["MISSING_GEMINI_API_KEY", "AI_KEY_OR_PERMISSION", "AI_QUOTA_OR_RATE_LIMIT", "AI_MODEL_UNAVAILABLE", "AI_REQUEST_REJECTED", "AI_RATE_LIMIT", "AI_DAILY_LIMIT", "AI_TIMEOUT", "AI_EMPTY_RESPONSE", "PRO_REQUIRED"];
+          return send(response.ok ? 503 : response.status, { error: allowed.includes(code) ? code : response.status === 401 ? "unauthenticated" : safeError(response.status) });
+        }
+        const text = (payload.result || payload.data)?.text;
+        if (typeof text !== "string" || !text.trim()) return send(502, { error: "AI_EMPTY_RESPONSE" });
+        return send(200, { text: text.trim() });
+      }
       const verification = await fetchImpl(`https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${firebaseApiKey}`, {
         method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ idToken: token }), signal: AbortSignal.timeout(10000),
       });
@@ -31,6 +65,10 @@ module.exports = function localAi({ apiKey: configuredApiKey, getApiKey, firebas
       for await (const chunk of req) { size += chunk.length; if (size > 8 * 1024 * 1024) return send(413, { error: "AI_REQUEST_REJECTED" }); raw += chunk.toString(); }
       let input;
       try { input = JSON.parse(raw); } catch { return send(400, { error: "AI_REQUEST_REJECTED" }); }
+      if (input.feature === 'notebook' && typeof input.config?.sourceUrl === 'string') {
+        try { return send(200,{text:await require('../functions/websiteSource').readWebsiteText(input.config.sourceUrl)}); }
+        catch { return send(422,{error:'SOURCE_UNAVAILABLE'}); }
+      }
       const contents = typeof input.contents === "string" && input.contents.trim() ? [{ role: "user", parts: [{ text: input.contents }] }] : input.contents;
       if (!Array.isArray(contents) || !contents.length || contents.some((item) => !Array.isArray(item?.parts) || !item.parts.length)) return send(400, { error: "AI_REQUEST_REJECTED" });
       const config = input.config || {};

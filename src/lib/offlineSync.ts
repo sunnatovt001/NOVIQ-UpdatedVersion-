@@ -152,7 +152,7 @@ const applyOperation = async (operation: OfflineSyncOperation) => {
     );
   }
   const [{ deleteDoc, doc, setDoc, updateDoc }, { db }] = await Promise.all([
-    import("firebase/firestore"),
+    import('@/src/lib/dataStore'),
     import("@/src/lib/firebase"),
   ]);
   const targetRef = doc(db, rootPath, ...pathSegments);

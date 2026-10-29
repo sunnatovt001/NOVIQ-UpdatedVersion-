@@ -1,7 +1,7 @@
 import { createServer } from 'vite';
 import fs from 'node:fs';
 const names=new Set(['getFirestore','doc','collection','query','where','orderBy','limit','onSnapshot','getDocs','runTransaction']);
-function walk(directory){for(const item of fs.readdirSync(directory,{withFileTypes:true})){const p=directory+'/'+item.name;if(item.isDirectory())walk(p);else if(/\.tsx?$/.test(p))for(const match of fs.readFileSync(p,'utf8').matchAll(/import\s*\{([^}]+)\}\s*from\s*["']firebase\/firestore["']/gs))for(const n of match[1].split(',')){const name=n.trim().split(/\s+as\s+/)[0];if(name && !name.startsWith('type '))names.add(name);}}}walk('src');
+function walk(directory){for(const item of fs.readdirSync(directory,{withFileTypes:true})){const p=directory+'/'+item.name;if(item.isDirectory())walk(p);else if(/\.tsx?$/.test(p))for(const match of fs.readFileSync(p,'utf8').matchAll(/import\s*\{([^}]+)\}\s*from\s*["'](?:firebase\/firestore|@\/src\/lib\/dataStore)["']/gs))for(const n of match[1].split(',')){const name=n.trim().split(/\s+as\s+/)[0];if(name && !name.startsWith('type '))names.add(name);}}}walk('src');
 const records=new Map(),counts=new Map();
 const mock=`
  const uid=()=>new URLSearchParams(location.search).get('testUid') || 'isolated-browser-user';

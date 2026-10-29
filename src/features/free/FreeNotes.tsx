@@ -14,7 +14,7 @@ import {
   X,
   Youtube,
 } from "lucide-react";
-import { type AiAttachment, askNotebook } from "@/src/lib/gemini";
+import { type AiAttachment, askNotebook, readNotebookLink } from "@/src/lib/gemini";
 import { cn } from "@/src/lib/utils";
 import { useAuth } from "@/src/contexts/AuthContext";
 import { trackUserEvent } from "@/src/lib/analytics";
@@ -24,8 +24,8 @@ import {
   onSnapshot,
   orderBy,
   query,
-} from "firebase/firestore";
-import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
+} from '@/src/lib/dataStore';
+import { getDownloadURL, ref, uploadBytes } from '@/src/lib/storageStore';
 import { db, storage } from "@/src/lib/firebase";
 import ReactMarkdown from "react-markdown";
 import { getAppErrorMessage } from "@/src/lib/errors";
@@ -108,6 +108,7 @@ export const Notes = () => {
   useDialogFocus(showSourceModal, sourceDialogRef, () => setShowSourceModal(false));
   useBodyScrollLock(showSourceModal);
   const [sourceUrl, setSourceUrl] = useState("");
+  const [sourceError, setSourceError] = useState("");
   const [youtubeUrl, setYoutubeUrl] = useState("");
   const [youtubeTranscript, setYoutubeTranscript] = useState("");
   const [activeSourceTab, setActiveSourceTab] =
@@ -497,30 +498,15 @@ export const Notes = () => {
     setIsSourceLoading(false);
   });
 
-  const fetchWebsiteText = async (url: string) => {
-    const parsedUrl = new URL(url);
-    if (!["http:", "https:"].includes(parsedUrl.protocol)) {
-      throw new Error(t("notebook.invalidUrl"));
-    }
-    const response = await fetch(parsedUrl.href, { signal: AbortSignal.timeout(15000) });
-    if (!response.ok) throw new Error(t("notebook.fetchFailed", { status: response.status }));
-    const text = await response.text();
-    return text
-      .replace(/<script[\s\S]*?<\/script>/gi, " ")
-      .replace(/<style[\s\S]*?<\/style>/gi, " ")
-      .replace(/<[^>]+>/g, " ")
-      .replace(/\s+/g, " ")
-      .trim();
-  };
-
   const handleAddUrlSource = withSingleSourceRequest(sourceRequestRef, async () => {
     if (!user || !sourceUrl.trim()) return;
     setIsSourceLoading(true);
     setStatus("");
+    setSourceError("");
 
     try {
       const normalizedUrl = sourceUrl.trim();
-      const extractedText = await fetchWebsiteText(normalizedUrl);
+      const extractedText = await readNotebookLink(normalizedUrl);
       const summary = await askNotebook(
         "Create a source-grounded mastery digest from this imported website. Include exam-relevant concepts, traps, recall, application practice, exam-style questions, and next revision action.",
         [
@@ -532,7 +518,7 @@ export const Notes = () => {
           .join("\n\n"),
         notebookLanguage,
         { retries: 2 }
-      );
+      ).catch(() => t("notebook.digestUnavailable"));
       const localSource: NotebookSource = {
         id: makeSyncId("source"),
         type: "url",
@@ -570,6 +556,7 @@ export const Notes = () => {
       setSourceUrl("");
       setShowSourceModal(false);
     } catch (error) {
+      setSourceError(t("notebook.websiteFailed"));
       setStatus(t("notebook.websiteFailed"));
     } finally {
       setIsSourceLoading(false);
@@ -577,33 +564,35 @@ export const Notes = () => {
   });
 
   const handleAddYoutubeSource = withSingleSourceRequest(sourceRequestRef, async () => {
-    if (!user || !youtubeTranscript.trim()) {
+    if (!user || (!youtubeTranscript.trim() && !youtubeUrl.trim())) {
       setStatus(t("notebook.transcriptRequired"));
       return;
     }
 
     setIsSourceLoading(true);
     setStatus("");
+    setSourceError("");
 
     try {
+      const transcript = youtubeTranscript.trim() || await readNotebookLink(youtubeUrl.trim(), true);
       const summary = await askNotebook(
         "Create a source-grounded mastery digest from this YouTube transcript. Include key concepts, exam relevance, traps, recall, application practice, exam-style questions, and next revision action.",
         [
           notebookStudentContext,
           youtubeUrl.trim() ? `YouTube source: ${youtubeUrl.trim()}. Use this transcript before general knowledge.` : "YouTube transcript source. Use this transcript before general knowledge.",
-          youtubeTranscript.slice(0, 24000),
+          transcript.slice(0, 24000),
         ]
           .filter(Boolean)
           .join("\n\n"),
         notebookLanguage,
         { retries: 2 }
-      );
+      ).catch(() => t("notebook.digestUnavailable"));
       const localSource: NotebookSource = {
         id: makeSyncId("source"),
         type: "youtube",
         title: youtubeUrl.trim() ? `YouTube: ${youtubeUrl.trim()}` : t("notebook.youtubeTranscript"),
         url: youtubeUrl.trim(),
-        extractedText: youtubeTranscript.slice(0, 50000),
+        extractedText: transcript.slice(0, 50000),
         summary,
         createdAt: new Date().toISOString(),
         syncStatus: "pending",
@@ -619,7 +608,7 @@ export const Notes = () => {
         type: "youtube",
         title: localSource.title,
         url: youtubeUrl.trim(),
-        extractedText: youtubeTranscript.slice(0, 50000),
+        extractedText: transcript.slice(0, 50000),
         summary,
         createdAt: localSource.createdAt,
           },
@@ -636,6 +625,7 @@ export const Notes = () => {
       setYoutubeTranscript("");
       setShowSourceModal(false);
     } catch (error) {
+      setSourceError(t("notebook.transcriptFailed"));
       setStatus(t("notebook.transcriptFailed"));
     } finally {
       setIsSourceLoading(false);
@@ -746,7 +736,7 @@ export const Notes = () => {
   };
   return (
     <div className="free-library flex h-full min-h-0 flex-col gap-4 overflow-hidden">
-      <header className="fl-heading"><div><h1>{locale==='uz'?'O‘quv kutubxonangiz':locale==='ru'?'Ваша учебная библиотека':'Your study library'}</h1><p>{locale==='uz'?'Qaydlar va manbalaringizni bir joyda saqlang.':locale==='ru'?'Храните заметки и источники в одном месте.':'Keep your notes and sources in one clear place.'}</p></div><div><button type="button" className="fl-primary" onClick={handleCreateNote}><Plus size={17}/>{t('notebook.createNote')}</button><button type="button" disabled={isSourceLoading} onClick={()=>sourceInputRef.current?.click()}><Upload size={17}/>{t('notebook.upload')}</button><button type="button" onClick={()=>setShowSourceModal(true)}><LinkIcon size={17}/>{t('notebook.link')}</button></div></header>
+      <header className="fl-heading"><div><h1>{locale==='uz'?'O‘quv kutubxonangiz':locale==='ru'?'Ваша учебная библиотека':'Your study library'}</h1><p>{locale==='uz'?'Qaydlar va manbalaringizni bir joyda saqlang.':locale==='ru'?'Храните заметки и источники в одном месте.':'Keep your notes and sources in one clear place.'}</p></div><div><button type="button" className="fl-primary" onClick={handleCreateNote}><Plus size={17}/>{t('notebook.createNote')}</button><button type="button" disabled={isSourceLoading} onClick={()=>sourceInputRef.current?.click()}><Upload size={17}/>{t('notebook.upload')}</button><button type="button" onClick={()=>{setSourceError("");setShowSourceModal(true)}}><LinkIcon size={17}/>{t('notebook.link')}</button></div></header>
       <div className="fl-columns grid min-h-0 flex-1 grid-cols-1 gap-3 xl:grid-cols-[230px_minmax(0,1fr)_290px]">
       <input
         ref={sourceInputRef}
@@ -778,7 +768,7 @@ export const Notes = () => {
             </button>
             <button
               type="button"
-              onClick={() => setShowSourceModal(true)}
+              onClick={() => { setSourceError(""); setShowSourceModal(true); }}
               className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-3 text-xs font-bold text-slate-300 hover:bg-white/10"
             >
               <LinkIcon size={15} />
@@ -989,6 +979,7 @@ export const Notes = () => {
       )}
 
       <NotebookSourceDialog
+        error={sourceError}
         open={showSourceModal}
         dialogRef={sourceDialogRef}
         activeTab={activeSourceTab}

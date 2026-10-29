@@ -6,20 +6,36 @@ import { createAdminApi } from './adminApi.mjs';
 import { createTelegramApi } from './telegramApi.mjs';
 import { TelegramBotService, runAutomatedNotificationCycle } from './telegramBot.mjs';
 import { createStaticFrontend } from './staticFrontend.mjs';
+import { createNotebookApi } from './notebookApi.mjs';
+import { createPlannerApi } from './plannerApi.mjs';
+import { createProfileApi } from './profileApi.mjs';
+import { createFlashcardsApi } from './flashcardsApi.mjs';
+import { createMirroredDatabase, readMirrorKey } from './firebaseMirror.mjs';
 import { fileURLToPath } from 'node:url';
 const origin = process.env.APP_ORIGIN || process.env.RENDER_EXTERNAL_URL;
 if (!origin || new URL(origin).origin !== origin) throw new Error('Explicit APP_ORIGIN required.');
 const connection = createDatabaseConnection(readDatabaseConfig());
-const db = await connection.getDatabase(), sessions = createSessionService(db);
+const rawDb = await connection.getDatabase();
+const db = process.env.NOVIQ_FIREBASE_MIRROR === 'true'
+  ? createMirroredDatabase(rawDb, { transaction: work => connection.transaction(work),
+    key: readMirrorKey(process.env.FIREBASE_MIRROR_ENCRYPTION_KEY) }) : rawDb;
+const sessions = createSessionService(db);
 await sessions.ensureIndexes();
 await db.collection('auth_login_limits').createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 await db.collection('auth_telegram_proofs').createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 await db.collection('telegram_link_tokens').createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 await db.collection('telegram_processed_updates').createIndex({ processedAt: 1 }, { expireAfterSeconds: 604800 });
 await db.collection('telegram_notifications').createIndex({ sentAt: 1 }, { expireAfterSeconds: 2592000 });
-const auth = createAuthApi(db, sessions, { origin, telegramToken: process.env.TELEGRAM_BOT_TOKEN || '', telegramBotUsername: process.env.TELEGRAM_BOT_USERNAME || '' }), admin = createAdminApi(db, sessions);
+const auth = createAuthApi(db, sessions, { origin, firebaseIdentityEnabled: process.env.NOVIQ_FIREBASE_IDENTITY === 'true', telegramToken: process.env.TELEGRAM_BOT_TOKEN || '', telegramBotUsername: process.env.TELEGRAM_BOT_USERNAME || '' }), admin = createAdminApi(db, sessions);
 const telegram = createTelegramApi(db, sessions, { origin, token: process.env.TELEGRAM_BOT_TOKEN || '', botUsername: process.env.TELEGRAM_BOT_USERNAME || 'noviqq_bot', webhookSecret: process.env.TELEGRAM_WEBHOOK_SECRET || '' });
 const frontend = createStaticFrontend(fileURLToPath(new URL('../../dist/', import.meta.url)));
+// Opt-in until the current source snapshot and frontend transport are verified.
+const notebook = process.env.NOVIQ_MONGO_NOTEBOOK_API === 'true' ? createNotebookApi(db, sessions, { origin }) : null;
+if (notebook) await db.collection('notebook_notes').createIndex({ userId: 1, deleted: 1, id: 1 });
+const planner = process.env.NOVIQ_MONGO_PLANNER_API === 'true' ? createPlannerApi(db, sessions, { origin }) : null;
+const profile = process.env.NOVIQ_MONGO_PROFILE_API === 'true' ? createProfileApi(db,sessions,{origin}) : null;
+const flashcards = process.env.NOVIQ_MONGO_FLASHCARDS_API === 'true' ? createFlashcardsApi(db,sessions,{origin}) : null;
+if(flashcards) await db.collection('flashcard_records').createIndex({userId:1,kind:1,parentId:1,deleted:1,id:1});
 
 // Periodic automated notifications (runs every 15 minutes if bot token is configured)
 let notificationInterval;
@@ -47,6 +63,10 @@ const server = http.createServer((request, response) => {
     return;
   }
   if (path.startsWith('/api/auth/')) return void auth(request, response);
+  if (notebook && path.startsWith('/api/notebook/')) return void notebook(request, response);
+  if (planner && path.startsWith('/api/planner/')) return void planner(request, response);
+  if (profile && (path === '/api/profile' || path.startsWith('/api/profile/'))) return void profile(request,response);
+  if (flashcards && path.startsWith('/api/flashcards/')) return void flashcards(request,response);
   if (path.startsWith('/api/admin/')) return void admin(request, response);
   if (path.startsWith('/api/telegram/') || path === '/api/telegram') return void telegram(request, response);
   if (path.startsWith('/api/')) { response.statusCode = 404; response.end('Not found'); return; }

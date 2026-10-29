@@ -1,0 +1,42 @@
+// Firebase Auth remains unchanged. One explicit build setting selects the data
+// authority for every supported operation; failures never switch databases.
+import * as firebase from 'firebase/firestore';
+import * as mongo from './mongoFirestore.mjs';
+export * from 'firebase/firestore';
+export const mongoDataEnabled=import.meta.env.VITE_DATA_BACKEND==='mongodb';
+function route(name:keyof typeof mongo){return mongoDataEnabled?mongo[name]:(firebase as unknown as Record<string,unknown>)[name];}
+export const getFirestore=route('getFirestore') as typeof firebase.getFirestore;
+export const doc=route('doc') as typeof firebase.doc;
+export const collection=route('collection') as typeof firebase.collection;
+export const collectionGroup=route('collectionGroup') as typeof firebase.collectionGroup;
+export const query=route('query') as typeof firebase.query;
+export const where=route('where') as typeof firebase.where;
+export const or=route('or') as typeof firebase.or;
+export const and=route('and') as typeof firebase.and;
+export const orderBy=route('orderBy') as typeof firebase.orderBy;
+export const limit=route('limit') as typeof firebase.limit;
+export const startAfter=route('startAfter') as typeof firebase.startAfter;
+export const documentId=route('documentId') as typeof firebase.documentId;
+export const onSnapshot=route('onSnapshot') as typeof firebase.onSnapshot;
+export const getDoc=route('getDoc') as typeof firebase.getDoc;
+export const getDocFromServer=route('getDocFromServer') as typeof firebase.getDocFromServer;
+export const getDocFromCache=route('getDocFromCache') as typeof firebase.getDocFromCache;
+export const getDocs=route('getDocs') as typeof firebase.getDocs;
+export const getDocsFromServer=route('getDocsFromServer') as typeof firebase.getDocsFromServer;
+export const getDocsFromCache=route('getDocsFromCache') as typeof firebase.getDocsFromCache;
+export const getCountFromServer=route('getCountFromServer') as typeof firebase.getCountFromServer;
+export const getAggregateFromServer=route('getAggregateFromServer') as typeof firebase.getAggregateFromServer;
+export const sum=route('sum') as typeof firebase.sum;
+export const count=route('count') as typeof firebase.count;
+export const setDoc=route('setDoc') as typeof firebase.setDoc;
+export const updateDoc=route('updateDoc') as typeof firebase.updateDoc;
+export const addDoc=route('addDoc') as typeof firebase.addDoc;
+export const deleteDoc=route('deleteDoc') as typeof firebase.deleteDoc;
+export const runTransaction=route('runTransaction') as typeof firebase.runTransaction;
+export const writeBatch=route('writeBatch') as typeof firebase.writeBatch;
+export const serverTimestamp=route('serverTimestamp') as typeof firebase.serverTimestamp;
+export const increment=route('increment') as typeof firebase.increment;
+export const deleteField=route('deleteField') as typeof firebase.deleteField;
+export const arrayUnion=route('arrayUnion') as typeof firebase.arrayUnion;
+export const arrayRemove=route('arrayRemove') as typeof firebase.arrayRemove;
+export const Timestamp=(mongoDataEnabled?mongo.Timestamp:firebase.Timestamp) as typeof firebase.Timestamp;

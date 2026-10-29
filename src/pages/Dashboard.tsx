@@ -6,7 +6,7 @@ import { TaskStarterModal } from "@/src/components/TaskStarterModal";
 import { TodayDashboardView } from "@/src/components/Dashboard/TodayDashboardView";
 import { motion, AnimatePresence } from "motion/react";
 import { CheckCircle2 } from "lucide-react";
-import { collection, doc, query, orderBy, limit, onSnapshot } from "firebase/firestore";
+import { collection, doc, query, orderBy, limit, onSnapshot } from '@/src/lib/dataStore';
 import { db } from "@/src/lib/firebase";
 import { useBodyScrollLock } from "@/src/lib/useBodyScrollLock";
 import { writeDocWithQueue, type SyncStatus } from "@/src/lib/offlineSync";
@@ -500,4 +500,4 @@ const FreeDashboard = ({ setActiveTab }: { setActiveTab: (tab: string) => void }
 };
 
 const IntelligenceDashboard=React.lazy(()=>import('@/src/features/pro/ProHub').then(m=>({default:m.ProHub})));
-export const Dashboard=(props:{setActiveTab:(tab:string)=>void})=>{const {access}=useMembership();return access.entitled?<React.Suspense fallback={<div role="status">NOVIQ PRO…</div>}><IntelligenceDashboard/></React.Suspense>:<FreeDashboard {...props}/>;};
+export const Dashboard=(props:{setActiveTab:(tab:string)=>void})=>{const {cinematic}=useMembership();return cinematic?<React.Suspense fallback={<div role="status">NOVIQ PRO…</div>}><IntelligenceDashboard/></React.Suspense>:<FreeDashboard {...props}/>;};

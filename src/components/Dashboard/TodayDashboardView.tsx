@@ -1,4 +1,4 @@
-import { ProgressionPanel } from '@/src/features/progression/ProgressionPanel';
+import { SyncNotice } from "@/src/features/progression/SyncNotice";
 import React from "react";
 import {
   ArrowRight,
@@ -153,30 +153,8 @@ export const TodayDashboardView = ({
         </button>
       </form>
 
-      {(statsUnavailable || tasksError || recentUnavailable) && (
-        <div className="grid gap-2" aria-label={t("today.recoveryActions")}>
-          {statsUnavailable && (
-            <div role="alert" className="today-alert">
-              <span>{t("today.statsUnavailable")}</span>
-              <button type="button" onClick={onRetryStatistics}>{t("today.retryStats")}</button>
-            </div>
-          )}
-          {tasksError && (
-            <div role="alert" className="today-alert">
-              <span>{tasksError}</span>
-              <button type="button" onClick={onRetryTasks}>{t("today.retryMission")}</button>
-            </div>
-          )}
-          {recentUnavailable && (
-            <div role="alert" className="today-alert">
-              <span>{t("today.recentUnavailable")}</span>
-              <button type="button" onClick={onRetryRecent}>{t("today.retryRecent")}</button>
-            </div>
-          )}
-        </div>
-      )}
+      {(statsUnavailable || tasksError || recentUnavailable) && <SyncNotice message={[statsUnavailable?t("today.statsUnavailable"):"",tasksError||"",recentUnavailable?t("today.recentUnavailable"):""].filter(Boolean).join(' ')} onRefresh={()=>{if(statsUnavailable)onRetryStatistics();if(tasksError)onRetryTasks();if(recentUnavailable)onRetryRecent();}}/>}
 
-      <ProgressionPanel />
       <div className="ft-grid grid gap-5 xl:grid-cols-[minmax(0,1.65fr)_minmax(300px,0.75fr)]">
         <div className="space-y-5">
           <section className="today-next-card overflow-hidden rounded-[1.75rem] p-6 sm:p-8">

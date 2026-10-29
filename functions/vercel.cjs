@@ -20,7 +20,7 @@ function createLoader(env = process.env, firebaseAdmin = admin, requireHandlers 
   }
   if (account.project_id !== firebaseConfig.projectId) throw configurationError('FIREBASE_PROJECT_MISMATCH');
   if (env.FIRESTORE_DATABASE && env.FIRESTORE_DATABASE !== firebaseConfig.firestoreDatabaseId) throw configurationError('FIRESTORE_DATABASE_MISMATCH');
-  if (!firebaseAdmin.apps.length) {
+  if (!firebaseAdmin.apps.some(app => app?.name === '[DEFAULT]') && !firebaseAdmin.apps.some(app => app?.name === undefined)) {
     let credential;
     try { credential = firebaseAdmin.credential.cert(account); } catch { throw configurationError('FIREBASE_PRIVATE_KEY_INVALID'); }
     firebaseAdmin.initializeApp({ credential, projectId: account.project_id });

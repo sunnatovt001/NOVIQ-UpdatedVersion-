@@ -1,5 +1,5 @@
 import {useEffect,useState} from 'react';
-import {collection,onSnapshot,orderBy,query,limit} from 'firebase/firestore';
+import {collection,onSnapshot,orderBy,query,limit} from '@/src/lib/dataStore';
 import {db} from '@/src/lib/firebase';
 import {recordDate} from '@/src/lib/recordDate';
 import {loadLocalDataStrict} from '@/src/lib/localStore';
@@ -28,7 +28,7 @@ export function useStudyEvidence(uid?:string,count=300){
     setState({uid,records:[],ready:false,error:false,deviceSeconds:0});
     const deadline=window.setTimeout(()=>{if(!ready){ready=true;failed=true;publish();}},15000);
     const stop=onSnapshot(query(collection(db,'users',uid,'studySessions'),orderBy('timestamp','desc'),limit(count)),{includeMetadataChanges:true},snapshot=>{
-      cloud=snapshot.docs.map(doc=>({...doc.data(),id:doc.id,userId:doc.data().userId||uid} as StudyEvidence));ready=!snapshot.metadata?.fromCache;failed=false;publish();
+      cloud=snapshot.docs.map(doc=>({...doc.data(),id:doc.id,userId:doc.data().userId||uid,origin:doc.metadata?.hasPendingWrites?'device':'server'} as StudyEvidence));ready=!snapshot.metadata?.fromCache;failed=false;publish();
     },()=>{ready=true;failed=true;publish();});
     const update=()=>publish();window.addEventListener('noviq:focus-history',update);window.addEventListener('storage',update);
     return()=>{active=false;window.clearTimeout(deadline);stop();window.removeEventListener('noviq:focus-history',update);window.removeEventListener('storage',update);};

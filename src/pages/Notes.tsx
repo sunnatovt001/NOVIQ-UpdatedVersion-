@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import "@/src/features/notebook/notebook-liquid.css";
 import {
   Book,
   FileText,
@@ -14,7 +15,7 @@ import {
   X,
   Youtube,
 } from "lucide-react";
-import { type AiAttachment, askNotebook } from "@/src/lib/gemini";
+import { type AiAttachment, askNotebook, readNotebookLink } from "@/src/lib/gemini";
 import { cn } from "@/src/lib/utils";
 import { useAuth } from "@/src/contexts/AuthContext";
 import { trackUserEvent } from "@/src/lib/analytics";
@@ -24,8 +25,8 @@ import {
   onSnapshot,
   orderBy,
   query,
-} from "firebase/firestore";
-import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
+} from '@/src/lib/dataStore';
+import { getDownloadURL, ref, uploadBytes } from '@/src/lib/storageStore';
 import { db, storage } from "@/src/lib/firebase";
 import ReactMarkdown from "react-markdown";
 import { getAppErrorMessage } from "@/src/lib/errors";
@@ -111,6 +112,7 @@ export const Notes = () => {
   useDialogFocus(showSourceModal, sourceDialogRef, () => setShowSourceModal(false));
   useBodyScrollLock(showSourceModal);
   const [sourceUrl, setSourceUrl] = useState("");
+  const [sourceError, setSourceError] = useState("");
   const [youtubeUrl, setYoutubeUrl] = useState("");
   const [youtubeTranscript, setYoutubeTranscript] = useState("");
   const [activeSourceTab, setActiveSourceTab] =
@@ -511,30 +513,15 @@ export const Notes = () => {
     setIsSourceLoading(false);
   });
 
-  const fetchWebsiteText = async (url: string) => {
-    const parsedUrl = new URL(url);
-    if (!["http:", "https:"].includes(parsedUrl.protocol)) {
-      throw new Error(t("notebook.invalidUrl"));
-    }
-    const response = await fetch(parsedUrl.href, { signal: AbortSignal.timeout(15000) });
-    if (!response.ok) throw new Error(t("notebook.fetchFailed", { status: response.status }));
-    const text = await response.text();
-    return text
-      .replace(/<script[\s\S]*?<\/script>/gi, " ")
-      .replace(/<style[\s\S]*?<\/style>/gi, " ")
-      .replace(/<[^>]+>/g, " ")
-      .replace(/\s+/g, " ")
-      .trim();
-  };
-
   const handleAddUrlSource = withSingleSourceRequest(sourceRequestRef, async () => {
     if (!user || !sourceUrl.trim()) return;
     setIsSourceLoading(true);
     setStatus("");
+    setSourceError("");
 
     try {
       const normalizedUrl = sourceUrl.trim();
-      const extractedText = await fetchWebsiteText(normalizedUrl);
+      const extractedText = await readNotebookLink(normalizedUrl);
       const summary = await askNotebook(
         "Create a source-grounded mastery digest from this imported website. Include exam-relevant concepts, traps, recall, application practice, exam-style questions, and next revision action.",
         [
@@ -546,7 +533,7 @@ export const Notes = () => {
           .join("\n\n"),
         notebookLanguage,
         { retries: 2 }
-      );
+      ).catch(() => t("notebook.digestUnavailable"));
       const localSource: NotebookSource = {
         id: makeSyncId("source"),
         type: "url",
@@ -584,6 +571,7 @@ export const Notes = () => {
       setSourceUrl("");
       setShowSourceModal(false);
     } catch (error) {
+      setSourceError(t("notebook.websiteFailed"));
       setStatus(t("notebook.websiteFailed"));
     } finally {
       setIsSourceLoading(false);
@@ -591,33 +579,35 @@ export const Notes = () => {
   });
 
   const handleAddYoutubeSource = withSingleSourceRequest(sourceRequestRef, async () => {
-    if (!user || !youtubeTranscript.trim()) {
+    if (!user || (!youtubeTranscript.trim() && !youtubeUrl.trim())) {
       setStatus(t("notebook.transcriptRequired"));
       return;
     }
 
     setIsSourceLoading(true);
     setStatus("");
+    setSourceError("");
 
     try {
+      const transcript = youtubeTranscript.trim() || await readNotebookLink(youtubeUrl.trim(), true);
       const summary = await askNotebook(
         "Create a source-grounded mastery digest from this YouTube transcript. Include key concepts, exam relevance, traps, recall, application practice, exam-style questions, and next revision action.",
         [
           notebookStudentContext,
           youtubeUrl.trim() ? `YouTube source: ${youtubeUrl.trim()}. Use this transcript before general knowledge.` : "YouTube transcript source. Use this transcript before general knowledge.",
-          youtubeTranscript.slice(0, 24000),
+          transcript.slice(0, 24000),
         ]
           .filter(Boolean)
           .join("\n\n"),
         notebookLanguage,
         { retries: 2 }
-      );
+      ).catch(() => t("notebook.digestUnavailable"));
       const localSource: NotebookSource = {
         id: makeSyncId("source"),
         type: "youtube",
         title: youtubeUrl.trim() ? `YouTube: ${youtubeUrl.trim()}` : t("notebook.youtubeTranscript"),
         url: youtubeUrl.trim(),
-        extractedText: youtubeTranscript.slice(0, 50000),
+        extractedText: transcript.slice(0, 50000),
         summary,
         createdAt: new Date().toISOString(),
         syncStatus: "pending",
@@ -633,7 +623,7 @@ export const Notes = () => {
         type: "youtube",
         title: localSource.title,
         url: youtubeUrl.trim(),
-        extractedText: youtubeTranscript.slice(0, 50000),
+        extractedText: transcript.slice(0, 50000),
         summary,
         createdAt: localSource.createdAt,
           },
@@ -650,6 +640,7 @@ export const Notes = () => {
       setYoutubeTranscript("");
       setShowSourceModal(false);
     } catch (error) {
+      setSourceError(t("notebook.transcriptFailed"));
       setStatus(t("notebook.transcriptFailed"));
     } finally {
       setIsSourceLoading(false);
@@ -774,7 +765,7 @@ export const Notes = () => {
         }}
       />
 
-      <aside className={cn("glass flex h-full min-w-0 flex-col overflow-hidden border-white/10 bg-white/[0.02]", mobileView !== "notes" && mobileView !== "sources" && "hidden xl:flex")}>
+      <aside className={cn("notebook-source-rail glass flex h-full min-w-0 flex-col overflow-hidden border-white/10 bg-white/[0.02]", mobileView !== "notes" && mobileView !== "sources" && "hidden xl:flex")}>
         <header className="shrink-0 space-y-4 border-b border-white/10 p-4">
           <div>
             <h2 className="font-display text-3xl font-bold tracking-tight text-white">{t("notebook.title")}</h2>
@@ -792,7 +783,7 @@ export const Notes = () => {
             </button>
             <button
               type="button"
-              onClick={() => setShowSourceModal(true)}
+              onClick={() => { setSourceError(""); setShowSourceModal(true); }}
               className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-3 text-xs font-bold text-slate-300 hover:bg-white/10"
             >
               <LinkIcon size={15} />
@@ -818,14 +809,14 @@ export const Notes = () => {
           </div>
         </header>
 
-        <div className="CustomScrollbar flex-1 space-y-5 overflow-y-auto p-4">
+        <div className="notebook-source-list CustomScrollbar min-h-0 flex-1 space-y-5 overflow-y-auto p-4">
           <section className="space-y-2">
             <div className="flex items-center justify-between px-1">
               <h3 className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-500">{t("notebook.sources")}</h3>
               <span className="text-[10px] font-bold text-slate-500">{filteredSources.length}</span>
             </div>
             {filteredSources.map((source) => (
-              <article key={source.id} className="rounded-2xl border border-white/10 bg-white/[0.04] p-3">
+              <article key={source.id} className="notebook-source-card rounded-2xl border border-white/10 bg-white/[0.04] p-3">
                 <div className="flex items-start gap-3">
                   <div className="rounded-xl bg-blue-500/10 p-2.5 text-blue-300">
                     {source.type === "url" ? <Globe size={16} /> : source.type === "youtube" ? <Youtube size={16} /> : <FileText size={16} />}
@@ -1004,6 +995,7 @@ export const Notes = () => {
       )}
 
       <NotebookSourceDialog
+        error={sourceError}
         open={showSourceModal}
         dialogRef={sourceDialogRef}
         activeTab={activeSourceTab}

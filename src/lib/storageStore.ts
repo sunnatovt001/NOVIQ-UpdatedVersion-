@@ -1,0 +1,10 @@
+import * as firebase from 'firebase/storage';
+import * as mongo from './mongoStorage.mjs';
+export * from 'firebase/storage';
+const enabled=import.meta.env.VITE_DATA_BACKEND==='mongodb';
+export const getStorage=(enabled?mongo.getStorage:firebase.getStorage) as typeof firebase.getStorage;
+export const ref=(enabled?mongo.ref:firebase.ref) as typeof firebase.ref;
+export const uploadBytes=(enabled?mongo.uploadBytes:firebase.uploadBytes) as typeof firebase.uploadBytes;
+export const uploadBytesResumable=(enabled?mongo.uploadBytesResumable:firebase.uploadBytesResumable) as typeof firebase.uploadBytesResumable;
+export const getDownloadURL=(enabled?mongo.getDownloadURL:firebase.getDownloadURL) as typeof firebase.getDownloadURL;
+export const deleteObject=(enabled?mongo.deleteObject:firebase.deleteObject) as typeof firebase.deleteObject;

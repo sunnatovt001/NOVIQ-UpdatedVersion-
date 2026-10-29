@@ -9,7 +9,7 @@ const {
   assertFails,
   assertSucceeds,
 } = require("@firebase/rules-unit-testing");
-const { doc, setDoc, updateDoc, getDoc } = require("firebase/firestore");
+const { doc, setDoc, updateDoc, getDoc, serverTimestamp } = require("firebase/firestore");
 let environment;
 let owner;
 before(async () => {
@@ -199,7 +199,7 @@ test('Planner CAS rejects stale clients, preserves confirmed data and keeps priv
  const model=load('src/features/planner/smartPlannerModel.ts',{'./smartSchedule':{}});
  const persistence=load('src/features/planner/plannerPersistence.ts',{'./smartPlannerModel':model});
  const uid='planner-integrity';const own=environment.authenticatedContext(uid).firestore();
- const service=load('src/features/planner/plannerCloud.ts',{'firebase/firestore':fire,'@/src/lib/firebase':{db:own},'@/src/lib/auditMode':{isReadOnlyAudit:false},'@/src/lib/localStore':{},'@/src/lib/offlineSync':{},'./smartPlannerModel':model,'./plannerPersistence':persistence});
+ const service=load('src/features/planner/plannerCloud.ts',{'@/src/lib/dataStore':fire,'@/src/lib/firebase':{db:own},'@/src/lib/auditMode':{isReadOnlyAudit:false},'@/src/lib/localStore':{},'@/src/lib/offlineSync':{},'./smartPlannerModel':model,'./plannerPersistence':persistence});
  const root=doc(own,`users/${uid}/planner/smart-v2`);
  const first={...model.initialSmartPlan(uid),ready:true,completedOnboardingAt:Date.now(),revision:'first-confirmed',updatedAt:Date.now()};
  const saved=await service.commitPlannerPlan(uid,first,null,'Confirm first plan');
@@ -238,4 +238,46 @@ test('promotions and redemption records are server owned even for administrators
       await assertFails(setDoc(doc(client,path),{amount:0}));
     }
   }
+});
+
+test('daily visits count once per Tashkent day and cannot forge rewards or best streak', async () => {
+  const today = Math.floor((Date.now()+18000000)/86400000);
+  const ref = doc(owner, 'users/visit-owner');
+  const visitor = environment.authenticatedContext('visit-owner').firestore();
+  const target = doc(visitor, 'users/visit-owner');
+  await environment.withSecurityRulesDisabled(async context => {
+    await setDoc(doc(context.firestore(),'users/visit-owner'), {uid:'visit-owner',visitStreak:3,bestVisitStreak:24,lastVisitDay:today-1});
+  });
+  const patch={visitStreak:4,bestVisitStreak:24,lastVisitDay:today,lastVisitAt:serverTimestamp()};
+  await assertFails(updateDoc(ref,patch));
+  await assertFails(updateDoc(target,{...patch,bestVisitStreak:100}));
+  await assertFails(updateDoc(target,{...patch,xp:100}));
+  await assertSucceeds(updateDoc(target,patch));
+  await assertFails(updateDoc(target,{...patch,visitStreak:5}));
+  await assertSucceeds(updateDoc(target,patch));
+  await assertFails(updateDoc(target,{...patch,lastVisitDay:today-1}));
+  await assertFails(updateDoc(target,{...patch,lastVisitAt:new Date(0)}));
+});
+
+test('the real daily visit transaction survives duplicate tabs and resets after a missed day', async () => {
+  const vm = require('node:vm'), ts = require('typescript');
+  const compile = path => ts.transpileModule(fs.readFileSync(path,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS}}).outputText;
+  const math = {};
+  vm.runInNewContext(compile('src/lib/visitStreak.ts'),{exports:math,Date,Math,Number});
+  const uid='transaction-visitor', db=environment.authenticatedContext(uid).firestore();
+  const exportsObject={};
+  new Function('exports','require',compile('src/lib/recordDailyVisit.ts'))(exportsObject,name=>name==='@/src/lib/dataStore'?require('firebase/firestore'):name==='./firebase'?{db}:math);
+  const today=math.visitDay();
+  await environment.withSecurityRulesDisabled(async context=>{
+    await setDoc(doc(context.firestore(),'users/'+uid),{uid,visitStreak:3,bestVisitStreak:24,lastVisitDay:today-1});
+  });
+  await Promise.all([exportsObject.recordDailyVisit(uid),exportsObject.recordDailyVisit(uid)]);
+  let data=(await getDoc(doc(db,'users/'+uid))).data();
+  assert.equal(data.visitStreak,4);assert.equal(data.bestVisitStreak,24);
+  await environment.withSecurityRulesDisabled(async context=>{
+    await updateDoc(doc(context.firestore(),'users/'+uid),{lastVisitDay:today-2});
+  });
+  await exportsObject.recordDailyVisit(uid);
+  data=(await getDoc(doc(db,'users/'+uid))).data();
+  assert.equal(data.visitStreak,1);assert.equal(data.bestVisitStreak,24);
 });

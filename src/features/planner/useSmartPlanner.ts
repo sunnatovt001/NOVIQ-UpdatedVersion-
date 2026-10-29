@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
-import { collection, onSnapshot, query, where } from 'firebase/firestore';
+import { collection, onSnapshot, query, where } from '@/src/lib/dataStore';
 import { db } from '@/src/lib/firebase';
 import { isReadOnlyAudit } from '@/src/lib/auditMode';
 import { loadLocalDataStrict, saveLocalData } from '@/src/lib/localStore';

@@ -9,6 +9,7 @@ export type NotebookSourceTab = "url" | "youtube";
 
 type NotebookSourceDialogProps = {
   open: boolean;
+  error?: string;
   dialogRef: RefObject<HTMLDivElement | null>;
   activeTab: NotebookSourceTab;
   sourceUrl: string;
@@ -26,6 +27,7 @@ type NotebookSourceDialogProps = {
 
 export const NotebookSourceDialog = ({
   open,
+  error,
   dialogRef,
   activeTab,
   sourceUrl,
@@ -115,6 +117,7 @@ export const NotebookSourceDialog = ({
                 </button>
               </div>
 
+              {error ? <p role="alert" className="mb-4 text-sm text-red-600 dark:text-red-300">{error}</p> : null}
               {activeTab === "url" ? (
                 <div className="space-y-4">
                   <label className="block">
@@ -179,7 +182,7 @@ export const NotebookSourceDialog = ({
                   <button
                     type="button"
                     onClick={onAnalyzeTranscript}
-                    disabled={!youtubeTranscript.trim() || loading}
+                    disabled={(!youtubeTranscript.trim() && !youtubeUrl.trim()) || loading}
                     className="premium-action flex min-h-12 w-full items-center justify-center gap-2"
                   >
                     {loading ? (

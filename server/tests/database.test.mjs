@@ -5,10 +5,26 @@ import { createDatabaseConnection, readDatabaseConfig } from '../src/database.mj
 test('requires explicit server configuration and rejects placeholders', () => {
   for (const env of [{}, { MONGODB_URI: 'https://example.com', MONGODB_DATABASE: 'noviq' },
     { MONGODB_URI: 'mongodb+srv://REPLACE_USER@cluster/', MONGODB_DATABASE: 'noviq' },
+    { MONGODB_URI: 'mongodb+srv://user:<db_password>@cluster/', MONGODB_DATABASE: 'noviq' },
     { MONGODB_URI: 'mongodb://localhost', MONGODB_DATABASE: '../noviq' }]) {
     assert.throws(() => readDatabaseConfig(env));
   }
   assert.equal(readDatabaseConfig({ MONGODB_URI: 'mongodb://localhost:27017', MONGODB_DATABASE: 'noviq_staging' }).database, 'noviq_staging');
+});
+
+test('authentication errors retain only a safe category, never the credential-bearing cause', async () => {
+  class Client {
+    async connect() { throw Object.assign(new Error('bad auth secret-password mongodb+srv://private'), { code: 8000 }); }
+    async close() {}
+  }
+  const connection = createDatabaseConnection({ uri: 'mongodb://localhost', database: 'test_db' }, Client);
+  await assert.rejects(connection.getDatabase(), error => {
+    assert.equal(error.code, 'ATLAS_AUTHENTICATION_FAILED');
+    assert.equal(error.cause, undefined);
+    assert.equal(error.message.includes('secret-password'), false);
+    return true;
+  });
+  await connection.close();
 });
 
 test('concurrent callers reuse one connection and explicit database', async () => {

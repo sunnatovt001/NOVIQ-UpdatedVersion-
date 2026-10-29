@@ -1,3 +1,6 @@
+import { visitStreaks } from '@/src/lib/visitStreak';
+import { XpIndicator } from "@/src/features/progression/XpIndicator";
+import { useNotificationDismiss } from "@/src/lib/useNotificationDismiss";
 import { getProfileAvatar } from '@/src/lib/profileAvatar';
 import './free-dashboard.css';
 import './free-planner.css';
@@ -46,7 +49,7 @@ import {
   serverTimestamp,
   setDoc,
   updateDoc,
-} from "firebase/firestore";
+} from '@/src/lib/dataStore';
 import { db } from "@/src/lib/firebase";
 import { getAppErrorMessage } from "@/src/lib/errors";
 import { calculateLevelName, getLocalDayKey } from "@/src/lib/progress";
@@ -178,7 +181,7 @@ const getMomentumState = (
     };
   }
 
-  const streak = Math.max(0, Math.round(Number(profile.streak) || 0));
+  const streak = Math.max(0, Math.round(visitStreaks(profile).current));
   const milestone = nextMomentumMilestone(streak);
   const lastStudyKey = profile.lastStudySessionAt ? getLocalDayKey(profile.lastStudySessionAt) : "";
   const completedToday = lastStudyKey === getLocalDayKey();
@@ -240,6 +243,7 @@ export const Layout: React.FC<{
     catch { return false; }
   });
   const [notificationsOpen, setNotificationsOpen] = useState(false);
+  useNotificationDismiss(notificationsOpen, () => setNotificationsOpen(false));
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const pushedNotificationIdsRef = useRef<Set<string>>(new Set());
   const momentum = useMemo(
@@ -349,7 +353,7 @@ export const Layout: React.FC<{
           type: "streak",
           preference: "dailyStreakSummary",
           title: "Daily progress check",
-          body: `Current streak: ${profile.streak || 0}. Complete one focused session to keep momentum.`,
+          body: `Current streak: ${visitStreaks(profile).current}. Complete one focused session to keep momentum.`,
           read: false,
         });
       }
@@ -503,6 +507,7 @@ export const Layout: React.FC<{
           initial={{ opacity: 0, y: 10, scale: 0.98 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
           exit={{ opacity: 0, y: 10, scale: 0.98 }}
+          data-notification-panel
           className="noviq-popover-viewport absolute right-0 top-[calc(100%+0.75rem)] z-[500] flex max-h-[min(72vh,520px)] w-[min(92vw,420px)] flex-col overflow-hidden rounded-3xl border border-[#E5E7EB] bg-white text-[#111827] shadow-[0_28px_90px_rgba(17,24,39,0.22)]"
         >
           <div className="flex items-center justify-between border-b border-[#E5E7EB] p-4">
@@ -580,7 +585,7 @@ export const Layout: React.FC<{
             alt="Noviq logo"
             className="h-11 w-11 rounded-2xl border border-[#E5E7EB] object-cover"
           />
-          <h1 className="font-display text-2xl font-black tracking-tighter text-[#111827]">Noviq</h1>
+          <h1 className="hidden font-display text-2xl font-black tracking-tighter text-[#111827] sm:block">Noviq</h1><XpIndicator/>
         </div>
         <div className="flex items-center gap-2">
           <HeaderLanguagePicker/>
@@ -727,7 +732,7 @@ export const Layout: React.FC<{
       {/* Main Content */}
       <main ref={mainContent} tabIndex={-1} aria-label={[...primaryMenuItems, ...secondaryMenuItems].find(item => item.id === activeTab)?.label} className="relative flex flex-1 flex-col overflow-hidden pb-[calc(4.75rem+env(safe-area-inset-bottom))] pt-[calc(5rem+env(safe-area-inset-top))] lg:pb-0 lg:pt-0">
         <div className="app-main-surface pointer-events-none absolute inset-0 rounded-[2rem] border border-[#E5E7EB] bg-white/45" />
-        {activeTab === "dashboard" && <div className="ft-toolbar relative z-[300] hidden h-14 shrink-0 items-center justify-between px-10 lg:flex xl:px-14"><span>Workspace / Dashboard</span><div className="flex items-center gap-3"><HeaderLanguagePicker/>{renderThemeToggleButton()}<div className="relative"><button type="button" className="theme-toggle flex h-12 w-12 items-center justify-center rounded-2xl border border-[#E5E7EB] bg-white" aria-label={t('shell.notifications')} onClick={()=>setNotificationsOpen(current=>!current)}><Bell size={18}/></button>{notificationDropdown}</div></div></div>}
+        {activeTab === "dashboard" && <div className="ft-toolbar relative z-[300] hidden h-14 shrink-0 items-center justify-between px-10 lg:flex xl:px-14"><span>Workspace / Dashboard</span><div className="flex items-center gap-3"><XpIndicator/><HeaderLanguagePicker/>{renderThemeToggleButton()}<div className="relative"><button type="button" className="theme-toggle flex h-12 w-12 items-center justify-center rounded-2xl border border-[#E5E7EB] bg-white" aria-label={t('shell.notifications')} data-notification-trigger aria-expanded={notificationsOpen} onClick={()=>setNotificationsOpen(current=>!current)}><Bell size={18}/></button>{notificationDropdown}</div></div></div>}
         {activeTab !== "dashboard" && <header className={cn("relative z-[300] hidden shrink-0 items-center justify-between lg:flex", activeTab === "tutor" ? "h-20 px-5" : "h-28 px-10 xl:px-14")}>
           <div className="space-y-1">
             <h2 className="group flex items-center gap-3 text-3xl font-bold leading-none tracking-tight text-[#111827]">
@@ -739,27 +744,13 @@ export const Layout: React.FC<{
           </div>
 
           <div className="flex items-center gap-8">
-            <div className="hidden gap-8 xl:flex">
-               <div className="text-right">
-                  <p className="mb-1 text-[9px] font-black uppercase tracking-widest text-[#9CA3AF]">{levelName}</p>
-                  <p className="text-xl font-bold leading-none text-[#111827]">{(profile?.xp || 0).toLocaleString()}</p>
-               </div>
-               <div className="text-right">
-                   <p className="mb-1 text-[9px] font-black uppercase tracking-widest text-[#9CA3AF]">{t("shell.currentStreak")}</p>
-                  <div className="flex items-center gap-2 justify-end">
-                     <Flame size={16} className="text-orange-500 animate-pulse" />
-                     <p className="text-xl font-bold text-orange-500 leading-none">{profile?.streak || 0}</p>
-                  </div>
-               </div>
-            </div>
-
-            <div className="mx-2 h-10 w-px bg-[#E5E7EB]" />
-
             <div className="flex items-center gap-5 translate-y-1">
+               <XpIndicator/>
                <HeaderLanguagePicker/>
                {renderThemeToggleButton()}
                <div className="relative z-[400]">
                  <button
+                   data-notification-trigger aria-expanded={notificationsOpen}
                    onClick={() => setNotificationsOpen((current) => !current)}
                    className="relative flex h-12 w-12 items-center justify-center rounded-[1.1rem] border border-[#E5E7EB] bg-white text-[#6B7280] transition-colors hover:border-[var(--noviq-accent)] hover:bg-[var(--noviq-soft)] hover:text-[#111827]"
                     aria-label={t("shell.notifications")}

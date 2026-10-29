@@ -1,4 +1,5 @@
-import type { RefObject } from "react";
+import "./notebook-panel.css";
+import { useEffect, useRef, type RefObject } from "react";
 import {
   Book,
   Brain,
@@ -91,6 +92,11 @@ export const NotebookAiPanel = ({
   onClose,
 }: NotebookAiPanelProps) => {
   const { t } = useLocale();
+  const messagesRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const container = messagesRef.current;
+    if (container) container.scrollTop = container.scrollHeight;
+  }, [messages.length, loading]);
   const submit = () => {
     const prompt = input.trim();
     if (!prompt || loading) return;
@@ -103,7 +109,7 @@ export const NotebookAiPanel = ({
       ref={panelRef}
       aria-label={t("notebook.aiPanel")}
       className={cn(
-        "flex h-full min-w-0 flex-col overflow-hidden rounded-[1.5rem] border border-slate-200 bg-white text-slate-950 shadow-sm dark:border-white/10 dark:bg-[#111827] dark:text-white",
+        "notebook-ai-panel flex h-full min-h-0 min-w-0 flex-col overflow-hidden rounded-[1.5rem] border border-slate-200 bg-white text-slate-950 shadow-sm dark:border-white/10 dark:bg-[#111827] dark:text-white",
         !mobileOpen && "hidden xl:flex",
       )}
     >
@@ -129,7 +135,7 @@ export const NotebookAiPanel = ({
         </div>
       </header>
 
-      <div className="grid grid-cols-3 gap-2 border-b border-slate-200 p-3 dark:border-white/10">
+      <div className="notebook-ai-actions grid shrink-0 grid-cols-3 gap-2 border-b border-slate-200 p-3 dark:border-white/10">
         {QUICK_ACTIONS.map(({ labelKey, Icon, prompt }) => (
           <button
             key={labelKey}
@@ -144,7 +150,7 @@ export const NotebookAiPanel = ({
         ))}
       </div>
 
-      <div className="CustomScrollbar flex-1 space-y-4 overflow-y-auto p-3 [overscroll-behavior:contain]">
+      <div ref={messagesRef} className="notebook-ai-messages CustomScrollbar min-h-0 min-w-0 flex-1 space-y-4 overflow-x-hidden overflow-y-auto p-3 [overscroll-behavior:contain]">
         {messages.length === 0 ? (
           <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm leading-6 text-slate-600 dark:border-white/10 dark:bg-white/[0.04] dark:text-slate-400">
             {t("notebook.aiEmpty")}
@@ -181,7 +187,7 @@ export const NotebookAiPanel = ({
 
               <div
                 className={cn(
-                  "min-w-0 max-w-[82%] rounded-2xl p-3 text-sm leading-6",
+                  "min-w-0 flex-1 break-words [overflow-wrap:anywhere] rounded-2xl p-3 text-sm leading-6",
                   isUser
                     ? "bg-emerald-700 text-white"
                     : "border border-slate-200 bg-slate-50 text-slate-700 dark:border-white/10 dark:bg-white/[0.04] dark:text-slate-200",
@@ -234,7 +240,7 @@ export const NotebookAiPanel = ({
         ) : null}
       </div>
 
-      <div className="border-t border-slate-200 p-3 dark:border-white/10">
+      <div className="notebook-ai-composer shrink-0 border-t border-slate-200 p-3 dark:border-white/10">
         {error ? (
           <div
             role="alert"
@@ -269,9 +275,9 @@ export const NotebookAiPanel = ({
                 submit();
               }
             }}
-            rows={2}
+            rows={1}
             placeholder={t("notebook.aiPlaceholder")}
-            className="CustomScrollbar min-h-14 min-w-0 flex-1 resize-none rounded-2xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-950 outline-none placeholder:text-slate-400 focus:border-emerald-600 dark:border-white/10 dark:bg-white/[0.05] dark:text-white"
+            className="CustomScrollbar max-h-32 min-h-11 min-w-0 flex-1 resize-none rounded-2xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-950 outline-none placeholder:text-slate-400 focus:border-emerald-600 dark:border-white/10 dark:bg-white/[0.05] dark:text-white"
           />
           <button
             type="button"

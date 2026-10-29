@@ -21,6 +21,9 @@ export interface UserProfile {
   level: number;
   levelName?: string;
   streak: number;
+  visitStreak?: number;
+  bestVisitStreak?: number;
+  lastVisitDay?: number;
   lastActive: string;
   lastStudySessionAt?: string;
   totalStudySeconds?: number;

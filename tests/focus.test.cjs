@@ -162,6 +162,7 @@ function focusHarness({
   vm.runInNewContext(compile("src/pages/Focus.tsx"), {
     exports,
     require: (name) => {
+      if(name==='@/src/lib/visitStreak')return {visitStreaks:()=>({current:0,best:0})};
       if(name==='@/src/features/pro/FocusReflection')return {FocusReflection:()=>null};
       assert.ok(name in modules, name);
       return modules[name];

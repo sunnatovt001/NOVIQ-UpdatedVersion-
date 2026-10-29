@@ -1,6 +1,6 @@
-import { getFirestore } from "firebase/firestore";
+import { getFirestore } from '@/src/lib/dataStore';
 import { getFunctions } from "firebase/functions";
-import { getStorage } from "firebase/storage";
+import { getStorage } from '@/src/lib/storageStore';
 import { app, firebaseConfig } from "./firebaseApp";
 
 export * from "./firebaseAuth";

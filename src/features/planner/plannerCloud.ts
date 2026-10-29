@@ -1,4 +1,4 @@
-import { collection, doc, getDocs, limit, onSnapshot, orderBy, query, runTransaction } from 'firebase/firestore';
+import { collection, doc, getDocs, limit, onSnapshot, orderBy, query, runTransaction } from '@/src/lib/dataStore';
 import { db } from '@/src/lib/firebase';
 import { isReadOnlyAudit } from '@/src/lib/auditMode';
 import { loadLocalDataStrict, saveLocalData } from '@/src/lib/localStore';

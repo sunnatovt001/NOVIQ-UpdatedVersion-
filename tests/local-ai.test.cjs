@@ -102,3 +102,27 @@ test('local AI uses a newly saved key on the next request without a restart',asy
  key='rotated-key';assert.equal((await run(handler,request())).statusCode,200);
  assert.deepEqual(used,['first-key','rotated-key']);
 });
+
+test('missing local key relays to the configured authenticated backend without copying secrets', async()=>{
+ const calls=[];
+ const handler=localAi({remoteRpcUrl:'https://project.example/api/rpc?name=generateAiResponse',logger:{warn(){}},fetchImpl:async(url,options)=>{
+  calls.push({url,options});return {ok:true,status:200,json:async()=>({result:{text:'Real backend response'}})};
+ }});
+ const contents=[{role:'user',parts:[{fileData:{mimeType:'video/mp4',fileUri:'https://youtu.be/video'}},{text:'Read source'}]}];
+ const response=await run(handler,request({}, {feature:'notebook',contents,config:{tools:[{urlContext:{}}]}}));
+ assert.equal(response.statusCode,200);assert.equal(response.body.text,'Real backend response');
+ assert.equal(calls.length,1);assert.equal(calls[0].options.headers.Authorization,'Bearer test-token');
+ assert.deepEqual(JSON.parse(calls[0].options.body).data.contents,contents);
+ assert.deepEqual(JSON.parse(calls[0].options.body).data.config.tools,[{urlContext:{}}]);
+ assert.equal(calls[0].options.headers['x-goog-api-key'],undefined);
+ assert.equal(calls[0].options.redirect,'error');
+});
+
+test('remote AI preserves safe quota errors and rejects unauthenticated or insecure relays',async()=>{
+ let calls=0;
+ const handler=localAi({remoteRpcUrl:'https://project.example/api/rpc?name=generateAiResponse',logger:{warn(){}},fetchImpl:async()=>{calls++;return {ok:false,status:429,json:async()=>({error:{message:'Internal private diagnostic',details:{reason:'AI_DAILY_LIMIT'}}})}}});
+ assert.equal((await run(handler,request())).body.error,'AI_DAILY_LIMIT');
+ assert.equal((await run(handler,request({headers:{host:'localhost:3000',origin:'http://localhost:3000','content-type':'application/json'}}))).statusCode,401);
+ assert.equal(calls,1);
+ assert.equal((await run(localAi({remoteRpcUrl:'http://insecure.example',logger:{warn(){}}}),request())).body.error,'AI_BACKEND_UNAVAILABLE');
+});

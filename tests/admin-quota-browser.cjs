@@ -1,0 +1,27 @@
+const {chromium}=require('playwright'),assert=require('node:assert/strict');
+(async()=>{const browser=await chromium.launch({channel:'chrome',headless:true});try{
+ const origin='http://127.0.0.1:4184',uid='quota-admin',scope='quota-'+Date.now();
+ const page=await browser.newPage({viewport:{width:1440,height:1000}});
+ let groupReads=0;
+ page.on('request',request=>{if(request.url().endsWith('/__planner_fixture')){const data=request.postDataJSON();if(data?.action==='read'&&data.path?.startsWith('@group/'))groupReads++;}});
+ await page.request.post(origin+'/__planner_fixture',{data:{scope,uid,action:'seed',records:{[`users/${uid}`]:{uid,displayName:'Real cached admin',email:'quota@example.test',isAdmin:true,onboarded:true,settings:{},onboardingAnswers:{mainGoal:'English',userType:'student',struggle:'focus'},subscription:{plan:'pro',status:'active',currentPeriodEnd:'2099-01-01'},visitStreak:2,bestVisitStreak:7,lastVisitDay:Math.floor((Date.now()+18000000)/86400000)},[`users/${uid}/proExperience/onboarding`]:{completed:true}}}});
+ await page.goto(origin+`/?testUser=1&testAdmin=1&testUid=${uid}&fixtureScope=${scope}#/admin`);
+ await page.getByRole('row').filter({hasText:'quota@example.test'}).waitFor();
+ await page.waitForFunction(()=>Object.keys(sessionStorage).some(key=>key.startsWith('noviq:admin-users:')));
+ assert.equal(groupReads,0,'opening user management must not read 10 activity collections');
+ await page.evaluate(()=>sessionStorage.setItem('fixtureAdminQuota','1'));
+ await page.reload();
+ await page.getByText('Daily database read limit reached',{exact:true}).waitFor();
+ await page.getByRole('row').filter({hasText:'quota@example.test'}).waitFor();
+ await page.getByText(/Saved account list/).waitFor();
+ assert.equal(groupReads,0);
+ await page.getByRole('button',{name:'View details',exact:true}).click();
+ assert.equal(await page.getByText('Daily read quota exhausted.',{exact:false}).count(),1);
+ assert.equal(await page.getByText(/Free daily read units per project/).count(),0);
+ assert.equal(await page.getByRole('button',{name:'Load activity analytics'}).isDisabled(),true);
+ await page.evaluate(()=>{for(const key of Object.keys(sessionStorage))if(key.startsWith('noviq:admin-users:'))sessionStorage.removeItem(key)});
+ await page.reload();
+ await page.getByText('Account list is unavailable. This does not mean there are no users.',{exact:true}).waitFor();
+ assert.equal(await page.getByRole('row').filter({hasText:'quota@example.test'}).count(),0);
+ console.log('PASS quota preserves genuine cached accounts, labels staleness, and avoids bulk analytics reads');
+}finally{await browser.close()}})().catch(e=>{console.error(e);process.exitCode=1});

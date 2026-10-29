@@ -11,13 +11,14 @@ export function createSessionService(db, { now = () => new Date(), random = rand
       await sessions.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 });
       await sessions.createIndex({ userId: 1 });
     },
-    async create(userId, remember = false) {
+    async create(userId, remember = false, lifetimeMs) {
       if (typeof userId !== 'string' || !userId || typeof remember !== 'boolean') throw new Error('Invalid session request.');
+      if (lifetimeMs !== undefined && (!Number.isSafeInteger(lifetimeMs) || lifetimeMs < 60000 || lifetimeMs > 86400000)) throw new Error('Invalid session lifetime.');
       const account = await accounts.findOne({ _id: userId });
       if (!account || account.disabled) throw new Error('Account unavailable.');
       const token = random(32).toString('hex');
       const createdAt = now();
-      const expiresAt = new Date(createdAt.getTime() + (remember ? 30 : 1) * 86400000);
+      const expiresAt = new Date(createdAt.getTime() + (lifetimeMs ?? (remember ? 30 : 1) * 86400000));
       await sessions.insertOne({ _id: tokenHash(token), userId, createdAt, expiresAt });
       return { token, expiresAt };
     },

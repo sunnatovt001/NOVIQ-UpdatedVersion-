@@ -1,5 +1,5 @@
 import React, {useEffect,useState} from "react";
-import {collection,limit,onSnapshot,orderBy,query,where} from "firebase/firestore";
+import {collection,limit,onSnapshot,orderBy,query,where} from '@/src/lib/dataStore';
 import {db} from "@/src/lib/firebase";
 type Entry={id:string;createdAt:string;source:string;code:string;route:string};
 export const ClientErrorMonitor=({compact=false}:{compact?:boolean}={})=>{

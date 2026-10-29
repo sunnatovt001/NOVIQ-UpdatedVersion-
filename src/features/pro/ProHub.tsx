@@ -2,7 +2,7 @@ import { ReferenceOverview } from './ReferenceOverview';
 import { LiquidToday } from './LiquidToday';
 import { GlassDashboard } from './GlassDashboard';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { collection, doc, onSnapshot, orderBy, query, limit } from 'firebase/firestore';
+import { collection, doc, onSnapshot, orderBy, query, limit } from '@/src/lib/dataStore';
 import { ArrowUpRight, Compass, Download, Orbit, Play, Sparkles } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { db } from '@/src/lib/firebase';

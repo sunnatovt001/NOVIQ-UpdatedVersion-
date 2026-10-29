@@ -10,6 +10,7 @@ coverage/
 .agents/
 .codex/
 backups/
+.runtime/
 *.err
 saidaminpicture.jpg
 

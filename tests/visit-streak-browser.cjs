@@ -1,0 +1,22 @@
+const {chromium}=require('playwright'),assert=require('node:assert/strict');
+(async()=>{const browser=await chromium.launch({channel:'chrome',headless:true});try{
+ const origin='http://127.0.0.1:4184',uid='visit-streak',scope='visits-'+Date.now(),now=Date.now(),today=Math.floor((now+18000000)/86400000);
+ const context=await browser.newContext({viewport:{width:1440,height:1000},timezoneId:'Asia/Tashkent'}),page=await context.newPage();
+ const api=async(action,extra={})=>(await page.request.post(origin+'/__planner_fixture',{data:{scope,uid,action,...extra}})).json();
+ const profile={uid,displayName:'Streak Test',email:'streak@example.test',isAdmin:true,onboarded:true,settings:{},visitStreak:3,bestVisitStreak:24,lastVisitDay:today,streak:0,onboardingAnswers:{mainGoal:'English',userType:'student',struggle:'focus'},subscription:{plan:'pro',status:'active',currentPeriodEnd:new Date(now+30*86400000).toISOString()}};
+ await api('seed',{records:{[`users/${uid}`]:profile,[`users/${uid}/trusted/progress`]:{streak:2,xp:45},[`users/${uid}/proExperience/onboarding`]:{completed:true}}});
+ const base=origin+`/?testUser=1&testAdmin=1&testUid=${uid}&fixtureScope=${scope}`;
+ await page.goto(base+'#/dashboard');await page.locator('.gd-stat').nth(2).locator('strong').waitFor();
+ await page.waitForFunction(()=>document.querySelectorAll('.gd-stat strong')[2]?.textContent==='3 days');
+ await page.goto(base+'#/admin');await page.getByRole('button',{name:'Users',exact:true}).click({timeout:10000}).catch(async e=>{console.log('FAIL',page.url(),await page.locator('body').innerText());throw e});
+ const row=page.getByRole('row').filter({hasText:'streak@example.test'});await row.waitFor();
+ assert.equal(await page.getByRole('columnheader',{name:'Current streak',exact:true}).count(),1);
+ assert.equal(await page.getByRole('columnheader',{name:'Best streak',exact:true}).count(),1);
+ const cells=await row.locator('td').allTextContents();assert.ok(cells.includes('3'));assert.ok(cells.includes('24'));
+ await api('seed',{records:{[`users/${uid}`]:{...profile,lastVisitDay:today-1}}});
+ await page.waitForFunction(()=>[...document.querySelectorAll('tr')].some(row=>row.textContent.includes('streak@example.test')&&[...row.querySelectorAll('td')].some(td=>td.textContent==='0')));
+ assert.ok((await row.locator('td').allTextContents()).includes('24'));
+ await page.goto(base+'#/dashboard');await page.waitForFunction(()=>document.querySelectorAll('.gd-stat strong')[2]?.textContent==='0 days');
+ await page.screenshot({path:'artifacts/visit-streak-dashboard.png'});
+ console.log('PASS dashboard and admin share daily visit streak; no visit today shows zero current while retaining best 24');
+}finally{await browser.close()}})().catch(error=>{console.error(error);process.exitCode=1});

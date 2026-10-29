@@ -63,6 +63,7 @@ export type UserRow = {
   online: boolean;
   streak: number;
   totalStudySeconds: number;
+  bestStreak: number;
   raw: AdminUser;
 };
 

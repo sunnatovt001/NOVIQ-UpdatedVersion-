@@ -1,3 +1,4 @@
+import { visitStreaks } from '@/src/lib/visitStreak';
 import { ProgressionPanel } from '@/src/features/progression/ProgressionPanel';
 import { setDailyGoalTarget } from '@/src/lib/verifiedProgress';
 import React, { useEffect, useMemo, useRef, useState } from "react";
@@ -25,7 +26,7 @@ import {
   X,
 } from "lucide-react";
 import { cn } from "@/src/lib/utils";
-import { doc, updateDoc } from "firebase/firestore";
+import { doc, updateDoc } from '@/src/lib/dataStore';
 import { httpsCallable } from "@/src/lib/callable";
 import { db, functions } from "@/src/lib/firebase";
 import { getAuth, sendPasswordResetEmail, updateProfile } from 'firebase/auth';
@@ -489,7 +490,6 @@ export const Profile = () => {
         </div>
       )}
 
-      <ProgressionPanel details />
       <div className="pf-grid grid gap-8 lg:grid-cols-12">
         <aside className="pf-aside space-y-6 lg:col-span-4">
           <section className="pf-identity relative overflow-hidden rounded-3xl border border-slate-200 bg-white p-6 text-center dark:border-slate-700 dark:bg-slate-900 sm:p-8">
@@ -541,17 +541,13 @@ export const Profile = () => {
             </div>}
             {cinematic && <div className="pf-upload"><p>{ui.avatars}</p><button type="button" onClick={()=>fileInputRef.current?.click()}><Upload size={17}/>{ui.upload}</button><small>JPG, PNG · max 8 MB</small></div>}
 
-            <div className="pf-legacy-metrics mt-8 grid grid-cols-3 gap-3">
+            <div className="pf-legacy-metrics mt-8 grid grid-cols-2 gap-3">
               <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-800">
                 <p className="text-xl font-black text-slate-950 [font-variant-numeric:tabular-nums] dark:text-white">{profile?.level || 1}</p>
                 <p className="text-[9px] font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400">{levelName}</p>
               </div>
               <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-800">
-                <p className="text-xl font-black text-slate-950 [font-variant-numeric:tabular-nums] dark:text-white">{profile?.xp || 0}</p>
-                <p className="text-[9px] font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400">XP</p>
-              </div>
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-800">
-                <p className="text-xl font-black text-blue-700 [font-variant-numeric:tabular-nums] dark:text-blue-300">{profile?.streak || 0}</p>
+                <p className="text-xl font-black text-blue-700 [font-variant-numeric:tabular-nums] dark:text-blue-300">{visitStreaks(profile).current}</p>
                 <p className="text-[9px] font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400">{copy.streak}</p>
               </div>
             </div>
@@ -702,6 +698,8 @@ export const Profile = () => {
           {!cinematic && connectionsPanel}
         </main>
       </div>
+
+      <ProgressionPanel details />
 
       {createPortal(
         <AnimatePresence>

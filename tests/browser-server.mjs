@@ -7,7 +7,7 @@ const pages = fs.readdirSync('src/pages').filter(n => n.endsWith('.tsx')).map(n 
 const components = fs.readdirSync('src/components').filter(n => n.endsWith('.tsx')).map(n => fs.readFileSync(`src/components/${n}`, 'utf8'));
 const names = new Set(['getFirestore','runTransaction']);
 for (const code of [...files, ...pages, ...components]) {
-  for (const match of code.matchAll(/import\s*\{([^}]+)\}\s*from\s*["']firebase\/firestore["']/gs)) {
+  for (const match of code.matchAll(/import\s*\{([^}]+)\}\s*from\s*["'](?:firebase\/firestore|@\/src\/lib\/dataStore)["']/gs)) {
     for (const token of match[1].split(',')) if (token.trim() && !token.trim().startsWith('type ')) names.add(token.trim().split(/\s+as\s+/)[0]);
   }
 }

@@ -161,6 +161,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     let latestBaseProfile: UserProfile | null = null;
     let latestTrustedProgress: Partial<UserProfile> = {};
     let latestResolvedAdmin = false;
+    let latestTokenAdmin = false;
 
     let loadTimer: ReturnType<typeof setTimeout>;
     const deadline = () => {
@@ -169,7 +170,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (isDisposed) return;
         const current = auth.currentUser;
         const cached = current ? loadLocalData<UserProfile | null>(profileCacheKey(current.uid), null) : null;
-        if (cached) { latestBaseProfile = cached; latestResolvedAdmin = false; publishProfile(); }
+        if (cached) { latestBaseProfile = cached; latestResolvedAdmin = latestTokenAdmin; publishProfile(); }
         else setAuthError("timeout");
         setLoading(false);
         console.error("Auth/profile initialization timed out");
@@ -201,6 +202,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       latestBaseProfile = null;
       latestTrustedProgress = {};
       latestResolvedAdmin = false;
+      latestTokenAdmin = false;
       deadline();
       setUser(firebaseUser);
       setAuthError("");
@@ -216,10 +218,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return;
       }
 
+      // Signed Firebase claims remain authoritative when Firestore is unavailable.
+      const tokenResult = await withDeadline(firebaseUser.getIdTokenResult?.(true) || Promise.resolve(null), 8000).catch(() => null);
+      if (isDisposed || revision !== accountRevision || auth.currentUser?.uid !== firebaseUser.uid) return;
+      latestTokenAdmin = tokenResult?.claims.admin === true;
+      latestResolvedAdmin = latestTokenAdmin;
       let backend;
       try {
         backend = await withDeadline(Promise.all([
-          import("firebase/firestore"),
+          import('@/src/lib/dataStore'),
           import("@/src/lib/firebase"),
         ]), 10000);
       } catch (error) {
@@ -260,7 +267,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             if (!snapshot.metadata.fromCache && !snapshot.metadata.hasPendingWrites && (!queued || queued.status === "synced")) clearLocalProfilePatch(firebaseUser.uid);
             saveLocalData(profileCacheKey(firebaseUser.uid), profileData);
             latestBaseProfile = profileData;
-            latestResolvedAdmin = Boolean(profileData.isAdmin);
+            latestResolvedAdmin = latestTokenAdmin || Boolean(profileData.isAdmin);
             publishProfile();
 
             setLoading(false);
@@ -270,7 +277,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           const cached = loadLocalData<UserProfile | null>(profileCacheKey(firebaseUser.uid), null);
           if (cached && snapshot.metadata.fromCache && !navigator.onLine) {
             latestBaseProfile = cached;
-            latestResolvedAdmin = false;
+            latestResolvedAdmin = latestTokenAdmin;
             publishProfile();
             setLoading(false);
             return;
@@ -292,7 +299,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           });
           if (isDisposed || revision !== accountRevision || auth.currentUser?.uid !== firebaseUser.uid) return;
           latestBaseProfile = resolvedProfile;
-          latestResolvedAdmin = Boolean(resolvedProfile?.isAdmin);
+          latestResolvedAdmin = latestTokenAdmin || Boolean(resolvedProfile?.isAdmin);
           publishProfile();
           setLoading(false);
         },
@@ -302,7 +309,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           const cached = loadLocalData<UserProfile | null>(profileCacheKey(firebaseUser.uid), null);
           if (!cached || error.code === "permission-denied") setAuthError(getAccountErrorCode(error));
           latestBaseProfile = withLocalProfilePatch(cached || createInitialProfile(firebaseUser));
-          latestResolvedAdmin = false;
+          latestResolvedAdmin = latestTokenAdmin;
           publishProfile();
           setLoading(false);
         }
@@ -322,17 +329,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   useEffect(() => {
     if (!user || !profile || profile.uid !== user.uid || isReadOnlyAudit) return;
-    let disposed = false, checkedDay = '';
+    let disposed = false, checkedDay = '', visitCheckedDay = '';
     const check = () => {
       const day = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Tashkent', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
-      if (checkedDay === day || !navigator.onLine) return;
+      if (!navigator.onLine || document.hidden) return;
+      if (visitCheckedDay !== day) {
+        visitCheckedDay = day;
+        void import('@/src/lib/recordDailyVisit').then(api => api.recordDailyVisit(user.uid)).catch(() => { if (!disposed) visitCheckedDay = ''; });
+      }
+      if (checkedDay === day) return;
       checkedDay = day;
       void import('@/src/lib/verifiedProgress').then(api => api.checkInProgress()).catch(() => { if (!disposed) checkedDay = ''; });
     };
     check();
     const timer = window.setInterval(check, 60000);
     window.addEventListener('online', check);
-    return () => { disposed = true; window.clearInterval(timer); window.removeEventListener('online', check); };
+    window.addEventListener('focus', check);
+    document.addEventListener('visibilitychange', check);
+    return () => { disposed = true; window.clearInterval(timer); window.removeEventListener('online', check); window.removeEventListener('focus', check); document.removeEventListener('visibilitychange', check); };
   }, [user?.uid, profile?.uid]);
 
   const signOut = () => auth.signOut();
@@ -361,7 +375,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (isReadOnlyAudit) throw new Error('Setup cannot be saved in read-only mode.');
     if (!validOnboardingAnswers(answers)) throw new Error('Complete every setup question.');
     const uid = user.uid;
-    const { doc, runTransaction, serverTimestamp } = await import('firebase/firestore');
+    const { doc, runTransaction, serverTimestamp } = await import('@/src/lib/dataStore');
     const { db } = await import('@/src/lib/firebase');
     const ref = doc(db, 'users', uid);
     // A transaction needs the server. Offline/failed writes must never unlock

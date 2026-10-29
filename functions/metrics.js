@@ -1,5 +1,5 @@
 const { createHash } = require('node:crypto');
-const { AggregateField } = require('firebase-admin/firestore');
+const { AggregateField } = process.env.NOVIQ_DATA_BACKEND === 'mongodb' ? require('./databaseRuntime.cjs') : require('firebase-admin/firestore');
 const VERSION = 1;
 const SOURCES = {studySessions:'session',notebookNotes:'note',notebookSources:'source',notebookMessages:'notebookMessage',tutorMessages:'tutorMessage',roadmapTasks:'task',decks:'deck'};
 const dateMillis = value => {

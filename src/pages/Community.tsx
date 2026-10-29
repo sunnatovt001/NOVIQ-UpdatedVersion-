@@ -32,7 +32,7 @@ import {
   startAfter,
   type DocumentData,
   type QueryDocumentSnapshot,
-} from "firebase/firestore";
+} from '@/src/lib/dataStore';
 import { httpsCallable } from "@/src/lib/callable";
 import { sendEmailVerification } from "firebase/auth";
 import { db, functions } from "@/src/lib/firebase";

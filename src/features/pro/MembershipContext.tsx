@@ -15,7 +15,7 @@ export type Access = {
   billing?: { recurring: boolean; providersConfigured: boolean };
 };
 
-// A formatting helper only. The provider never authorizes an experience from this projection.
+// Cached plan display only; paid API requests still require server authorization.
 export function displayAccess(s: SubscriptionState | undefined, now = Date.now()): Access {
   const trial = s?.status === 'trialing', end = Date.parse((trial ? s?.trialEndsAt || s?.currentPeriodEnd : s?.currentPeriodEnd) || '');
   const entitled = s?.plan === 'pro' && ['active', 'trialing'].includes(s.status) && end > now;
@@ -78,7 +78,7 @@ export function MembershipProvider({ children }: { children: React.ReactNode }) 
         accept(value, id, key); setError(false); setFailure(null);
       }
     } catch (cause) {
-      if (latest.current.uid === id && request === sequence.current) { setSnapshot(null); setError(true); setFailure(membershipFailure(cause, navigator.onLine)); }
+      if (latest.current.uid === id && request === sequence.current) { const reason = membershipFailure(cause, navigator.onLine); if (reason !== 'unavailable' && reason !== 'offline') setSnapshot(null); setError(true); setFailure(reason); }
     }
   };
   useEffect(() => {
@@ -108,6 +108,7 @@ export function MembershipProvider({ children }: { children: React.ReactNode }) 
     : Date.parse(current?.currentPeriodEnd || '');
   const entitled = !!current?.entitled && premiumStates.has(current.state) && Number.isFinite(end) && end > tick;
   const projection = displayAccess(profile?.uid === uid ? profile?.subscription : undefined, tick);
+  const savedPremiumAppearance = !current && error && (failure === 'unavailable' || failure === 'offline') && profile?.uid === uid && projection.entitled;
   const access: Access = current
     ? { ...current, entitled, ...(current.entitled && !entitled ? { state: 'PRO_EXPIRED', quotas: config.quotas.free } : {}) }
     : { ...projection, entitled: false, state: 'VERIFYING', quotas: config.quotas.free };
@@ -127,7 +128,7 @@ export function MembershipProvider({ children }: { children: React.ReactNode }) 
   };
   return <Context.Provider value={{ access, busy, error, failure, available: !!current, refresh,
     start: () => action('startProTrial', { acceptTerms: true }), cancel: () => action('cancelProRenewal'),
-    now: tick, cinematic: entitled, setCinematic: () => {} }}>{children}</Context.Provider>;
+    now: tick, cinematic: entitled || savedPremiumAppearance, setCinematic: () => {} }}>{children}</Context.Provider>;
 }
 export const useMembership = () => {
   const value = useContext(Context);

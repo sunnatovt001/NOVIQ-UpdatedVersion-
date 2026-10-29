@@ -1,5 +1,5 @@
 import {useCallback,useEffect,useMemo,useRef,useState} from "react";
-import {collection,getDocs,limit,onSnapshot,orderBy,query,startAfter,type QueryDocumentSnapshot} from "firebase/firestore";
+import {collection,getDocs,limit,onSnapshot,orderBy,query,startAfter,type QueryDocumentSnapshot} from '@/src/lib/dataStore';
 import {db} from "./firebase";
 import {isReadOnlyAudit} from "./auditMode";
 import {loadLocalDataStrict,makeSyncId,saveLocalData} from "./localStore";

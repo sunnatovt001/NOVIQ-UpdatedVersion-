@@ -1,3 +1,4 @@
+import { visitStreaks } from './visitStreak';
 import React from "react";
 import {
   collection,
@@ -18,10 +19,10 @@ import {
   type Query,
   type DocumentSnapshot,
   type QuerySnapshot,
-} from "firebase/firestore";
+} from '@/src/lib/dataStore';
 import { withDeadline } from "./asyncRequest";
 import { db } from "@/src/lib/firebase";
-import { calculateLevel, getCurrentStreak } from "@/src/lib/progressMath";
+import { calculateLevel } from "@/src/lib/progressMath";
 import { summarizeCards, isMeaningfulSession } from "./activityEvidence";
 import { getCloudMetrics, serverMetricsEnabled } from "./cloudMetrics";
 import { reportClientError } from "./errorReporting";
@@ -488,10 +489,6 @@ export const useUserActivityMetrics = (
       update({
         ...(!dayScope ? { xp } : {}),
         level: calculateLevel(xp),
-        streak: getCurrentStreak(
-          toNumber(data.streak),
-          toDate(data.lastActive)?.toISOString(),
-        ),
       });
     };
     let trustedLoaded = false;
@@ -514,12 +511,15 @@ export const useUserActivityMetrics = (
       update({tasksDone:roadmapDone+plannerDone,missionTotal:Array.isArray(state.tasks)?state.tasks.length:0,missionCompleted:countPlannerTasksDone(data,null)});
       settled('planner');
     };
+    let visitData: Record<string, unknown> = {};
+    const refreshVisit = () => update({ streak: visitStreaks(visitData).current });
     const stop = [
       onSnapshot(
         doc(db, "users", uid),
         { includeMetadataChanges: true },
         (snap) => {
           if (snap.metadata.fromCache) return;
+          if (snap.exists()) { visitData = snap.data(); refreshVisit(); }
           if (!trustedLoaded) profile(snap);
           settled("profile");
         },
@@ -555,8 +555,8 @@ export const useUserActivityMetrics = (
         ? onSnapshot(doc(db,"users",uid,"trusted","metrics"),{includeMetadataChanges:true},readinessNext,error=>failure(error,"decks"))
         : onSnapshot(target("decks"),{includeMetadataChanges:true},readinessNext,error=>failure(error,"decks")),
     ];
-    const timer = window.setInterval(() => void refresh(), 60000);
-    const resume = () => void refresh();
+    const timer = window.setInterval(() => { refreshVisit(); void refresh(); }, 60000);
+    const resume = () => { refreshVisit(); void refresh(); };
     document.addEventListener("visibilitychange", resume);
     window.addEventListener("online", resume);
     window.addEventListener("focus", resume);

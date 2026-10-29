@@ -7,7 +7,7 @@ import { TodayDashboardView } from "@/src/components/Dashboard/TodayDashboardVie
 import './free-dashboard.css';
 import { motion, AnimatePresence } from "motion/react";
 import { CheckCircle2 } from "lucide-react";
-import { collection, doc, query, orderBy, limit, onSnapshot } from "firebase/firestore";
+import { collection, doc, query, orderBy, limit, onSnapshot } from '@/src/lib/dataStore';
 import { db } from "@/src/lib/firebase";
 import { useBodyScrollLock } from "@/src/lib/useBodyScrollLock";
 import { writeDocWithQueue, type SyncStatus } from "@/src/lib/offlineSync";

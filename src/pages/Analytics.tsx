@@ -1,4 +1,3 @@
-import { ProgressionPanel } from '@/src/features/progression/ProgressionPanel';
 import {useStudyEvidence,type StudyEvidence} from '@/src/features/pro/useStudyEvidence';
 import { useMembership } from '@/src/features/pro/MembershipContext';
 import { GlassProgress } from '@/src/features/analytics/GlassProgress';
@@ -12,7 +11,7 @@ import { MeasuredChart } from "@/src/components/MeasuredChart";
 import { isMeaningfulSession, missionCompletion } from "@/src/lib/activityEvidence";
 import { Calendar, Zap, Brain, Clock, ShieldCheck } from "lucide-react";
 import { cn } from "@/src/lib/utils";
-import { collection, limit, onSnapshot, orderBy, query } from "firebase/firestore";
+import { collection, limit, onSnapshot, orderBy, query } from '@/src/lib/dataStore';
 import { db } from "@/src/lib/firebase";
 import { useAuth } from "@/src/contexts/AuthContext";
 import { calculateLevel, calculateLevelName, getLocalDayKey } from "@/src/lib/progress";
@@ -169,7 +168,6 @@ export const Analytics = ({ setActiveTab }: { setActiveTab?: (t: string) => void
   return (
     <div className="pro-analytics-workspace space-y-8 px-0 pb-24 text-slate-950 dark:text-slate-50 sm:space-y-10">
       <div className="flex justify-end"><ProEntry area="reports"/></div>
-      <ProgressionPanel details />
       <SmartPlannerInsights />
       {evidence.deviceSeconds>0 && <p role="status">{locale==='uz'?'Qurilmada saqlangan faoliyat ham kiritilgan.':locale==='ru'?'Включена активность, сохранённая на устройстве.':'Includes activity saved only on this device.'}</p>}
       {sessionLoading && <p role="status" className="text-sm font-medium text-slate-600 dark:text-slate-300">{copy.loading}</p>}

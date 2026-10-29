@@ -26,7 +26,7 @@ function harness({ legacy = false, denied = false, code, completed } = {}) {
   const run = load(`exports.run = ${callback}`, {
     ...state, user: { uid: 'u1' }, auth: { currentUser: { uid: 'u1' } }, isReadOnlyAudit: false,
     clearLocalProfilePatch() {}, setProfile(update) { publications++; update(profile); },
-    require: name => name === 'firebase/firestore' ? {
+    require: name => name === '@/src/lib/dataStore' ? {
       doc: () => 'users/u1', serverTimestamp: () => 'server-time',
       runTransaction: async (_, action) => {
         attempts++;

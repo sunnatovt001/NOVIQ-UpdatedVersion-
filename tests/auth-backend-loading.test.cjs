@@ -17,7 +17,7 @@ function harness() {
   const context = {
     exports: {}, accountRevision: 0, isDisposed: false, auth: { currentUser: { uid: 'u1' } },
     loadTimer: 0, clearTimeout() {}, deadline() {}, unsubscribeProfile: undefined, unsubscribeTrustedProgress: undefined,
-    latestBaseProfile: null, latestTrustedProgress: {}, latestResolvedAdmin: false,
+    latestBaseProfile: null, latestTrustedProgress: {}, latestResolvedAdmin: false, latestTokenAdmin: false, withLocalProfilePatch: value => value,
     publishProfile: () => publications.push(context.latestBaseProfile),
     buildTrustedProgressPatch: value => value,
     console: { warn() {}, error() {} },
@@ -28,7 +28,7 @@ function harness() {
     require: name => {
       loads.push(name);
       if (context.fail) throw new Error('Backend unavailable');
-      return name === 'firebase/firestore'
+      return name === '@/src/lib/dataStore'
         ? { doc: (_, ...path) => path.join('/'), onSnapshot: (...args) => { listeners.push(args); return () => {}; }, runTransaction: () => context.transaction() }
         : { db: {} };
     },
@@ -81,4 +81,16 @@ test('late profile bootstrap rejection cannot overwrite a newer account state', 
   reject(new Error('Old bootstrap failed')); await pending;
   assert.equal(h.errors.length, before);
   assert.equal(h.publications.length, 0);
+});
+
+test('verified admin token survives quota failure, but cached admin flags cannot grant a role', async () => {
+  for (const signedAdmin of [true,false]) {
+    const h=harness();
+    h.context.loadLocalData=()=>({uid:'u1',isAdmin:true,subscription:{plan:'pro',status:'active',currentPeriodEnd:'2099-01-01'}});
+    await h.run({uid:'u1',getIdTokenResult:async()=>({claims:{admin:signedAdmin}})});
+    h.listeners[1][2]({code:'resource-exhausted'});
+    assert.equal(h.context.latestResolvedAdmin,signedAdmin);
+    assert.equal(h.context.latestBaseProfile.subscription.plan,'pro');
+    await h.run(null);assert.equal(h.context.latestTokenAdmin,false);
+  }
 });

@@ -1,6 +1,9 @@
+import { isAdminQuotaError, readAdminUsersCache, saveAdminUsersCache } from '@/src/features/admin/adminRecovery';
+import { visitStreaks } from '@/src/lib/visitStreak';
+import { useActivityClock } from '@/src/lib/useActivityClock';
 import { AdminPromos } from '@/src/features/admin/AdminPromos';
 import React, { useEffect, useMemo, useState } from "react";
-import { collection, collectionGroup, limit, onSnapshot, orderBy, query } from "firebase/firestore";
+import { collection, collectionGroup, limit, onSnapshot, orderBy, query } from '@/src/lib/dataStore';
 import { httpsCallable } from "@/src/lib/callable";
 import {
   Activity,
@@ -87,7 +90,7 @@ import { EmptyState, MetricCard, StatusBadge, Section, AdminChartTooltip } from 
 export const Admin = ({ setActiveTab }: { setActiveTab?: (t: string) => void }) => {
   const { profile, isAdmin } = useAuth();
   const [dateRange, setDateRange] = useState<RangeKey>("7d");
-  const [adminView, setAdminView] = useState('overview');
+  const [adminView, setAdminView] = useState('users');
   const [chartSeries, setChartSeries] = useState<'users'|'events'>('users');
   const [search, setSearch] = useState("");
   const [planFilter, setPlanFilter] = useState<PlanFilter>("all");
@@ -112,11 +115,15 @@ export const Admin = ({ setActiveTab }: { setActiveTab?: (t: string) => void }) 
   const [grantStatus, setGrantStatus] = useState("");
   const [isGranting, setIsGranting] = useState(false);
   const [showDataWarnings, setShowDataWarnings] = useState(false);
+  const [loadActivity, setLoadActivity] = useState(false);
+  const [cachedUsersAt, setCachedUsersAt] = useState<number | null>(null);
 
   useEffect(() => {
     if (!isAdmin) return undefined;
 
-    setLoadState(makeLoadState(true));
+    const cached = readAdminUsersCache(profile?.uid || profile?.email || "");
+    if (cached) { setUsers(cached.users); setCachedUsersAt(cached.savedAt); }
+    setLoadState({ ...makeLoadState(loadActivity), users: true });
     setErrors({});
 
     const markLoaded = (key: DataKey) => setLoadState((current) => ({ ...current, [key]: false }));
@@ -128,12 +135,12 @@ export const Admin = ({ setActiveTab }: { setActiveTab?: (t: string) => void }) 
       markLoaded(key);
     };
 
+    const activityListener: typeof onSnapshot = ((...args: any[]) => loadActivity ? (onSnapshot as any)(...args) : () => {}) as typeof onSnapshot;
     const unsubscribers = [
       onSnapshot(
         query(collection(db, "users"), limit(MAX_ADMIN_DOCS)),
         (snapshot) => {
-          setUsers(
-            snapshot.docs.map((document) => {
+          const nextUsers = snapshot.docs.map((document) => {
               const data = document.data() as Record<string, any>;
               return {
                 id: document.id,
@@ -149,13 +156,16 @@ export const Admin = ({ setActiveTab }: { setActiveTab?: (t: string) => void }) 
                 settings: data.settings || {},
                 raw: data,
               };
-            })
-          );
+            });
+          if (!snapshot.metadata?.fromCache || nextUsers.length) {
+            setUsers(nextUsers);
+            if (!snapshot.metadata?.fromCache) { saveAdminUsersCache(profile?.uid || profile?.email || "", nextUsers); setCachedUsersAt(null); }
+          }
           markLoaded("users");
         },
         (error) => markError("users", error)
       ),
-      onSnapshot(
+      activityListener(
         query(collectionGroup(db, "trusted"), orderBy("updatedAt", "desc"), limit(MAX_ADMIN_DOCS)),
         (snapshot) => {
           setTrustedRecords(mapCollectionGroupDocs(snapshot, "trusted", ["updatedAt", "lastActive"]));
@@ -163,7 +173,7 @@ export const Admin = ({ setActiveTab }: { setActiveTab?: (t: string) => void }) 
         },
         (error) => markError("trusted", error)
       ),
-      onSnapshot(
+      activityListener(
         query(collectionGroup(db, "studySessions"), orderBy("timestamp", "desc"), limit(MAX_ADMIN_DOCS)),
         (snapshot) => {
           setStudySessions(mapCollectionGroupDocs(snapshot, "studySessions", ["timestamp", "createdAt"]));
@@ -171,7 +181,7 @@ export const Admin = ({ setActiveTab }: { setActiveTab?: (t: string) => void }) 
         },
         (error) => markError("studySessions", error)
       ),
-      onSnapshot(
+      activityListener(
         query(collectionGroup(db, "progressEvents"), orderBy("createdAt", "desc"), limit(MAX_ADMIN_DOCS)),
         (snapshot) => {
           setProgressEvents(mapCollectionGroupDocs(snapshot, "progressEvents", ["createdAt", "processedAt"]));
@@ -179,7 +189,7 @@ export const Admin = ({ setActiveTab }: { setActiveTab?: (t: string) => void }) 
         },
         (error) => markError("progressEvents", error)
       ),
-      onSnapshot(
+      activityListener(
         query(collectionGroup(db, "notebookNotes"), orderBy("updatedAt", "desc"), limit(MAX_ADMIN_DOCS)),
         (snapshot) => {
           setNotebookNotes(mapCollectionGroupDocs(snapshot, "notebookNotes", ["updatedAt", "createdAt"]));
@@ -187,7 +197,7 @@ export const Admin = ({ setActiveTab }: { setActiveTab?: (t: string) => void }) 
         },
         (error) => markError("notebookNotes", error)
       ),
-      onSnapshot(
+      activityListener(
         query(collectionGroup(db, "notebookMessages"), orderBy("createdAt", "desc"), limit(MAX_ADMIN_DOCS)),
         (snapshot) => {
           setNotebookMessages(mapCollectionGroupDocs(snapshot, "notebookMessages", ["createdAt"]));
@@ -195,7 +205,7 @@ export const Admin = ({ setActiveTab }: { setActiveTab?: (t: string) => void }) 
         },
         (error) => markError("notebookMessages", error)
       ),
-      onSnapshot(
+      activityListener(
         query(collectionGroup(db, "tutorMessages"), orderBy("createdAt", "desc"), limit(MAX_ADMIN_DOCS)),
         (snapshot) => {
           setTutorMessages(mapCollectionGroupDocs(snapshot, "tutorMessages", ["createdAt"]));
@@ -203,7 +213,7 @@ export const Admin = ({ setActiveTab }: { setActiveTab?: (t: string) => void }) 
         },
         (error) => markError("tutorMessages", error)
       ),
-      onSnapshot(
+      activityListener(
         query(collectionGroup(db, "decks"), orderBy("updatedAt", "desc"), limit(MAX_ADMIN_DOCS)),
         (snapshot) => {
           setDecks(mapCollectionGroupDocs(snapshot, "decks", ["updatedAt", "createdAt"]));
@@ -211,7 +221,7 @@ export const Admin = ({ setActiveTab }: { setActiveTab?: (t: string) => void }) 
         },
         (error) => markError("decks", error)
       ),
-      onSnapshot(
+      activityListener(
         query(collection(db, "analyticsEvents"), orderBy("createdAt", "desc"), limit(MAX_ADMIN_DOCS)),
         (snapshot) => {
           setAnalyticsEvents(
@@ -233,7 +243,7 @@ export const Admin = ({ setActiveTab }: { setActiveTab?: (t: string) => void }) 
         },
         (error) => markError("analyticsEvents", error)
       ),
-      onSnapshot(
+      activityListener(
         query(collectionGroup(db, "subscriptionRequests"), orderBy("createdAt", "desc"), limit(MAX_ADMIN_DOCS)),
         (snapshot) => {
           setSubscriptionRequests(mapCollectionGroupDocs(snapshot, "subscriptionRequests", ["createdAt", "serverReceivedAt"]));
@@ -241,7 +251,7 @@ export const Admin = ({ setActiveTab }: { setActiveTab?: (t: string) => void }) 
         },
         (error) => markError("subscriptionRequests", error)
       ),
-      onSnapshot(
+      activityListener(
         query(collectionGroup(db, "subscriptionCheckouts"), orderBy("createdAt", "desc"), limit(MAX_ADMIN_DOCS)),
         (snapshot) => {
           setSubscriptionCheckouts(mapCollectionGroupDocs(snapshot, "subscriptionCheckouts", ["createdAt", "serverReceivedAt", "verifiedAt"]));
@@ -252,7 +262,7 @@ export const Admin = ({ setActiveTab }: { setActiveTab?: (t: string) => void }) 
     ];
 
     return () => unsubscribers.forEach((unsubscribe) => unsubscribe());
-  }, [isAdmin]);
+  }, [isAdmin, profile?.uid, profile?.email, loadActivity]);
 
   const trustedByUser = useMemo(() => {
     const map = new Map<string, TrustedProgress>();
@@ -312,6 +322,7 @@ export const Admin = ({ setActiveTab }: { setActiveTab?: (t: string) => void }) 
     return latest;
   }, [allActivityRecords, trustedByUser, users]);
 
+  const streakClock = useActivityClock();
   const rows = useMemo<UserRow[]>(() => {
     const now = Date.now();
     return users.map((user) => {
@@ -328,12 +339,13 @@ export const Admin = ({ setActiveTab }: { setActiveTab?: (t: string) => void }) 
         planStatus: getPlanStatus(user),
         lastActive,
         online: Boolean(lastActive && now - lastActive.getTime() <= ONLINE_WINDOW_MS),
-        streak: trusted?.streak ?? (Number(user.raw.streak) || 0),
+        streak: visitStreaks(user.raw, streakClock).current,
+        bestStreak: visitStreaks(user.raw, streakClock).best,
         totalStudySeconds: trusted?.totalStudySeconds ?? (Number(user.raw.totalStudySeconds) || 0),
         raw: user,
       };
     });
-  }, [lastActivityByUser, trustedByUser, users]);
+  }, [lastActivityByUser, trustedByUser, users, streakClock]);
 
   const goalOptions = useMemo(() => Array.from(new Set(rows.map((row) => row.goal).filter(Boolean))).sort(), [rows]);
   const rangeStart = useMemo(() => getRangeStart(dateRange), [dateRange]);
@@ -618,6 +630,7 @@ export const Admin = ({ setActiveTab }: { setActiveTab?: (t: string) => void }) 
   };
 
   const isLoading = Object.values(loadState).some(Boolean);
+  const quotaExceeded = Object.values(errors).some(isAdminQuotaError);
   const errorEntries = Object.entries(errors).filter(([, value]) => value);
 
   if (!isAdmin) {
@@ -663,7 +676,8 @@ export const Admin = ({ setActiveTab }: { setActiveTab?: (t: string) => void }) 
 
         <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
           <MetricCard label="Trusted XP" value={String(selectedUserMetrics.xp)} icon={Zap} detail={`Level ${selectedUserMetrics.level}`} />
-          <MetricCard label="Streak" value={String(selectedUserMetrics.streak)} icon={Activity} detail="Realtime trusted progress" />
+          <MetricCard label="Current streak" value={String(visitStreaks(selectedUser?.raw.raw, streakClock).current)} icon={Activity} detail="Consecutive daily visits" />
+          <MetricCard label="Best streak" value={String(visitStreaks(selectedUser?.raw.raw, streakClock).best)} icon={Activity} detail="Longest daily visit streak" />
           <MetricCard label="Focus time" value={formatStudyTime(selectedUserMetrics.focusMinutes * 60)} icon={Timer} detail="Realtime focus sessions" />
           <MetricCard label="Last active" value={formatDateOnly(selectedUser.lastActive)} icon={Clock} detail={formatDateTime(selectedUser.lastActive)} />
         </div>
@@ -831,7 +845,7 @@ export const Admin = ({ setActiveTab }: { setActiveTab?: (t: string) => void }) 
                 Workspace / Admin
               </span>
               <StatusBadge tone={errorEntries.length ? "warn" : "good"}>
-                {errorEntries.length ? `${errorEntries.length} data warning` : "Live Firestore"}
+                {errorEntries.length ? (quotaExceeded ? "Daily read limit" : "Data unavailable") : cachedUsersAt ? "Saved snapshot" : "Live Firestore"}
               </StatusBadge>
             </div>
             <h2 className="mt-4 font-display text-4xl font-bold tracking-[-0.055em] text-[var(--admin-heading)] sm:text-5xl">
@@ -881,9 +895,9 @@ export const Admin = ({ setActiveTab }: { setActiveTab?: (t: string) => void }) 
             <div className="flex items-start gap-3">
               <AlertCircle size={18} className="mt-0.5 shrink-0" />
               <div>
-                <p className="font-extrabold">Some admin data could not load</p>
+                <p className="font-extrabold">{quotaExceeded ? "Daily database read limit reached" : "Some admin data could not load"}</p>
                 <p className="mt-1 text-sm text-amber-800/80 dark:text-amber-100/70">
-                  {errorEntries.length} Firestore sources need permission or index review. Available metrics are still shown below.
+                  {quotaExceeded ? (users.length ? "Showing previously loaded accounts. Refresh this page after the database quota resets to load updates." : "Fresh accounts cannot load until the database quota resets or its capacity is increased. No accounts have been deleted.") : "Some data is unavailable. Previously loaded records are preserved."}
                 </p>
               </div>
             </div>
@@ -899,8 +913,8 @@ export const Admin = ({ setActiveTab }: { setActiveTab?: (t: string) => void }) 
           {showDataWarnings && (
             <div className="mt-4 grid gap-2 border-t border-amber-200 pt-4 text-sm dark:border-amber-300/15 sm:grid-cols-2">
               {errorEntries.map(([key, value]) => (
-                <p key={key}>
-                  <span className="font-bold">{key}:</span> {value}
+                <p key={key} className="max-h-24 overflow-auto break-words">
+                  <span className="font-bold">{key}:</span> {isAdminQuotaError(value) ? "Daily read quota exhausted." : value}
                 </p>
               ))}
             </div>
@@ -908,6 +922,9 @@ export const Admin = ({ setActiveTab }: { setActiveTab?: (t: string) => void }) 
         </div>
       )}
 
+      {cachedUsersAt && <p role="status" className="text-sm text-[var(--admin-muted)]">Saved account list · {new Date(cachedUsersAt).toLocaleString()} · not live</p>}
+      {!loadActivity && <div className="admin-panel rounded-2xl border p-4 text-sm"><p>Activity analytics are not loaded. Accounts and their saved streaks are shown below.</p><button type="button" disabled={quotaExceeded} className="mt-3 rounded-xl border px-4 py-2 font-bold disabled:opacity-50" onClick={() => setLoadActivity(true)}>Load activity analytics</button></div>}
+      <div hidden={!loadActivity} data-admin-activity={loadActivity ? "loaded" : "pending"}>
       <div className="ag-metrics grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <MetricCard
           label="Total users"
@@ -1011,11 +1028,12 @@ export const Admin = ({ setActiveTab }: { setActiveTab?: (t: string) => void }) 
         </Section>
       </div>
 
+      </div>
       <Section
         title="User management"
         className="ag-users"
         eyebrow="Accounts"
-        action={<StatusBadge tone="info">{filteredRows.length} shown</StatusBadge>}
+        action={<StatusBadge tone="info">{errors.users && !users.length ? "Unavailable" : `${filteredRows.length} shown`}</StatusBadge>}
       >
         <div className="mb-5 grid gap-3 xl:grid-cols-[minmax(0,1fr)_170px_210px_190px]">
           <div className="relative">
@@ -1056,7 +1074,7 @@ export const Admin = ({ setActiveTab }: { setActiveTab?: (t: string) => void }) 
                   <th className="px-4 py-3.5">Plan</th>
                   <th className="px-4 py-3.5">Last active</th>
                   <th className="px-4 py-3.5">Status</th>
-                  <th className="px-4 py-3.5">Streak</th>
+                  <th className="px-4 py-3.5">Current streak</th><th className="px-4 py-3">Best streak</th>
                   <th className="px-4 py-3.5">Study time</th>
                   <th className="w-14 px-4 py-3.5" />
                 </tr>
@@ -1084,7 +1102,7 @@ export const Admin = ({ setActiveTab }: { setActiveTab?: (t: string) => void }) 
                     <td className="px-4 py-4"><StatusBadge tone={row.plan === "pro" ? "info" : "neutral"}>{row.plan}</StatusBadge></td>
                     <td className="px-4 py-4 text-[var(--admin-muted)]">{formatDateTime(row.lastActive)}</td>
                     <td className="px-4 py-4"><StatusBadge tone={row.online ? "good" : "neutral"}>{row.online ? "Online" : "Offline"}</StatusBadge></td>
-                    <td className="px-4 py-4 font-bold text-[var(--admin-heading)]">{row.streak}</td>
+                    <td className="px-4 py-4 font-bold text-[var(--admin-heading)]">{row.streak}</td><td className="px-4 py-4 font-bold text-[var(--admin-heading)]">{row.bestStreak}</td>
                     <td className="px-4 py-4 text-[var(--admin-body)]">{formatStudyTime(row.totalStudySeconds)}</td>
                     <td className="px-4 py-4">
                       <button
@@ -1105,13 +1123,13 @@ export const Admin = ({ setActiveTab }: { setActiveTab?: (t: string) => void }) 
             </table>
           </div>
         ) : (
-          <EmptyState message={isLoading ? "Loading users..." : "No users match the current filters."} />
+          <EmptyState message={loadState.users ? "Loading users..." : errors.users && !users.length ? "Account list is unavailable. This does not mean there are no users." : "No users match the current filters."} />
         )}
       </Section>
 
       {adminView==='overview'&&<div className="ag-users-footer"><span>Showing {Math.min(filteredRows.length,3)} of {filteredRows.length} matching accounts</span><button type="button" onClick={()=>setAdminView('users')}>View all users →</button></div>}
 
-      <div className="ag-operations grid gap-6 xl:grid-cols-12">
+      <div style={{ display: loadActivity ? undefined : "none" }} className="ag-operations grid gap-6 xl:grid-cols-12">
         <Section title="Payment operations" eyebrow="Subscriptions" className="ag-payments xl:col-span-5" action={<StatusBadge tone={pendingSubscriptionDocs.length ? "warn" : "neutral"}>{pendingSubscriptionDocs.length ? "Review needed" : "No pending requests"}</StatusBadge>}>
           <MetricCard
             label="Verified revenue"
@@ -1179,7 +1197,7 @@ export const Admin = ({ setActiveTab }: { setActiveTab?: (t: string) => void }) 
         </Section>
       </div>
       {(adminView==='overview'||adminView==='subscriptions')&&<AdminPromos/>}
-      <section className="ag-health"><header><h3>System health</h3><button type="button" onClick={()=>setAdminView(adminView==='health'?'overview':'health')}>{adminView==='health'?'Back to overview':'View reports'}</button></header><ClientErrorMonitor compact={adminView!=='health'}/></section>
+      {(adminView==='health'||(adminView==='overview'&&loadActivity))&&<section className="ag-health"><header><h3>System health</h3><button type="button" onClick={()=>setAdminView(adminView==='health'?'overview':'health')}>{adminView==='health'?'Back to overview':'View reports'}</button></header><ClientErrorMonitor compact={adminView!=='health'}/></section>}
     </div>
   );
 };

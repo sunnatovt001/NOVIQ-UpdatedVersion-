@@ -1,0 +1,12 @@
+/* Short laptop screens need room for the conversation and a fixed composer. */
+@media (max-height: 850px) {
+  .noviq-app .notebook-ai-panel > header {padding:12px}
+  .noviq-app .notebook-ai-panel > header > div > div > p:first-child {display:none}
+  .noviq-app .notebook-ai-panel > header h3 {margin-top:0;font-size:18px;line-height:24px}
+  .noviq-app .notebook-ai-panel > header > div > div > p:last-child {margin-top:3px;line-height:16px}
+  .noviq-app .notebook-ai-panel > div.grid {padding:8px;gap:6px}
+  .noviq-app .notebook-ai-panel > div.grid > button {flex-direction:row;gap:4px;min-height:40px;padding:6px 4px}
+  .noviq-app .notebook-ai-panel > div.grid > button > svg {width:14px;height:14px;flex-shrink:0}
+}
+.noviq-app .notebook-ai-panel .notebook-ai-messages {overflow-wrap:anywhere}
+.noviq-app .notebook-ai-panel .notebook-ai-messages pre {max-width:100%;overflow-x:auto;white-space:pre-wrap}

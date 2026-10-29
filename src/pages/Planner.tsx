@@ -12,7 +12,7 @@ import { localizePlannerValidation } from "@/src/features/planner/plannerValidat
 import { formatTimer } from "@/src/features/planner/plannerTimer";
 import { PlannerCompletionDialog } from "@/src/features/planner/PlannerCompletionDialog";
 import { PlannerRecommendationsDialog } from "@/src/features/planner/PlannerRecommendationsDialog";
-import { doc, onSnapshot } from "firebase/firestore";
+import { doc, onSnapshot } from '@/src/lib/dataStore';
 import {
   AlertTriangle, ArrowLeft, Award, BookOpen, Brain, Calendar, Check,
   CheckCircle2, ChevronRight, Clock, Flame, Headphones, Loader2, Lock,

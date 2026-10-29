@@ -6,7 +6,13 @@ const crypto=require('node:crypto');
 const canonical=value=>JSON.stringify(value,(_,v)=>v && typeof v==='object' && !Array.isArray(v)?Object.fromEntries(Object.entries(v).sort(([a],[b])=>a.localeCompare(b))):v);
 const hash=value=>crypto.createHash('sha256').update(canonical(value)).digest('hex');
 async function request(base,route,method='GET',body,token) {
-  const response=await fetch(`${base}/${route}`,{method,headers:{'Content-Type':'application/json',...(token?{Authorization:`Bearer ${await token()}`}:{Authorization:'Bearer owner'})},...(body?{body:JSON.stringify(body)}:{}),signal:AbortSignal.timeout(30000)});
+  let response;
+  for(let attempt=0;attempt<4;attempt++){
+    try{response=await fetch(`${base}/${route}`,{method,headers:{'Content-Type':'application/json',...(token?{Authorization:`Bearer ${await token()}`}:{Authorization:'Bearer owner'})},...(body?{body:JSON.stringify(body)}:{}),signal:AbortSignal.timeout(30000)});}
+    catch(error){if(attempt===3)throw error;await new Promise(resolve=>setTimeout(resolve,1000*(attempt+1)));continue;}
+    if(![500,502,503,504].includes(response.status)||attempt===3)break;
+    await response.body?.cancel();await new Promise(resolve=>setTimeout(resolve,1000*(attempt+1)));
+  }
   if(!response.ok){const failure=await response.json();throw new Error(`Firestore snapshot/restore request failed (HTTP ${response.status}): ${failure.error?.message || 'request rejected'}; no production records changed`);}
   return response.json();
 }
@@ -37,8 +43,9 @@ async function collect(project,database,readTime,token) {
     }while(collectionToken);
   };
   let offset=0;
+  const concurrency=Math.max(1,Math.min(32,Number(process.env.NOVIQ_SNAPSHOT_CONCURRENCY)||8));
   while(offset<parents.length){
-    const batch=parents.slice(offset,offset+8);
+    const batch=parents.slice(offset,offset+concurrency);
     await Promise.all(batch.map(visit));offset+=batch.length;
     if(offset%200<8)console.log(`Snapshot traversal: ${documents.length} documents collected`);
   }

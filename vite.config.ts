@@ -23,8 +23,11 @@ export default defineConfig(({mode}) => ({
       delete require.cache[middlewarePath];
       const getApiKey = () => process.env.GEMINI_API_KEY || loadEnv(mode, path.resolve(__dirname, 'functions'), 'GEMINI_').GEMINI_API_KEY || loadEnv(mode, __dirname, 'GEMINI_').GEMINI_API_KEY;
       const apiKey = getApiKey();
-      if (!apiKey) server.config.logger.warn('NOVIQ AI: set GEMINI_API_KEY in functions/.env.local and restart the development server.');
-      server.middlewares.use(require(middlewarePath)({ getApiKey, firebaseApiKey: firebaseConfig.apiKey, models: (process.env.GEMINI_LOCAL_MODELS || env.GEMINI_LOCAL_MODELS || "gemini-3.5-flash,gemini-3.1-flash-lite").split(",").map(value=>value.trim()) }));
+      // Reuse the existing project's authenticated API when this checkout has
+      // no server key. Never expose or duplicate the production Gemini secret.
+      const remoteRpcUrl = process.env.GEMINI_REMOTE_RPC_URL || env.GEMINI_REMOTE_RPC_URL || 'https://noviqupdated.vercel.app/api/rpc?name=generateAiResponse';
+      if (!apiKey) server.config.logger.info('NOVIQ AI: using the authenticated project backend (no local Gemini key).');
+      server.middlewares.use(require(middlewarePath)({ getApiKey, remoteRpcUrl, firebaseApiKey: firebaseConfig.apiKey, models: (process.env.GEMINI_LOCAL_MODELS || env.GEMINI_LOCAL_MODELS || "gemini-3.5-flash,gemini-3.1-flash-lite").split(",").map(value=>value.trim()) }));
       const telegramPath = require.resolve('./server/local-telegram.cjs');
       delete require.cache[telegramPath];
       server.middlewares.use(require(telegramPath)({ firebaseConfig }));

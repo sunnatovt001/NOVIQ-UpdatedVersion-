@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Plus, Copy, Trash2, ArrowUp, ArrowDown, Sparkles, ImagePlus } from 'lucide-react';
-import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
+import { ref, uploadBytesResumable, getDownloadURL } from '@/src/lib/storageStore';
 import { storage } from '@/src/lib/firebase';
 import { loadLocalDataStrict, saveLocalData } from '@/src/lib/localStore';
 import { generateDefinitionSuggestions } from '@/src/lib/gemini';

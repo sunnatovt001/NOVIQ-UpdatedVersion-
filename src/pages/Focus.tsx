@@ -1,3 +1,4 @@
+import { visitStreaks } from '@/src/lib/visitStreak';
 import { useVerifiedFocusSession } from '@/src/lib/useVerifiedFocusSession';
 import type { XpReceipt } from '@/src/lib/verifiedProgress';
 import {FocusReflection} from '@/src/features/pro/FocusReflection';
@@ -149,7 +150,7 @@ export const Focus = () => {
   const localIdRef = useRef(validCache ? cached.localId : undefined);
   const generationRef = useRef(0);
   const [xpReceipt, setXpReceipt] = useState<XpReceipt | null>(null);
-  const verificationWarning = useCallback(() => setSessionError(locale === 'uz' ? 'XP tasdig‘i kutilmoqda. Taymer ishlashda davom etadi.' : locale === 'ru' ? 'Ожидается подтверждение XP. Таймер продолжает работать.' : 'XP verification is pending. Your timer is still running.'), [locale]);
+  const verificationWarning = useCallback(() => undefined, []);
   useVerifiedFocusSession(sessionIdRef, isActive && mode === 'focus', localOnly, verifying, verificationWarning);
 
   useEffect(
@@ -479,9 +480,8 @@ export const Focus = () => {
       )}
     >
       <audio ref={audioRef} loop />
-      {xpReceipt && <p role="status" aria-live="polite" className="mb-3 rounded-xl border border-[var(--noviq-border)] p-3 text-sm">{xpReceipt.status === 'unverified' ? (locale === 'uz' ? 'Saqlandi · tasdiqlanmagan' : locale === 'ru' ? 'Сохранено · не подтверждено' : 'Saved · unverified') : (locale === 'uz' ? 'Tasdiqlandi' : locale === 'ru' ? 'Подтверждено' : 'Verified')} +{xpReceipt.xpDelta} XP{xpReceipt.capReached ? (locale === 'uz' ? ' · Kunlik XP chegarasi. O‘qish vaqti saqlanadi.' : locale === 'ru' ? ' · Дневной лимит XP. Время учёбы сохраняется.' : ' · Daily XP cap reached. Study time is still saved.') : xpReceipt.sourceXp === 0 ? (locale === 'uz' ? ' · XP uchun kamida 5 tasdiqlangan daqiqa kerak.' : locale === 'ru' ? ' · Для XP нужно минимум 5 подтверждённых минут.' : ' · At least 5 verified minutes are needed for Focus XP.') : ''}</p>}
       {xpReceipt?.duration !== undefined && xpReceipt.recordedDuration !== undefined && xpReceipt.recordedDuration > xpReceipt.duration && <p role="status" className="mb-3 text-sm">{locale === 'uz' ? 'Qayd etilgan vaqt' : locale === 'ru' ? 'Записанное время' : 'Recorded time'}: {formatTime(xpReceipt.recordedDuration)} · {locale === 'uz' ? 'server tasdiqlagan' : locale === 'ru' ? 'подтверждено сервером' : 'server verified'}: {formatTime(xpReceipt.duration)}</p>}
-      {(study.error || !study.ready || study.deviceSeconds>0) && <p role="status" className="mb-3 text-sm">{study.error ? (locale==='uz'?'Server tarixi olinmadi; qurilmadagi yozuvlar saqlangan.':locale==='ru'?'История сервера недоступна. Данные устройства сохранены.':'Server history unavailable; device records are preserved.') : !study.ready ? (locale==='uz'?'Tarix yuklanmoqda…':locale==='ru'?'Загрузка истории…':'Loading activity history…') : (locale==='uz'?'Qurilmada saqlangan, sinxronlanmagan vaqt ham kiritilgan.':locale==='ru'?'Включена активность, сохранённая только на устройстве.':'Includes activity saved only on this device.')} <button className="underline" onClick={study.retry}>{locale==='uz'?'Qayta urinish':locale==='ru'?'Повторить':'Retry'}</button></p>}
+      {study.error && <details className="quiet-sync"><summary>{locale==='uz'?'Faoliyat sinxronlashuvi':locale==='ru'?'Синхронизация активности':'Activity sync'}</summary><p>{locale==='uz'?'Serverga ulanish kutilmoqda. Qurilmadagi yozuvlar saqlangan.':locale==='ru'?'Ожидается подключение. Данные устройства сохранены.':'Waiting for a connection. Device records are saved.'}</p><button type="button" onClick={study.retry}>{locale==='uz'?'Yangilash':locale==='ru'?'Обновить':'Refresh'}</button></details>}
       <div className="mx-auto grid w-full max-w-none gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(360px,0.9fr)]">
         <section className="rounded-[28px] border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900 sm:p-5 lg:p-6">
           <header className="flex flex-wrap items-center justify-between gap-4">
@@ -809,7 +809,7 @@ export const Focus = () => {
                 <Flame size={22} />
               </span>
               <p className="mt-4 text-3xl font-black text-orange-500">
-                {profile?.streak || 0}
+                {visitStreaks(profile).current}
               </p>
               <p className="mt-1 text-xs font-bold text-slate-500">
                 {copy.currentStreak}

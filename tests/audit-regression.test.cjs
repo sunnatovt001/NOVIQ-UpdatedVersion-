@@ -718,34 +718,17 @@ test('Notebook real upload handler reports mixed file outcomes without false all
   }
 });
 
-test('Notebook website extraction restricts protocols and supplies an abort deadline', async () => {
-  let calls = 0, requested, deadline;
-  const signal = {};
-  const context = { URL, t: (key, values) => `${key}:${values?.status || ''}`,
-    AbortSignal: { timeout: ms => { deadline = ms; return signal; } },
-    fetch: async (url, options) => { calls++; requested = { url, options }; return { ok: true, text: async () => '<style>hidden</style><script>private()</script><p>Source <b>evidence</b></p>' }; } };
-  const extract = handler('src/pages/Notes.tsx', 'fetchWebsiteText', context);
-  await assert.rejects(extract('javascript:alert(1)'), /notebook.invalidUrl/);
-  assert.equal(calls, 0);
-  assert.equal(await extract('https://example.invalid/source'), 'Source evidence');
-  assert.equal(deadline, 15000);
-  assert.equal(requested.options.signal, signal);
-  assert.equal(requested.url, 'https://example.invalid/source');
-  context.fetch = async () => ({ ok: false, status: 403 });
-  await assert.rejects(extract('https://example.invalid'), /notebook.fetchFailed:403/);
-  context.fetch = async () => { throw new Error('aborted fixture'); };
-  await assert.rejects(extract('https://example.invalid'), /aborted fixture/);
-});
-
 test('Notebook website/transcript import failures expose only localized safe guidance', async () => {
   for (const [name, expected] of [['handleAddUrlSource', 'notebook.websiteFailed'], ['handleAddYoutubeSource', 'notebook.transcriptFailed']]) {
-    const context = { user: { uid: 'fixture' }, sourceUrl: 'https://example.invalid', youtubeUrl: '', youtubeTranscript: 'Fixture transcript',
+    const context = { user: { uid: 'fixture' }, sourceUrl: 'https://example.invalid', youtubeUrl: 'https://youtu.be/abcdefghijk', youtubeTranscript: '',
       isReadOnlyAudit: false, notebookStudentContext: '', notebookLanguage: 'uz-UZ',
       setStatus: value => { context.status = value; }, setIsSourceLoading: value => { context.loading = value; },
-      t: key => `localized:${key}`, fetchWebsiteText: async () => { throw new Error('private request diagnostic'); },
+      setSourceError: value => { context.sourceError = value; },
+      t: key => `localized:${key}`, readNotebookLink: async () => { throw new Error('private request diagnostic'); },
       askNotebook: async () => { throw new Error('private provider diagnostic'); } };
     await handler('src/pages/Notes.tsx', name, context)();
     assert.equal(context.status, `localized:${expected}`);
+    assert.equal(context.sourceError, `localized:${expected}`);
     assert.equal(context.loading, false);
     assert.ok(!context.status.includes('private'));
   }
@@ -860,4 +843,28 @@ test('Notebook AI renders real handler output, blocks whitespace and parallel su
   await send('Local preview question');
   assert.equal(writes.length, previousWrites);
   assert.equal(context.messages.at(-1).content, 'Source-grounded answer');
+});
+
+test('Free and Pro imports preserve source evidence when digest generation fails', async () => {
+  for (const path of ['src/pages/Notes.tsx', 'src/features/free/FreeNotes.tsx']) {
+    for (const name of ['handleAddUrlSource', 'handleAddYoutubeSource']) {
+      const context = {
+        user:{uid:'fixture'}, sourceUrl:'https://example.org/article', youtubeUrl:'https://youtu.be/abcdefghijk', youtubeTranscript:'',
+        notebookStudentContext:'', notebookLanguage:'uz-UZ', sources:[], writes:[], URL, console,
+        t:key=>key, setStatus(){}, setSourceError(){}, setIsSourceLoading(){},
+        readNotebookLink:async()=> 'Evidence survives a digest outage.',
+        askNotebook:async()=>{throw new Error('Provider unavailable');},
+        makeSyncId:()=> 'source-fixture',
+        setSources:update=>{context.sources=update(context.sources);},
+        debugNotebookMetricsWrite(){}, setCloudSyncBlocked(){},
+        writeDocWithQueue:async request=>{context.writes.push(request);return 'synced';},
+        trackUserEvent:async()=>{}, setSourceUrl(){},setYoutubeUrl(){},setYoutubeTranscript(){},setShowSourceModal(){},
+      };
+      await handler(path,name,context)();
+      assert.equal(context.sources.length,1);
+      assert.equal(context.sources[0].extractedText,'Evidence survives a digest outage.');
+      assert.equal(context.sources[0].summary,'notebook.digestUnavailable');
+      assert.equal(context.writes[0].data.extractedText,context.sources[0].extractedText);
+    }
+  }
 });

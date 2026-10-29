@@ -1,3 +1,4 @@
+import { SyncNotice } from '@/src/features/progression/SyncNotice';
 import { writePagePath } from '@/src/lib/navigation';
 /**
  * @license
@@ -202,9 +203,7 @@ const AppContent = () => {
   return (
       <RoutePage key={`${user.uid}:${premium ? 'pro' : 'free'}`} loader={premium ? loadLayout : loadFreeLayout} name="Layout" pageProps={{ activeTab, setActiveTab,
         children: <>
-          {!membership.available && membership.error && <div role="alert" className="flex shrink-0 flex-wrap items-center justify-center gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-950">
-            <span>{membershipFailureMessage(membership.failure, locale)}</span><button className="min-h-11 px-3 underline" onClick={() => void membership.refresh()}>{proCopy.retry}</button>
-          </div>}
+          {!membership.available && membership.error && <SyncNotice message={membershipFailureMessage(membership.failure, locale)} onRefresh={() => void membership.refresh()}/>}
           <RoutePage key={name} loader={!premium && freePageLoaders[name] ? freePageLoaders[name] : pageLoaders[name]} name={name} pageProps={{ setActiveTab }} />
         </>,
       }} />

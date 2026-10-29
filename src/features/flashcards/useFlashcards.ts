@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { collection, onSnapshot, query, orderBy, limit } from 'firebase/firestore';
+import { collection, onSnapshot, query, orderBy, limit } from '@/src/lib/dataStore';
 import { db } from '@/src/lib/firebase';
 import { loadLocalDataStrict, saveLocalData } from '@/src/lib/localStore';
 import { getQueuedOperation, writeDocWithQueue, flushOfflineSyncQueue } from '@/src/lib/offlineSync';

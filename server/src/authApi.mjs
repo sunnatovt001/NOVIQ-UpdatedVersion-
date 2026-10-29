@@ -3,6 +3,7 @@ import { verifyLegacyPassword } from './legacyPassword.mjs';
 import { requireTrustedOrigin, sessionCookie } from './sessions.mjs';
 import { verifyTelegramIdentity } from './telegramIdentity.mjs';
 import { verifyGoogleBridge } from './googleBridge.mjs';
+import { verifyFirebaseIdentity } from './firebaseIdentity.mjs';
 
 export function readSessionToken(header) {
   if (typeof header !== 'string') return null;
@@ -18,7 +19,7 @@ async function readJson(request) {
   }
   try { return JSON.parse(Buffer.concat(chunks).toString('utf8')); } catch { throw Object.assign(new Error(), { status: 400 }); }
 }
-export function createAuthApi(db, sessions, { origin, verify = verifyLegacyPassword, googleVerify = verifyGoogleBridge, now = () => new Date(), telegramToken = '', telegramBotUsername = '' }) {
+export function createAuthApi(db, sessions, { origin, verify = verifyLegacyPassword, googleVerify = verifyGoogleBridge, firebaseVerify = verifyFirebaseIdentity, firebaseIdentityEnabled = false, now = () => new Date(), telegramToken = '', telegramBotUsername = '' }) {
   return async (request, response) => {
     response.setHeader('Content-Type', 'application/json'); response.setHeader('Cache-Control', 'no-store');
     const send = (status, body) => { response.statusCode = status; response.end(JSON.stringify(body)); };
@@ -36,6 +37,33 @@ export function createAuthApi(db, sessions, { origin, verify = verifyLegacyPassw
       }
       if (request.method !== 'POST') return send(405, { error: 'Method not allowed.' });
       try { requireTrustedOrigin(request.headers.origin, origin); } catch { return send(403, { error: 'Untrusted request origin.' }); }
+      if (path === '/api/auth/firebase') {
+        if (!firebaseIdentityEnabled) return send(404, { error: 'Not found.' });
+        const body = await readJson(request);
+        if (!body || Object.keys(body).some(key => key !== 'idToken')) return send(400, { error: 'Invalid identity request.' });
+        const identity = await firebaseVerify(body.idToken);
+        if (!identity) return send(401, { error: 'Firebase identity unavailable.' });
+        const accounts = db.collection('auth_accounts');
+        let account = await accounts.findOne({ _id: identity.uid });
+        if (!account) {
+          // New users are created by Firebase Auth, never by submitted UID/email.
+          try { await accounts.insertOne({ _id: identity.uid, ...(identity.email ? { email: identity.email } : {}),
+            displayName: identity.displayName, emailVerified: identity.emailVerified, disabled: false,
+            providers: [], sourceProject: identity.project, createdAt: now() }); }
+          catch (error) { if (error.code !== 11000) throw error; }
+          account = await accounts.findOne({ _id: identity.uid });
+        }
+        if (!account || account.sourceProject !== identity.project || account.disabled) return send(401, { error: 'Account unavailable.' });
+        // A short-lived session caps the lifetime of a previously verified
+        // Firebase identity. Refresh exchange keeps sign-out/revocation bounded.
+        const session = await sessions.create(account._id, false, 3600000);
+        await sessions.revoke(readSessionToken(request.headers.cookie));
+        response.setHeader('Set-Cookie', sessionCookie(session.token, { maxAge: 3600 }));
+        return send(200, { user: await sessions.resolve(session.token) });
+      }
+      // Once Firebase Auth is authoritative, archived password hashes or a
+      // separate Telegram/Google bridge must not bypass a Firebase reset/revoke.
+      if (firebaseIdentityEnabled && path !== '/api/auth/logout') return send(404, { error: 'Not found.' });
       if (path === '/api/auth/google') {
         const body = await readJson(request);
         const identity = await googleVerify(body?.idToken);
