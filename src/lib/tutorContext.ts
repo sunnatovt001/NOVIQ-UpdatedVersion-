@@ -91,7 +91,7 @@ export const buildStudentTutorContext = (profile: UserProfile | null | undefined
       compact(form.currentScore) ? `current score ${form.currentScore}` : undefined,
       compact(form.targetScore) ? `target score ${form.targetScore}` : undefined,
       remaining !== undefined ? `${remaining} days remaining` : undefined,
-      compact(form.schoolSubject) ? `subject ${form.schoolSubject}` : undefined,
+      (form.mode === 'school' || form.mode === 'entrance') && compact(form.schoolSubject) ? `subject ${form.schoolSubject}` : undefined,
       compact(form.hoursPerDay) ? `${form.hoursPerDay} hours/day` : undefined,
       compact(form.daysPerWeek) ? `${form.daysPerWeek} days/week` : undefined,
     ].filter(Boolean);

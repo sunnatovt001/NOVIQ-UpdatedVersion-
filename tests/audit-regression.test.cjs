@@ -584,6 +584,8 @@ test('Tutor uses the selected profile goal without treating untouched IELTS defa
   state={...state,lastPlanKey:'confirmed',form:{mode:'school',schoolSubject:'Physics',goal:'Mechanics'}};
   const context=buildStudentTutorContext({goals:['Improve school grades']},'student');
   assert.ok(context.includes('subject Physics'));assert.ok(context.includes('goal Mechanics'));assert.ok(!context.includes('IELTS'));
+  state={...state,form:{mode:'ielts',goal:'IELTS 7.5',schoolSubject:'Mathematics'}};
+  assert.ok(!buildStudentTutorContext({goals:['Prepare for IELTS']},'student').includes('subject Mathematics'),'A hidden default school subject must not override the selected exam');
   assert.equal(buildStudentTutorContext(null,'other').includes('Student name:'),false);
 });
 
