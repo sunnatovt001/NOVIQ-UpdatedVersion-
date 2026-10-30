@@ -2,14 +2,24 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "vite",
   "installCommand": "npm ci && npm ci --prefix functions && npm ci --prefix server",
-  "buildCommand": "npm run verify",
+  "buildCommand": "npm run verify && node server/scripts/catch-up-firebase-mirror.mjs --execute --max-events=1640 --max-writes=1280 && node scripts/production-readiness.mjs",
   "outputDirectory": "dist",
   "functions": {
-    "api/rpc.js": { "maxDuration": 120 },
-    "api/telegram.js": { "maxDuration": 120 },
-    "api/data.js": { "maxDuration": 120 },
-    "api/files.js": { "maxDuration": 120 },
-    "api/maintenance.js": { "maxDuration": 120 }
+    "api/rpc.js": {
+      "maxDuration": 120
+    },
+    "api/telegram.js": {
+      "maxDuration": 120
+    },
+    "api/data.js": {
+      "maxDuration": 120
+    },
+    "api/files.js": {
+      "maxDuration": 120
+    },
+    "api/maintenance.js": {
+      "maxDuration": 120
+    }
   },
   "crons": [
     {
@@ -22,8 +32,29 @@
     }
   ],
   "headers": [
-    { "source": "/api/(.*)", "headers": [{ "key": "Cache-Control", "value": "no-store" }] },
-    { "source": "/(.*)", "headers": [{ "key": "X-Content-Type-Options", "value": "nosniff" }] }
+    {
+      "source": "/api/(.*)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-store"
+        }
+      ]
+    },
+    {
+      "source": "/(.*)",
+      "headers": [
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        }
+      ]
+    }
   ],
-  "rewrites": [{ "source": "/((?!api/).*)", "destination": "/index.html" }]
+  "rewrites": [
+    {
+      "source": "/((?!api/).*)",
+      "destination": "/index.html"
+    }
+  ]
 }
