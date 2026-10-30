@@ -193,6 +193,7 @@ test('malformed AI activities cannot silently acquire template questions or prom
 });
 
 function handler(path, name, context) {
+  path = {'src/pages/Tutor.tsx':'src/features/tutor/useTutorController.ts','src/pages/Notes.tsx':'src/features/notebook/useNotesController.ts','src/features/free/FreeNotes.tsx':'src/features/notebook/useNotesController.ts'}[path] || path;
   context.sourceRequestRef ??= { current: false };
   context.withSingleSourceRequest ??= load('src/features/notebook/sourceBatch.ts').withSingleSourceRequest;
   context.Error = Error;
@@ -572,6 +573,20 @@ test('AI callable errors provide auth, quota, timeout and malformed-response gui
   assert.match(gemini.getFriendlyAiError({ message: 'AI_EMPTY_RESPONSE' }), /empty response/);
 });
 
+test('Tutor uses the selected profile goal without treating untouched IELTS defaults as a chosen plan', () => {
+  let state = {form:{mode:'ielts',goal:'IELTS 7.5',currentScore:'5.5',schoolSubject:'Mathematics'},tasks:[],lastPlanKey:''};
+  const {buildStudentTutorContext}=load('src/lib/tutorContext.ts',{'@/src/lib/localStore':{loadLocalData:()=>state}});
+  for(const goal of ['Prepare for SAT','Prepare for HSK','Reach a CEFR level','Improve school grades','Prepare for university entrance']){
+    const context=buildStudentTutorContext({onboarding:{goal,challenge:'Time management'},goals:['Prepare for IELTS']},'student');
+    assert.ok(context.includes(`Selected learning goal: ${goal}`));
+    assert.ok(!context.includes('IELTS'));assert.ok(!context.includes('current score 5.5'));
+  }
+  state={...state,lastPlanKey:'confirmed',form:{mode:'school',schoolSubject:'Physics',goal:'Mechanics'}};
+  const context=buildStudentTutorContext({goals:['Improve school grades']},'student');
+  assert.ok(context.includes('subject Physics'));assert.ok(context.includes('goal Mechanics'));assert.ok(!context.includes('IELTS'));
+  assert.equal(buildStudentTutorContext(null,'other').includes('Student name:'),false);
+});
+
 test('Tutor context treats interface language as fallback and preserves evidence and material names', () => {
   const { buildTutorRequestContext } = load('src/features/tutor/tutorRequest.ts');
   for (const [language, expected] of [['en-US', 'English'], ['uz-UZ', 'Uzbek'], ['ru-RU', 'Russian']]) {
@@ -754,8 +769,8 @@ test('Notebook source digest preserves selected language, source evidence and at
     else assert.ok(context.includes(text.slice(0, 18000)));
     assert.ok(!context.includes('x'.repeat(18001)));
   }
-  assert.match(fs.readFileSync('src/pages/Notes.tsx', 'utf8'), /summarizeUploadedSource\(file, attachment, extractedText, notebookStudentContext, notebookLanguage\)/);
-  const source = fs.readFileSync('src/pages/Notes.tsx', 'utf8');
+  assert.match(fs.readFileSync('src/features/notebook/useNotesController.ts', 'utf8'), /summarizeUploadedSource\(file, attachment, extractedText, notebookStudentContext, notebookLanguage\)/);
+  const source = fs.readFileSync('src/features/notebook/useNotesController.ts', 'utf8');
   assert.equal((source.match(/"en-US"/g) || []).length, 1, 'Only the default locale mapping may use a fixed English language');
 });
 

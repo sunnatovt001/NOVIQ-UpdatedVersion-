@@ -1,4 +1,5 @@
 import { randomBytes } from 'node:crypto';
+import {documentOrderKeys,orderField,scalarOrderKey} from './documentOrder.mjs';
 import { pack,revive,Timestamp,FieldValue,validPath,validField,fieldAt,equal,applyDocumentWrite } from '../../shared/mongoValues.mjs';
 export {Timestamp,FieldValue};
 const fail=(code,message='Database request rejected.')=>Object.assign(new Error(message),{code});
@@ -81,16 +82,39 @@ export function createCanonicalStore({getDatabase,transaction,enqueueBackup}){
   async function query(spec,session){
     mongoQuery(spec); // Validate cursor as well as the filter before any I/O.
     const {filter,orders}=mongoQuery({...spec,after:undefined});
-    const rows=await (await documents()).find(filter,{session}).limit(10001).maxTimeMS(10000).toArray();
-    if(rows.length>10000)throw fail('resource-exhausted','Query exceeds the bounded collection budget. Narrow the query.');
-    const value=(row,order)=>order.field==='_id'?row._id:fieldAt(row,order.field);
-    rows.sort((a,b)=>{for(const order of orders){const comparison=compareDocumentValues(value(a,order),value(b,order));if(comparison)return comparison*order.direction;}return 0;});
-    let selected=rows;
-    if(spec.after!==undefined){
-      const cursor=(Array.isArray(spec.after)?spec.after:[spec.after]).map((v,i)=>orders[i].field==='_id'&&typeof v==='string'&&!v.includes('/')?`${spec.path}/${v}`:pack(v));
-      selected=rows.filter(row=>{for(let i=0;i<cursor.length;i++){const result=compareDocumentValues(value(row,orders[i]),cursor[i])*orders[i].direction;if(result)return result>0;}return false;});
+    const records=await documents();
+    const cursor=spec.after===undefined?null:(Array.isArray(spec.after)?spec.after:[spec.after]).map((v,i)=>orders[i].field==='_id'&&typeof v==='string'&&!v.includes('/')?`${spec.path}/${v}`:pack(v));
+    const normalizedOrders=orders.map(o=>({...o,field:o.field==='_id'?'_id':orderField(o.field.slice(5))}));
+    const keyValues=cursor?.map((v,i)=>orders[i].field==='_id'?v:scalarOrderKey(v));
+    const custom=orders.filter(o=>o.field!=='_id');
+    // Old/complex records retain exact comparison through a bounded-memory
+    // streaming compatibility path. Normal scalar pages sort/limit in MongoDB.
+    const missingKeys=custom.map(o=>({[orderField(o.field.slice(5))]:{$exists:false}}));
+    const legacy=missingKeys.length&&await records.findOne({$and:[filter,{$or:missingKeys}]},{session,maxTimeMS:10000});
+    if(!legacy&&(!keyValues||keyValues.every(v=>v!==null))){
+      const clauses=[filter];
+      if(keyValues)clauses.push({$or:keyValues.map((v,index)=>({$and:[...keyValues.slice(0,index).map((p,i)=>({[normalizedOrders[i].field]:{$eq:p}})),
+        {[normalizedOrders[index].field]:{[normalizedOrders[index].direction===1?'$gt':'$lt']:v}}]}))});
+      const rows=await records.find({$and:clauses},{session,collation:{locale:'simple'}})
+        .sort(Object.fromEntries(normalizedOrders.map(o=>[o.field,o.direction])))
+        .limit(spec.limit||10001).maxTimeMS(10000).toArray();
+      if(!spec.limit&&rows.length>10000)throw fail('resource-exhausted','Add a cursor and limit for large collections.');
+      const docs=rows.map(snapshot);
+      return {docs,size:docs.length,empty:docs.length===0,forEach:callback=>docs.forEach(callback)};
     }
-    const docs=(spec.limit?selected.slice(0,spec.limit):selected).map(snapshot);
+    const value=(row,order)=>order.field==='_id'?row._id:fieldAt(row,order.field);
+    const compare=(a,b)=>{for(const order of orders){const result=compareDocumentValues(value(a,order),value(b,order));if(result)return result*order.direction;}return 0;};
+    const selected=[],budget=spec.limit||10000;
+    for await(const row of records.find(filter,{session}).maxTimeMS(10000)){
+      if(cursor){let after=false;for(let i=0;i<cursor.length;i++){const result=compareDocumentValues(value(row,orders[i]),cursor[i])*orders[i].direction;if(result){after=result>0;break;}}if(!after)continue;}
+      let low=0,high=selected.length;
+      while(low<high){const mid=(low+high)>>>1;if(compare(selected[mid],row)<0)low=mid+1;else high=mid;}
+      if(low<budget)selected.splice(low,0,row);
+      if(selected.length>budget){if(!spec.limit)throw fail('resource-exhausted','Add a cursor and limit for large collections.');selected.pop();}
+      // A late row after the retained window still counts toward unpaged limits.
+      else if(!spec.limit&&low>=budget)throw fail('resource-exhausted','Add a cursor and limit for large collections.');
+    }
+    const docs=selected.map(snapshot);
     return {docs,size:docs.length,empty:docs.length===0,forEach:callback=>docs.forEach(callback)};
   }
   async function aggregate(spec,fields,session){
@@ -178,6 +202,7 @@ export function createCanonicalStore({getDatabase,transaction,enqueueBackup}){
       await fence(`collection:${path.split('/').slice(0,-1).join('/')}`);
       const parts=path.split('/'),row={_id:path,parent:parts.slice(0,-1).join('/'),collectionGroup:parts.at(-2),id:parts.at(-1),
         data:data===null?(old?.data||{}):pack(data),deleted:data===null,version:(old?.version||0)+1,updatedAt:now};
+      row.sortKeys=documentOrderKeys(row.data);
       if(old){const result=await collection.replaceOne({_id:path,version:old.version},row,{session});if(result.matchedCount!==1)throw fail('aborted');}
       else await collection.insertOne(row,{session});
       await db.collection('mongo_trigger_jobs').insertOne({_id:`${path}:${row.version}`,path,version:row.version,

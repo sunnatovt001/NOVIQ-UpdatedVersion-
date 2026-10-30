@@ -49,7 +49,6 @@ export function createDocumentPolicy({uid,claims={},lookup}){
     if(p.length===2&&['analytics','analyticsEvents'].includes(p[0]))return isAdmin();
     if(p.length===2&&p[0]==='analyticsUsers')return p[1]===uid||await isAdmin();
     if((p.length===2&&['studyPlans','notes','studySessions'].includes(p[0])||p.length===4&&p[0]==='decks'&&p[2]==='flashcards'))return data?.userId===uid;
-    if(p.length===4&&p[0]==='accountabilityRooms'&&p[2]==='messages')return true;
     return adminGroups.has(p.at(-2))&&await isAdmin();
   }
   const ownerConstraint=filters=>(filters||[]).some(c=>c.kind==='where'&&c.field==='userId'&&c.op==='=='&&c.value===uid);
@@ -67,7 +66,6 @@ export function createDocumentPolicy({uid,claims={},lookup}){
     if(p[0]==='users')return canRead(`${spec.path}/query-placeholder`,null);
     if(p[0]==='communities'&&p.length===3&&p[2]==='members')return await isAdmin()||(spec.filters||[]).some(c=>c.kind==='where'&&c.field==='__name__'&&c.op==='=='&&[uid,`${spec.path}/${uid}`].includes(c.value));
     if(p[0]==='communities'&&p.length===3&&p[2]==='messages')return !!await lookup(`communities/${p[1]}/members/${uid}`);
-    if(p[0]==='accountabilityRooms'&&p.length===3&&p[2]==='messages')return true;
     if(p[0]==='decks'&&p.length===3&&p[2]==='flashcards')return ownerConstraint(spec.filters);
     return false;
   }
@@ -120,7 +118,6 @@ export function createDocumentPolicy({uid,claims={},lookup}){
       }
     }
     if(p.length===2&&p[0]==='analyticsEvents')return creating?!deleting&&hasOnly(after,['userId','eventType','xp','details','page','createdAt','syncStatus','syncedAt'])&&after.userId===uid&&typeof after.eventType==='string'&&/^[a-z_]{1,64}$/.test(after.eventType)&&(!('xp'in after)||typeof after.xp==='number'&&after.xp<=500)&&sync(after):!deleting&&before.userId===uid&&syncOnly(before,after);
-    if(p.length===4&&p[0]==='accountabilityRooms'&&p[2]==='messages')return creating?!deleting&&after.userId===uid:before.userId===uid;
     return false;
   }
   return {canRead,canQuery,canWrite,isAdmin};

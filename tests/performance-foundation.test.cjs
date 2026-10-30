@@ -140,15 +140,17 @@ test("Planner keeps domain logic outside the React page", () => {
 
 test("Tutor keeps file processing modular and defaults to clean English copy", () => {
   const tutor = read("src/pages/Tutor.tsx");
+  const controller = read('src/features/tutor/useTutorController.ts');
   const attachments = read("src/features/tutor/tutorAttachments.ts");
   const copy = read("src/features/tutor/tutorCopy.ts");
 
   assert.ok(tutor.split(/\r?\n/).length <= 625);
-  assert.match(tutor, /fileToTutorAttachment/);
+  assert.match(controller, /fileToTutorAttachment/);
   assert.equal(tutor.includes("const readAsDataUrl"), false);
-  assert.match(tutor, /locale === "uz" \? "uz-UZ"/);
+  assert.match(controller, /locale === "uz" \? "uz-UZ"/);
   assert.match(attachments, /await import\("mammoth"\)/);
-  assert.match(copy, /Здравствуйте!/);
+  assert.match(copy, /Задайте вопрос/);
+  assert.doesNotMatch(copy, /Hello!|Assalomu alaykum!|Здравствуйте!/);
   assert.equal(copy.includes("Р—Р"), false);
 });
 
@@ -169,12 +171,13 @@ test("application locale defaults to English and persists explicit choices", () 
 
 test("Focus stays idle until requested and supports narrow localized controls", () => {
   const focus = read("src/pages/Focus.tsx");
+  const controller = read('src/features/focus/useFocusController.ts');
   const copy = read("src/features/focus/focusCopy.ts");
 
-  assert.match(focus, /useState<string \| null>\(null\)/);
+  assert.match(controller, /useState<string \| null>\(null\)/);
   assert.equal(focus.includes('useState<string | null>("focus-beats")'), false);
-  assert.match(focus, /window\.setInterval/);
-  assert.match(focus, /\}, \[isActive\]\);/);
+  assert.match(controller, /window\.setInterval/);
+  assert.match(controller, /\}, \[isActive\]\);/);
   assert.match(focus, /grid-cols-\[minmax\(0,1fr\)_minmax\(8\.5rem,1\.7fr\)_minmax\(0,1fr\)\]/);
   assert.match(copy, /Fokus hududi/);
   assert.match(copy, /Зона фокуса/);
@@ -246,7 +249,7 @@ test("Notebook separates its data model, source dialog and AI workspace", () => 
   const aiPanel = read("src/features/notebook/NotebookAiPanel.tsx");
 
   assert.ok(notebook.split(/\r?\n/).length <= 1100);
-  assert.match(notebook, /useNotebookDraft/);
+  assert.match(read('src/features/notebook/useNotesController.ts'), /useNotebookDraft/);
   assert.match(read('src/features/pro/useNotebookDraft.ts'), /loadLocalDataStrict/);
   assert.match(notebook, /<NotebookSourceDialog/);
   assert.match(notebook, /<NotebookAiPanel/);

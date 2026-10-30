@@ -12,14 +12,14 @@
     "education"
   ],
   "author": "Noviq AI",
-  "homepage": "https://noviqq.uz",
+  "homepage": "https://noviqupdated.vercel.app",
   "repository": {
     "type": "git",
     "url": "https://github.com/noviq/noviq"
   },
   "type": "module",
   "scripts": {
-    "dev": "vite --port=3000 --strictPort --host=0.0.0.0",
+    "dev": "vite --port=3000 --strictPort --host=127.0.0.1",
     "dev:local-ai": "vite --port=3000 --host=127.0.0.1 --mode local-ai",
     "bot:diagnose": "node scripts/telegram-runner.mjs --diagnose",
     "bot:poll": "node scripts/telegram-runner.mjs --poll",
@@ -29,7 +29,7 @@
     "lint": "tsc --noEmit",
     "verify": "node scripts/run-verification.mjs",
     "test": "node --test tests/*.test.cjs && npm --prefix functions test",
-    "test:rules": "npx firebase-tools@15.32.1 emulators:exec --project demo-noviq --config firebase.emulators.json --only firestore \"node --test tests/firestore.rules.cjs tests/metrics.firestore.cjs tests/progression.firestore.cjs\"",
+    "test:rules": "npx firebase-tools@15.32.1 emulators:exec --project demo-noviq --config firebase.emulators.json --only firestore \"node --test tests/firestore.rules.cjs tests/metrics.firestore.cjs tests/progression.firestore.cjs tests/mongo.rules-parity.cjs\"",
     "deploy:hosting": "npm run verify && npm run release:check:live && npx --yes firebase-tools@15.32.1 deploy --only hosting --project gen-lang-client-0937997111",
     "deploy": "npm run verify && npm run release:check:live && npx --yes firebase-tools@15.32.1 deploy --only hosting,firestore:ai-studio-b3129ca2-3cf9-4d3f-bf24-5a6d266fe7a1 --project gen-lang-client-0937997111",
     "deploy:full": "npm run verify && npm run release:check && npx --yes firebase-tools@15.32.1 deploy --only hosting,functions,firestore:ai-studio-b3129ca2-3cf9-4d3f-bf24-5a6d266fe7a1,storage --project gen-lang-client-0937997111 && npm run release:check:live",
@@ -79,6 +79,6 @@
     "playwright": "^1.63.0",
     "tailwindcss": "^4.1.14",
     "typescript": "~5.8.2",
-    "vite": "^6.2.3"
+    "vite": "^6.4.5"
   }
 }

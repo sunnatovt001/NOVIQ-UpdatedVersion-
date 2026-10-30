@@ -21,16 +21,16 @@ const origin='http://127.0.0.1:4184',uid='reference-controls',scope='controls-'+
  }
  console.log('PASS current Free trial dialog follows the theme; consent required; dismissing never grants access');
  const now=Date.now();await api('seed',{records:{[`users/${uid}`]:{...profile,subscription:{plan:'pro',status:'active',currentPeriodEnd:new Date(now+30*86400000).toISOString()}},[`users/${uid}/proExperience/onboarding`]:{completed:true},[`users/${uid}/decks/deck`]:{title:'Controls deck',subject:'Science',tags:[],updatedAt:new Date(now).toISOString()},[`users/${uid}/decks/deck/cards/card`]:{front:'Question',back:'Answer',order:0,deckId:'deck',updatedAt:new Date(now).toISOString()}}});
- await page.goto(base+'#/dashboard');await page.reload();await page.locator('.pro-reference-overview').waitFor();
+ await page.goto(base+'#/dashboard');await page.reload();await page.locator('.glass-dashboard').waitFor();
  const before=await page.locator('.noviq-app').getAttribute('data-pro-theme');await page.locator('.theme-toggle:visible').click();
- assert.notEqual(await page.locator('.noviq-app').getAttribute('data-pro-theme'),before);await page.reload();await page.locator('.pro-reference-overview').waitFor();assert.notEqual(await page.locator('.noviq-app').getAttribute('data-pro-theme'),before);
+ assert.notEqual(await page.locator('.noviq-app').getAttribute('data-pro-theme'),before);await page.reload();await page.locator('.glass-dashboard').waitFor();assert.notEqual(await page.locator('.noviq-app').getAttribute('data-pro-theme'),before);
  console.log('PASS Dashboard theme control switches appearance and survives refresh');
  for(const theme of ['light','dark']){
   await page.evaluate(theme=>localStorage.setItem('noviq-pro-theme',theme),theme);await page.goto(base+'#/flashcards');await page.reload();await page.locator('.pro-card-preview').waitFor();
   await page.locator('.fc-launch-actions').getByRole('button',{name:'Start studying',exact:true}).click();
   const study=page.locator('.fc-study-backdrop.pro-study');await study.waitFor();assert.equal(await study.evaluate(el=>el.classList.contains('dark')),theme==='dark');
   const card=study.locator('.fc-flashcard');await card.click();await page.waitForTimeout(450);assert.ok((await card.innerText()).includes('Answer'));
-  const color=await card.evaluate(el=>getComputedStyle(el).backgroundColor);assert.notEqual(color,'rgba(0, 0, 0, 0)');assert.equal(await card.evaluate(el=>getComputedStyle(el).color),theme==='light'?'rgb(20, 33, 61)':'rgb(248, 250, 252)');
+  const color=await card.evaluate(el=>getComputedStyle(el).backgroundColor);assert.ok(color!=='rgba(0, 0, 0, 0)' || await card.evaluate(el=>getComputedStyle(el).backgroundImage!=='none'));assert.equal(await card.evaluate(el=>getComputedStyle(el).color),theme==='light'?'rgb(20, 33, 61)':'rgb(248, 250, 252)');
   await page.screenshot({path:`artifacts/real-account/pro/study-dialog-${theme}.png`});
   await study.getByRole('button',{name:'Save & exit',exact:true}).click();await study.waitFor({state:'hidden'});
  }

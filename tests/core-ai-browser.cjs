@@ -32,9 +32,9 @@ const copy = {
         } else {
           await page.getByRole('button', { name: copy[locale].create, exact: true }).click();
           const warning = {
-            en:'Saved locally. Cloud sync will resume after Firebase rules are deployed.',
-            uz:'Qurilmada saqlandi. Firebase qoidalari joylangach bulut bilan sinxronlanadi.',
-            ru:'Сохранено локально. Синхронизация возобновится после публикации правил Firebase.',
+            en:'The server has not confirmed these changes. Keep this page open and retry saving.',
+            uz:'Server bu o‘zgarishlarni tasdiqlamadi. Sahifani ochiq saqlang va qayta saqlab ko‘ring.',
+            ru:'Сервер не подтвердил изменения. Не закрывайте страницу и повторите сохранение.',
           }[locale];
           await page.getByText(warning, { exact:true }).waitFor();
           await page.getByRole('button', { name: 'AI', exact: true }).click();

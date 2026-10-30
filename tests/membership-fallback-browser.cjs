@@ -11,7 +11,7 @@ const assert = require('node:assert/strict');
       assert.equal(await page.locator('.pro-environment').count(), 0);
       // Upgrade may show a local retry notice; it must never replace the shell.
       if (route !== 'pricing') assert.equal(await page.getByText('This action could not be completed. Your saved content is safe. Retry when connected.', { exact: true }).count(), 0);
-      assert.ok((await page.locator('main').innerText()).trim().length > 20);
+      assert.ok((await page.locator('.noviq-app > main').innerText()).trim().length > 20);
       console.log('PASS membership unavailable: Free ' + route + ' remains usable; PRO locked');
     }
     await page.screenshot({ path: 'artifacts/membership-fallback.png', fullPage: true });

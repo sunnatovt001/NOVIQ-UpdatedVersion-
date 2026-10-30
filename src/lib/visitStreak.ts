@@ -6,7 +6,7 @@ export function visitStreaks(data: Visits | null | undefined, at = Date.now()) {
   const gap = visitDay(at) - Number(data?.lastVisitDay);
   const stored = count(data?.visitStreak);
   // A current streak is visible only after a confirmed visit today.
-  // Keep the stored run so a visit later today can continue yesterday’s sequence.
+  // Keep the stored run so a visit later today can continue yesterdayï¿½s sequence.
   return { current: gap === 0 ? stored : 0, best: Math.max(stored, count(data?.bestVisitStreak)) };
 }
 export function nextVisit(data: Visits, at = Date.now()) {

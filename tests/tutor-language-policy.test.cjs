@@ -15,14 +15,26 @@ test('Free and Pro Tutor send the latest question unchanged under a question-fir
     for (const premium of [false, true]) {
       await exports.askTutor(question, 'Interface language: uz-UZ', 'uz-UZ', { ...(premium ? { premiumMode: 'coach' } : {}), history: [{ role: 'user', content: 'Old English conversation' }] });
       const request = requests.at(-1);
-      assert.ok(request.contents.endsWith(`Student question:\n${question}`));
+      assert.ok(request.contents.at(-1).parts.at(-1).text.endsWith(`Student question:\n${question}`));
+      assert.equal(request.contents[0].role, 'user');
+      assert.equal(request.contents[0].parts[0].text, 'Old English conversation');
       assert.ok(request.config.systemInstruction.includes('explicit request to answer in a particular language takes priority'));
       assert.ok(request.config.systemInstruction.includes('Uzbek written in Cyrillic is Uzbek, not Russian'));
       assert.ok(!request.config.systemInstruction.includes('Answer fluently in Uzbek'));
-      assert.ok(!request.contents.startsWith('Language: Uzbek'));
+      assert.ok(!request.contents.at(-1).parts.at(-1).text.startsWith('Language: Uzbek'));
       assert.equal(request.feature, premium ? 'intelligence' : 'tutor');
     }
   }
+  await exports.askTutor('yaxshi rahmat men ham zo‘rman', 'Selected learning goal: Prepare for SAT.', 'uz-UZ', {
+    history: [{role:'user',content:'salom'}, {role:'assistant',content:'Salom! Qalaysiz?'}, {role:'user',content:'yaxshi rahmat men ham zo‘rman'}],
+  });
+  const continuation=requests.at(-1);
+  assert.deepEqual(Array.from(continuation.contents,turn=>turn.role),['user','model','user']);
+  assert.equal(continuation.contents[1].parts[0].text,'Salom! Qalaysiz?');
+  assert.match(continuation.contents.at(-1).parts[0].text,/Selected learning goal: Prepare for SAT/);
+  assert.match(continuation.config.systemInstruction,/IELTS is not a default/);
+  assert.match(continuation.config.systemInstruction,/do not restart it/i);
+  assert.equal(JSON.stringify(continuation.contents).split('yaxshi rahmat').length-1,1,'Retry must not duplicate the latest turn');
   await exports.askTutor('Explain https://example.com and https://youtu.be/abc123', '', 'uz-UZ', { attachments: [{ name: 'voice.webm', mimeType: 'audio/webm', data: 'YXVkaW8=' }] });
   const media = requests.at(-1);
   assert.equal(media.contents[0].parts.find(part => part.inlineData).inlineData.mimeType, 'audio/webm');

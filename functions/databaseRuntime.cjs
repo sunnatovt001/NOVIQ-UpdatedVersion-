@@ -1,6 +1,7 @@
 // One database authority per deployment. This module never falls back to
 // Firestore after a MongoDB failure.
-if (process.env.NOVIQ_DATA_BACKEND !== 'mongodb') {
+const {server}=require('./backendConfig.cjs').backendConfiguration(process.env);
+if (server !== 'mongodb') {
   module.exports = require('firebase-admin/firestore');
 } else {
   const {createDatabaseConnection,readDatabaseConfig,createCanonicalStore,Timestamp,FieldValue,AggregateField,
@@ -11,7 +12,7 @@ if (process.env.NOVIQ_DATA_BACKEND !== 'mongodb') {
   const getDatabase = async () => {
     if (!ready) ready = (async()=>{
       const db=databaseNamespace(await connection.getDatabase(),process.env.MONGODB_COLLECTION_PREFIX||'');
-      await db.collection('mongo_documents').createIndex({parent:1,deleted:1,id:1});
+      await db.collection('mongo_documents').createIndex({parent:1,deleted:1,_id:1});
       await db.collection('mongo_documents').createIndex({collectionGroup:1,deleted:1});
       await db.collection('mongo_trigger_jobs').createIndex({state:1,nextAttemptAt:1,createdAt:1});
       await db.collection('firebase_mirror_outbox').createIndex({state:1,nextAttemptAt:1,createdAt:1});

@@ -30,6 +30,18 @@ test('premium AI requires current server entitlement and uses atomic finite quot
  const day=require('./policy').dayKey();h.records.set('users/u1/trusted/aiUsage',{dayKey:day,counts:{intelligence:30},total:30});await assert.rejects(h.functions.generateAiResponse(request),{code:'resource-exhausted'});assert.equal(providerCalls,1);
  const sub=h.records.get('users/u1').subscription;h.records.set('users/u1',{subscription:{...sub,trialEndsAt:new Date(0).toISOString(),currentPeriodEnd:new Date(0).toISOString()}});await assert.rejects(h.functions.generateAiResponse(request),{code:'permission-denied'});assert.equal(providerCalls,1);
 });
+test('premium Tutor modes preserve natural continuity, selected goals and question language',async()=>{
+ const bodies=[];const h=harness({}, {fetch:async(url,options)=>{bodies.push(JSON.parse(options.body));return {ok:true,json:async()=>({candidates:[{content:{parts:[{text:'Answer'}]}}]})};}});
+ await h.functions.startProTrial({auth,data:{acceptTerms:true}});
+ for(const premiumMode of ['coach','practice','mistake']){
+  await h.functions.generateAiResponse({auth,data:{feature:'intelligence',premiumMode,contents:[{role:'user',parts:[{text:'Selected learning goal: HSK. 你好是什么意思？'}]}]}});
+  const instruction=bodies.at(-1).systemInstruction.parts[0].text;
+  assert.match(instruction,/do not repeat greetings/);assert.match(instruction,/latest student question language and script/);
+  assert.match(instruction,/Never assume IELTS by default/);assert.match(instruction,/selected profile goal/);
+  assert.equal(bodies.at(-1).contents[0].parts[0].text,'Selected learning goal: HSK. 你好是什么意思？');
+ }
+});
+
 test('cancel preserves the paid period and all personal learning content',async()=>{
  const h=harness();await h.functions.startProTrial({auth,data:{acceptTerms:true}});const end=h.records.get('users/u1').subscription.currentPeriodEnd;
  h.records.set('users/u1/planner/smart-v2',{tasks:[{id:'existing'}]});h.records.set('users/u1/notebookNotes/saved',{content:'Private note'});h.records.set('users/u1/decks/saved',{title:'Saved deck'});

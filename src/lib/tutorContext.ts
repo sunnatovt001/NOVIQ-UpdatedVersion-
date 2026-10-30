@@ -11,6 +11,7 @@ type StoredPlannerTask = {
 };
 
 type StoredPlannerState = {
+  lastPlanKey?: string;
   form?: {
     mode?: string;
     goal?: string;
@@ -68,13 +69,19 @@ export const buildStudentTutorContext = (profile: UserProfile | null | undefined
   const lines: string[] = ["Student context for Noviq Tutor:"];
 
   if (profile?.displayName) lines.push(`Student name: ${profile.displayName}.`);
-  if (profile?.goals?.length) lines.push(`Profile goals: ${profile.goals.join(", ")}.`);
+  const selectedGoal = compact(profile?.onboarding?.goal) || compact(profile?.onboardingAnswers?.mainGoal);
+  if (selectedGoal) lines.push(`Selected learning goal: ${selectedGoal}.`);
+  else if (profile?.goals?.length) lines.push(`Selected learning goals: ${profile.goals.join(", ")}.`);
   if (profile?.currentLevel) lines.push(`Current level: ${profile.currentLevel}.`);
   if (profile?.dailyTargetMinutes) lines.push(`Daily study target: ${profile.dailyTargetMinutes} minutes.`);
   if (profile?.streak) lines.push(`Current streak: ${profile.streak} day${profile.streak === 1 ? "" : "s"}.`);
-  if (profile?.onboardingAnswers?.struggle) lines.push(`Known struggle: ${profile.onboardingAnswers.struggle}.`);
+  const struggle = profile?.onboarding?.challenge || profile?.onboardingAnswers?.struggle;
+  if (struggle) lines.push(`Known struggle: ${struggle}.`);
 
-  const form = state?.form;
+  // Visiting Planner persists a default IELTS form before a student creates a
+  // mission. Those defaults are not evidence of the student's selected exam.
+  const hasPlan = Boolean(state?.lastPlanKey || state?.tasks?.length);
+  const form = hasPlan ? state?.form : undefined;
   if (form) {
     const examType = EXAM_LABELS[form.mode || ""] || compact(form.mode);
     const remaining = daysUntil(form.examDate);

@@ -1,9 +1,30 @@
 import {auth} from './firebaseAuth';
 import {Timestamp,FieldValue,pack,revive,fieldAt,validPath} from '../../shared/mongoValues.mjs';
+import {createPollingLoop} from './mongoPolling.mjs';
 export {Timestamp};
 export const serverTimestamp=FieldValue.serverTimestamp,increment=FieldValue.increment,deleteField=FieldValue.delete,
   arrayUnion=FieldValue.arrayUnion,arrayRemove=FieldValue.arrayRemove;
 const listeners=new Map();
+const cache=new Map();
+let cacheOwner;
+function owner(){
+  const uid=auth.currentUser?.uid;
+  if(uid!==cacheOwner){cache.clear();cacheOwner=uid;for(const entry of listeners.values())entry.stop();listeners.clear();}
+  if(!uid)throw error('unauthenticated');
+  return uid;
+}
+const keyFor=body=>JSON.stringify(pack(body));
+function remember(body,result){
+  const key=keyFor(body);cache.delete(key);cache.set(key,structuredClone(result));
+  while(cache.size>200)cache.delete(cache.keys().next().value);
+  return result;
+}
+function cached(body){owner();const value=cache.get(keyFor(body));if(!value)throw error('unavailable');return structuredClone(value);}
+async function read(body,serverOnly=false){
+  owner();
+  try{return remember(body,await request(body));}
+  catch(cause){if(serverOnly||cause.code!=='unavailable')throw cause;return cached(body);}
+}
 const error=code=>Object.assign(new Error(code==='permission-denied'?'Permission denied.':code==='unauthenticated'?'Sign in required.':'Data request failed.'),{code});
 async function request(body){
   const user=auth.currentUser;if(!user)throw error('unauthenticated');
@@ -66,16 +87,18 @@ function snapshots(rows,database,fromCache=false){
   const docs=rows.map(row=>snapshot(row,database,fromCache));return {docs,size:docs.length,empty:docs.length===0,
     metadata:{fromCache,hasPendingWrites:false},forEach:callback=>docs.forEach(callback),docChanges:()=>docs.map((doc,index)=>({type:'added',doc,oldIndex:-1,newIndex:index}))};
 }
-export async function getDoc(ref){return snapshot((await request({operation:'get',path:ref.path})).document,ref.firestore);}
-export const getDocFromServer=getDoc,getDocFromCache=getDoc;
-export async function getDocs(target){return snapshots((await request({operation:'query',query:querySpec(target)})).documents,target.firestore);}
-export const getDocsFromServer=getDocs,getDocsFromCache=getDocs;
+export async function getDocFromServer(ref){return snapshot((await read({operation:'get',path:ref.path},true)).document,ref.firestore);}
+export async function getDocFromCache(ref){return snapshot(cached({operation:'get',path:ref.path}).document,ref.firestore,true);}
+export async function getDoc(ref){try{return await getDocFromServer(ref);}catch(cause){if(cause.code!=='unavailable')throw cause;return getDocFromCache(ref);}}
+export async function getDocsFromServer(target){return snapshots((await read({operation:'query',query:querySpec(target)},true)).documents,target.firestore);}
+export async function getDocsFromCache(target){return snapshots(cached({operation:'query',query:querySpec(target)}).documents,target.firestore,true);}
+export async function getDocs(target){try{return await getDocsFromServer(target);}catch(cause){if(cause.code!=='unavailable')throw cause;return getDocsFromCache(target);}}
 export const sum=field=>({operation:'sum',field});
 export const count=()=>({operation:'count'});
 export async function getAggregateFromServer(target,fields){const result=await request({operation:'aggregate',query:querySpec(target),fields});return {data:()=>result.data};}
 export const getCountFromServer=target=>getAggregateFromServer(target,{count:count()});
 function refresh(){for(const entry of listeners.values())entry.refresh();}
-async function commit(writes,reads=[]){const result=await request({operation:'commit',writes,reads});refresh();return result;}
+async function commit(writes,reads=[]){owner();const result=await request({operation:'commit',writes,reads});cache.clear();refresh();return result;}
 export const setDoc=(ref,data,options={})=>commit([{path:ref.path,kind:'set',data,merge:options.merge===true}]);
 export const updateDoc=(ref,data)=>commit([{path:ref.path,kind:'update',data}]);
 export const deleteDoc=ref=>commit([{path:ref.path,kind:'delete'}]);
@@ -100,23 +123,30 @@ export function onSnapshot(target,...args){
   const observer=typeof args[0]==='function'||args[0]?.next?args[0]:args[1];
   const next=typeof observer==='function'?observer:observer.next.bind(observer);
   const onError=typeof observer==='object'?observer.error?.bind(observer):(typeof args[0]==='function'?args[1]:args[2]);
-  const uid=auth.currentUser?.uid,key=JSON.stringify(pack([uid,target.type,target.path||querySpec(target)]));
+  const uid=owner(),key=JSON.stringify(pack([uid,target.type,target.path||querySpec(target)]));
   let entry=listeners.get(key);
   if(!entry){
-    const subscribers=new Set();let timer,stopped=false,inFlight=false,lastSignature,lastResult;
-    const poll=async()=>{
-      if(stopped||inFlight)return;inFlight=true;
-      try{
+    const subscribers=new Set();let lastResult;
+    const loop=createPollingLoop({
+      isActive:()=>auth.currentUser?.uid===uid&&(typeof navigator==='undefined'||navigator.onLine)&&(typeof document==='undefined'||!document.hidden),
+      read:async()=>{
         if(auth.currentUser?.uid!==uid)throw error('cancelled');
-        const result=target.type==='document'?await request({operation:'get',path:target.path}):await request({operation:'query',query:querySpec(target)});
-        if(stopped)return;
-        const signature=JSON.stringify(result);lastResult=result;
-        const changed=signature!==lastSignature;lastSignature=signature;
+        return read(target.type==='document'?{operation:'get',path:target.path}:{operation:'query',query:querySpec(target)},true);
+      },
+      deliver:(result,changed)=>{
+        lastResult=result;
         for(const sub of subscribers)if(changed||!sub.confirmed){sub.confirmed=true;sub.next(target.type==='document'?snapshot(result.document,target.firestore):snapshots(result.documents,target.firestore));}
-      }catch(cause){if(!stopped)for(const sub of subscribers)sub.error?.(cause);lastSignature=undefined;}
-      finally{inFlight=false;if(!stopped){clearTimeout(timer);timer=setTimeout(poll,typeof document!=='undefined'&&document.hidden?30000:5000);}}
-    };
-    entry={subscribers,refresh(){clearTimeout(timer);void poll();},cached(){return lastResult;},stop(){stopped=true;clearTimeout(timer);}};
+      },
+      onError:cause=>{for(const sub of subscribers)sub.error?.(cause);},
+    });
+    const foreground=()=>{if(typeof document!=='undefined'&&document.hidden||typeof navigator!=='undefined'&&!navigator.onLine)loop.pause();else loop.refresh();};
+    if(typeof window!=='undefined'){window.addEventListener('online',foreground);window.addEventListener('offline',foreground);window.addEventListener('focus',foreground);}
+    if(typeof document!=='undefined')document.addEventListener('visibilitychange',foreground);
+    entry={subscribers,refresh:()=>loop.refresh(),cached:()=>lastResult,stop(){
+      loop.stop();
+      if(typeof window!=='undefined'){window.removeEventListener('online',foreground);window.removeEventListener('offline',foreground);window.removeEventListener('focus',foreground);}
+      if(typeof document!=='undefined')document.removeEventListener('visibilitychange',foreground);
+    }};
     listeners.set(key,entry);
   }
   const subscriber={next,error:onError};entry.subscribers.add(subscriber);

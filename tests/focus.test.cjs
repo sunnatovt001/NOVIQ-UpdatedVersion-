@@ -159,8 +159,8 @@ function focusHarness({
     intervals.set(id, fn);
     return id;
   };
-  vm.runInNewContext(compile("src/pages/Focus.tsx"), {
-    exports,
+  const runtime = {
+    exports: {},
     require: (name) => {
       if(name==='@/src/lib/visitStreak')return {visitStreaks:()=>({current:0,best:0})};
       if(name==='@/src/features/pro/FocusReflection')return {FocusReflection:()=>null};
@@ -174,7 +174,11 @@ function focusHarness({
     Event: class Event {},
     setInterval: setTestInterval,
     clearInterval: (id) => intervals.delete(id),
-  });
+  };
+  vm.runInNewContext('(function(){'+compile('src/features/focus/useFocusController.ts')+'\n})()', runtime);
+  modules['@/src/features/focus/useFocusController'] = runtime.exports;
+  runtime.exports = exports;
+  vm.runInNewContext('(function(){'+compile('src/pages/Focus.tsx')+'\n})()', runtime);
   function render() {
     do {
       dirty = false;

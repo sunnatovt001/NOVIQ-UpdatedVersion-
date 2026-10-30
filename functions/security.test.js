@@ -209,6 +209,7 @@ function harness(env = {}, overrides = {}) {
     "node:crypto": crypto,
     "./promo": require("./promo"),
     "./policy": require("./policy"),
+    "./geminiProvider": require("./geminiProvider"),
     "./progression": require("./progression"),
     "./progressionStore": require("./progressionStore"),
     "./telegramNotifications": require("./telegramNotifications"),

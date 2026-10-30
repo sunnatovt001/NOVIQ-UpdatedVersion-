@@ -38,6 +38,7 @@ import { useBodyScrollLock } from "@/src/lib/useBodyScrollLock";
 import { getNotificationPreferences, type NotificationPreferenceKey } from "@/src/lib/preferences";
 import { writeDocWithQueue } from "@/src/lib/offlineSync";
 import { isReadOnlyAudit } from "@/src/lib/auditMode";
+import { SyncRecovery } from '@/src/components/SyncRecovery';
 import { useLocale } from "@/src/contexts/LocaleContext";
 import { useDialogFocus } from "@/src/lib/useDialogFocus";
 import { getProfileCopy } from "@/src/features/profile/profileCopy";
@@ -700,6 +701,7 @@ export const Profile = () => {
       </div>
 
       <ProgressionPanel details />
+      <SyncRecovery alwaysVisible />
 
       {createPortal(
         <AnimatePresence>

@@ -8,8 +8,15 @@ const require = createRequire(import.meta.url);
 
 export default defineConfig(({mode}) => ({
   // Fixture servers use different module transforms; never share their cache.
-  cacheDir: `node_modules/.vite-noviq-${mode}`,
+  cacheDir: `node_modules/.vite-noviq-${mode}${process.env.NOVIQ_FIXTURE_SCOPE ? `-${process.env.NOVIQ_FIXTURE_SCOPE}` : ''}`,
   plugins: [react(), tailwindcss(), {
+    name: 'noviq-data-authority',
+    apply: 'build',
+    buildStart() {
+      const env = { ...loadEnv(mode, __dirname, ''), ...process.env };
+      require('./functions/backendConfig.cjs').backendConfiguration(env, { match: true });
+    },
+  }, {
     name: 'noviq-local-ai',
     apply: 'serve',
     configureServer(server) {
@@ -41,7 +48,7 @@ export default defineConfig(({mode}) => ({
   server: {
     port: 3000,
     strictPort: true,
-    host: '0.0.0.0',
+    host: '127.0.0.1',
     // HMR is disabled in AI Studio via DISABLE_HMR env var.
     // Keep file watching quiet during agent edits.
     hmr: process.env.DISABLE_HMR !== 'true',
@@ -51,6 +58,11 @@ export default defineConfig(({mode}) => ({
       '**/artifacts/**',
       '**/backups/**',
       '**/design-system/**',
+      '**/functions/**',
+      '**/server/**',
+      '**/scripts/**',
+      '**/tests/**',
+      '**/artifacts-audit-*',
       '**/PRODUCTION_AUDIT.md',
       '**/FOUNDATION_REDESIGN_STATUS.md',
     ] },

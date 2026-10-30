@@ -458,9 +458,9 @@ service cloud.firestore {
     }
 
     match /accountabilityRooms/{roomId}/messages/{messageId} {
-      allow read: if isSignedIn();
-      allow create: if isOwnerField();
-      allow update, delete: if isSignedIn() && resource.data.userId == request.auth.uid;
+      // Retired public-room API. Current chat uses server-owned communities.
+      // Keep historical records, but never expose them through legacy clients.
+      allow read, write: if false;
     }
   }
 }

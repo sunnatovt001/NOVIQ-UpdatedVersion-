@@ -24,9 +24,9 @@ vm.runInNewContext(ts.transpileModule(fs.readFileSync('src/features/planner/smar
  await form.getByRole('button',{name:'Add task',exact:true}).click();
  await page.waitForTimeout(1000);
  assert.ok((await api('stats')).records[`users/${uid}/planner/smart-v2`].tasks.some(t=>t.title==='Recovery verification assignment'));
- await page.reload();await sp.locator('.sp-assignment-row').filter({hasText:'Recovery verification assignment'}).waitFor();
+ await page.reload();await sp.locator('.sp-rail-task').filter({hasText:'Recovery verification assignment'}).waitFor();
  console.log('PASS task creation persists through reload without replacing existing tasks');
- await page.goto(base+'#/notes');const notes=page.locator('.pro-notebook-workspace');await notes.waitFor();await notes.getByRole('button',{name:'Cell structure',exact:false}).first().click();
+ await page.goto(base+'#/notes');const notes=page.locator('.liquid-library');await notes.waitFor();await notes.getByRole('button',{name:'Cell structure',exact:false}).first().click();
  const content=notes.locator('textarea').first();await content.fill('Saved recovery verification note.');await notes.getByRole('button',{name:'Save',exact:true}).click();await page.waitForTimeout(600);await page.reload();await notes.waitFor();await notes.getByRole('button',{name:'Cell structure',exact:false}).first().click();assert.equal(await notes.locator('textarea').first().inputValue(),'Saved recovery verification note.');
  console.log('PASS Notebook edit/save survives reload using the existing persistence path');
  await page.goto(base+'#/flashcards');await page.getByRole('button',{name:'Create deck',exact:true}).first().click();const dialog=page.getByRole('dialog');await dialog.getByLabel('Deck title',{exact:true}).fill('Recovery new deck');await dialog.getByRole('button',{name:'Create & add cards',exact:true}).click();await page.waitForTimeout(700);

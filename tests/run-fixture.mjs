@@ -3,7 +3,8 @@ import { setTimeout as delay } from 'node:timers/promises';
 
 const [serverFile, port, ...suites] = process.argv.slice(2);
 if (!serverFile || !/^\d+$/.test(port) || !suites.length) throw new Error('Usage: run-fixture.mjs server-file port suite...');
-const server = spawn(process.execPath, [serverFile], { stdio: 'inherit', env: process.env });
+const fixtureScope = serverFile.replace(/[^a-zA-Z0-9_-]/g, '-');
+const server = spawn(process.execPath, [serverFile], { stdio: 'inherit', env: {...process.env, NOVIQ_FIXTURE_SCOPE: fixtureScope} });
 let serverExited = false;
 let active;
 server.on('exit', () => { serverExited = true; active?.kill(); });

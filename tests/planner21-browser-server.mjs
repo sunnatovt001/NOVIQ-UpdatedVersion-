@@ -24,7 +24,8 @@ const mock=`
  export const getDoc=async target=>snapshot(await request('read',{path:target.path}));
  export const getCountFromServer=async()=>({data:()=>({count:0})}),getAggregateFromServer=async()=>({data:()=>({xp:0})});
  export const getDocsFromServer=getDocs;
- ${[...names].filter(n=>!['getFirestore','doc','collection','query','where','orderBy','limit','onSnapshot','getDocs','runTransaction','setDoc','updateDoc','deleteDoc','getDoc','getCountFromServer','getAggregateFromServer','getDocsFromServer'].includes(n)).map(n=>`export const ${n}=()=>{throw new Error('Unsupported fixture operation: ${n}');};`).join('\n')}
+ export const documentId=()=> '__name__',getDocFromServer=getDoc,getDocFromCache=getDoc,getDocsFromCache=getDocs;
+ ${[...names].filter(n=>!['getFirestore','doc','collection','query','where','orderBy','limit','onSnapshot','getDocs','runTransaction','setDoc','updateDoc','deleteDoc','getDoc','getCountFromServer','getAggregateFromServer','getDocsFromServer'].includes(n)&&!['documentId','getDocFromServer','getDocFromCache','getDocsFromCache'].includes(n)).map(n=>`export const ${n}=()=>{throw new Error('Unsupported fixture operation: ${n}');};`).join('\n')}
 `;
 const server=await createServer({mode:'audit',server:{host:'127.0.0.1',port:4182,strictPort:true},plugins:[{
  name:'planner21-private-fixtures',enforce:'pre',

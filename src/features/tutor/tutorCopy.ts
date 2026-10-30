@@ -11,11 +11,11 @@ export const TUTOR_LANGUAGE_OPTIONS: Array<{
 
 const TUTOR_INTRO: Record<TutorLanguage, string> = {
   "en-US":
-    "Hello!\nI’m Saidamin, your Noviq Tutor. I’ll help you improve for IELTS, SAT, HSK, CEFR, school subjects, or university entrance exams.\nAsk a question or upload study material. I’ll connect the answer to your goal, level, and mistakes.",
+    "Ask a question or upload study material. I’ll tailor the explanation to your subject, exam and level.",
   "uz-UZ":
-    "Assalomu alaykum!\nMen Saidamin, Noviq Tutorman. IELTS, SAT, HSK, CEFR, maktab fanlari yoki universitet imtihonlarida natijangizni oshirishga yordam beraman.\nSavol yozing yoki o‘quv materialini yuklang. Javobni maqsadingiz, darajangiz va xatolaringizga bog‘layman.",
+    "Savolingizni yozing yoki o‘quv materialini yuklang. Tushuntirishni faningiz, imtihoningiz va darajangizga moslayman.",
   "ru-RU":
-    "Здравствуйте!\nЯ Саидамин, ваш Noviq Tutor. Я помогу улучшить результаты по IELTS, SAT, HSK, CEFR, школьным предметам или вступительным экзаменам.\nЗадайте вопрос или загрузите учебный материал. Я свяжу ответ с вашей целью, уровнем и ошибками.",
+    "Задайте вопрос или загрузите учебный материал. Я адаптирую объяснение к вашему предмету, экзамену и уровню.",
 };
 
 export const getTutorIntro = (language: TutorLanguage) =>

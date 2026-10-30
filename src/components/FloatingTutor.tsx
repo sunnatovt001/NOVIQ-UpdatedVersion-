@@ -128,7 +128,7 @@ export const FloatingTutor = ({ activeTab }: { activeTab?: string }) => {
     <div
       data-floating-tutor
       className={cn(
-        "fixed bottom-[calc(5.25rem+env(safe-area-inset-bottom))] right-3 z-[100] flex max-w-[calc(100vw-1.5rem)] flex-col items-end gap-2 sm:right-5 lg:bottom-5"
+        "fixed bottom-[calc(5.25rem+env(safe-area-inset-bottom))] right-3 z-[100] hidden max-w-[calc(100vw-1.5rem)] flex-col items-end gap-2 sm:right-5 lg:bottom-5 lg:flex"
       )}
     >
       <AnimatePresence>

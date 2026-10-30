@@ -33,6 +33,14 @@ before(async () => {
   });
 });
 after(async () => environment?.cleanup());
+test('retired accountability room API rejects authenticated and admin reads/writes',async()=>{
+  const path='accountabilityRooms/private/messages/old';
+  await environment.withSecurityRulesDisabled(context=>setDoc(doc(context.firestore(),path),{userId:'u1',text:'private legacy history'}));
+  for(const client of [owner,environment.authenticatedContext('u2').firestore(),environment.authenticatedContext('admin',{admin:true}).firestore()]){
+    await assertFails(getDoc(doc(client,path)));
+    await assertFails(setDoc(doc(client,path),{userId:'u1',text:'blocked'}));
+  }
+});
 test('Smart Planner and Focus attribution stay private to their account', async () => {
   for (const id of ['smart-v2', 'focus-receipt']) {
     const path = `users/u1/planner/${id}`;

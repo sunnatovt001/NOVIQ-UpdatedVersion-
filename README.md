@@ -5,11 +5,16 @@ Firestore, Storage, Gemini tutoring, planner, notes, flashcards and focus sessio
 
 ## Active backend
 
-Firebase Authentication, Firestore and Storage are the production source of truth.
-Vercel serves the frontend and Firebase-backed RPC/Telegram adapters. MongoDB in
-`server/` is migration staging only, not an automatic failover or a synchronized
-backup. Keep its code and configuration, but do not route production writes to it.
-A future cutover requires data verification and an explicit migration decision.
+Firebase Authentication provides identity. Firestore is the default data authority.
+An explicitly migrated deployment can select MongoDB with **both**
+`VITE_DATA_BACKEND=mongodb` and `NOVIQ_DATA_BACKEND=mongodb`. These values must
+match when building a deployment; an outage never switches databases.
+MongoDB mirroring is a separately configured asynchronous backup, not failover.
+Before a MongoDB cutover, verify the import and run
+`node --env-file=server/.env server/scripts/backfill-document-order.mjs` to add
+sortable metadata and pagination indexes to legacy canonical records. This script
+uses version checks and changes metadata only. It does not change user content.
+Legacy records remain readable through a streaming compatibility path until then.
 The `/backend-check` screen is excluded from normal builds; a separate staging
 build must explicitly set `VITE_ENABLE_MONGO_STAGING=true` to enable it.
 
@@ -40,9 +45,10 @@ indexes and legacy backfill have been verified; MongoDB is not needed for this.
 2. Run `npm ci` in `functions`. Functions target Node.js 22.
 3. Copy `.env.example` to `.env.local` for public frontend settings.
 4. Copy `functions/.env.example` to `functions/.env` and configure server keys.
+   Run `npm ci --prefix server` too; verification covers this backend.
 5. Confirm `firebase-applet-config.json` and `firebase.json` target the intended
    Firebase project and named Firestore database.
-6. Run `npm run dev`. Page links use hashes such as `/#/planner`, supporting
+6. Run `npm run dev` (loopback only by default). Page links use `/planner`, supporting
    browser back/forward navigation and the existing Hosting rewrite.
 
 Gemini and Telegram keys belong only in Functions configuration, never `VITE_*`.
@@ -122,8 +128,10 @@ for live blockers, domain configuration, backups and release/rollback checks.
   Flashcard review earns at most one 15-XP reward per day.
 - Client-proposed XP and mission/invitation/monthly bonuses are ignored. Planner
   practice points are separate from trusted account XP.
-- Offline notes/profile writes persist before synchronization. Verified study
-  sessions and online payments require connectivity.
+- New profile/document saves require a server acknowledgment and internet access.
+  Notebook editor drafts are stored separately on the device in both Free and Pro;
+  a draft is not a cloud save. Legacy offline queues can still be retried/exported.
+  Verified study sessions and online payments require connectivity.
 - Admin access uses Firebase custom claims/server profile state. Frontend
   environment variables cannot grant admin access.
 

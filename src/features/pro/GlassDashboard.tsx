@@ -29,7 +29,7 @@ export function GlassDashboard({ plan, now, status, due, records, blocked, save,
   });
   const minutes = Math.round(days.reduce((sum, d) => sum + d.minutes, 0));
   const duration = (n: number) => n >= 60 ? `${Math.floor(n / 60)}h ${n % 60}m` : `${n} ${tr('min', 'daq', 'мин')}`;
-  const daily=useMemo(()=>dashboardDay(plan,records,now),[plan,records,today,Math.floor(now/60000)]),tasks=daily.tasks,completed=daily.completed,sessions=daily.sessions;
+  const daily=useMemo(()=>dashboardDay(plan,records,now),[plan,records,now]),tasks=daily.tasks,completed=daily.completed,sessions=daily.sessions;
   const next=sessions.find(s=>s.end>now&&tasks.some(t=>t.id===s.taskId&&!t.completed));
   const nextTask = tasks.find(t => t.id === next?.taskId) || tasks.find(t => !t.completed);
   const subject = (task: SmartTask) => plan?.subjects.find(s => s.id === task.subjectId);

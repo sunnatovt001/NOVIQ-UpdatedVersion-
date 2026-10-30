@@ -47,8 +47,10 @@ const mockFirestore = `
  export const getAggregateFromServer = () => read({data:()=>({xp:0})});
  export const getDocsFromServer = target => read({docs:historyDocs(target||{})});
  export const getDocs = getDocsFromServer, getDoc = () => read({exists:()=>false,data:()=>undefined});
+ export const documentId = () => '__name__';
+ export const getDocFromServer = getDoc, getDocFromCache = getDoc, getDocsFromCache = getDocs;
  const write = () => { window.__unexpectedWrites = (window.__unexpectedWrites||0)+1; throw new Error('Browser fixture prohibits writes'); };
- ${[...names].filter(n=>!['getFirestore','collection','doc','collectionGroup','query','where','orderBy','limit','startAfter','or','sum','onSnapshot','getCountFromServer','getAggregateFromServer','getDocsFromServer','getDocs','getDoc'].includes(n)).map(n=>`export const ${n} = write;`).join('\n')}
+ ${[...names].filter(n=>!['getFirestore','collection','doc','collectionGroup','query','where','orderBy','limit','startAfter','or','sum','onSnapshot','getCountFromServer','getAggregateFromServer','getDocsFromServer','getDocs','getDoc','documentId','getDocFromServer','getDocFromCache','getDocsFromCache'].includes(n)).map(n=>`export const ${n} = write;`).join('\n')}
 `;
 const server = await createServer({
  mode:'audit', server:{host:'127.0.0.1',port:4180,strictPort:true},

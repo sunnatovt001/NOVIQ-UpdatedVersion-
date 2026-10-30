@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { newId, newSubject, localInstant, type SmartPlan, type SmartTask, type WeeklyRange } from './smartPlannerModel';
 import { loadLocalDataStrict, saveLocalData } from '@/src/lib/localStore';
 import { SUBJECT_OPTIONS, subjectQuestions, type SmartCopy } from './smartPlannerCopy';
@@ -39,6 +39,7 @@ export function SmartTaskForm({ plan, c, task, onSave, onCancel }: {
         return { value: null, broken: true };
     } });
     const recovered = stored.value?.baseRevision === plan.revision ? stored.value.fields : null;
+    const draftDirty = useRef(false);
     const [pendingRecovery, setPendingRecovery] = useState(!!stored.value && !recovered);
     const [title, setTitle] = useState<string>(recovered?.title ?? task?.title ?? ''), [subjectId, setSubjectId] = useState<string>(recovered?.subjectId ?? task?.subjectId ?? plan.subjects[0]?.id ?? '');
     const [minutes, setMinutes] = useState<number>(recovered?.minutes ?? task?.minutes ?? 30), [priority, setPriority] = useState<number>(recovered?.priority ?? task?.priority ?? 2);
@@ -46,17 +47,25 @@ export function SmartTaskForm({ plan, c, task, onSave, onCancel }: {
     const [deadline, setDeadline] = useState<string>(() => recovered?.deadline ?? (task?.deadline ? new Intl.DateTimeFormat('sv-SE', { timeZone: plan.timezone, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }).format(task.deadline).replace(' ', 'T') : ''));
     const [repeat, setRepeat] = useState<SmartTask['repeat']>(recovered?.repeat ?? task?.repeat ?? 'none'), [repeatUntil, setRepeatUntil] = useState<string>(recovered?.repeatUntil ?? task?.repeatUntil ?? '');
     const [flexibility, setFlexibility] = useState<SmartTask['flexibility']>(recovered?.flexibility ?? task?.flexibility ?? 'flexible'), [dependency, setDependency] = useState<string>(recovered?.dependency ?? task?.dependsOn?.[0] ?? ''), [error, setError] = useState(false), [draftError, setDraftError] = useState(stored.broken);
-    useEffect(() => { if (pendingRecovery || stored.broken)
+    useEffect(() => { if (!draftDirty.current || pendingRecovery || stored.broken)
         return; const timer = setTimeout(() => { try {
         saveLocalData(draftKey, { baseRevision: plan.revision, fields: { title, subjectId, minutes, priority, description, type, resource, deadline, repeat, repeatUntil, flexibility, dependency } });
     }
     catch {
         setDraftError(true);
     } }, 350); return () => clearTimeout(timer); }, [title, subjectId, minutes, priority, description, type, resource, deadline, repeat, repeatUntil, flexibility, dependency, pendingRecovery]);
-    const resumeDraft = () => { const f = stored.value?.fields; if (!f)
+    const resumeDraft = () => { draftDirty.current = true; const f = stored.value?.fields; if (!f)
         return; setTitle(f.title); setSubjectId(f.subjectId); setMinutes(f.minutes); setPriority(f.priority); setDescription(f.description || ''); setType(f.type || 'Practice'); setResource(f.resource || ''); setDeadline(f.deadline || ''); setRepeat(f.repeat || 'none'); setRepeatUntil(f.repeatUntil || ''); setFlexibility(f.flexibility || 'flexible'); setDependency(f.dependency || ''); setPendingRecovery(false); };
     const suggestions = /IELTS/i.test(plan.subjects.find(s => s.id === subjectId)?.name || '') ? ['Reading', 'Writing', 'Listening', 'Speaking', 'Vocabulary', 'Homework', 'Mock exam', 'Error review'] : /SAT/i.test(plan.subjects.find(s => s.id === subjectId)?.name || '') ? ['Math', 'Reading and Writing', 'Timed practice', 'Error review', 'Homework', 'Mock exam'] : ['Practice', 'Homework', 'Project', 'Review', 'Reading'];
-    return <form className="sp-task-form" onSubmit={e => {
+    return <form className="sp-task-form" onChange={() => {
+            draftDirty.current = true;
+            if (pendingRecovery) {
+                // Editing the current fields must still survive refresh. Preserve
+                // the older proposal separately before storing this new draft.
+                try { saveLocalData(draftKey + ':recovery', stored.value); setPendingRecovery(false); }
+                catch { setDraftError(true); }
+            }
+        }} onSubmit={e => {
             e.preventDefault();
             setError(false);
             try {
@@ -69,6 +78,7 @@ export function SmartTaskForm({ plan, c, task, onSave, onCancel }: {
                 if (!due)
                     delete next.deadline;
                 if (onSave(next)) {
+                    draftDirty.current = false;
                     if (!stored.broken)
                         localStorage.removeItem(draftKey);
                     if (!task) {

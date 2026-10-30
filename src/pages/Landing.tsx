@@ -1,4 +1,5 @@
-import { navigateToPage } from '@/src/lib/navigation';
+import { navigateToPage, writePagePath } from '@/src/lib/navigation';
+import { useAuth } from '@/src/contexts/AuthContext';
 import { useEffect, useRef, useState, type MouseEvent } from "react";
 import { ArrowRight, BookOpen, CalendarDays, ChartNoAxesColumn, Check, Layers, Menu, MessagesSquare, Music, Sparkles, X } from "lucide-react";
 import { useLocale } from "@/src/contexts/LocaleContext";
@@ -13,6 +14,7 @@ const featureIcons = [CalendarDays, Layers, Music, ChartNoAxesColumn, Sparkles, 
 const benefitIcons = [CalendarDays, Layers, MessagesSquare];
 
 export const Landing = () => {
+  const { user } = useAuth();
   const {locale, setLocale} = useLocale();
   const copy = getPublicLandingCopy(locale);
   const auth = getAuthCopy(locale);
@@ -49,7 +51,10 @@ export const Landing = () => {
     setAuthMode(mode);
   };
   const openFeature = (route: typeof landingFeatureRoutes[number]) => {
-    navigateToPage(`/${route}`);
+    if (user) { navigateToPage(`/${route}`); return; }
+    // Preserve the requested destination without replacing this Landing instance
+    // while its deferred signup dialog is loading. Auth resumes the route later.
+    writePagePath(route);
     openAuth("signup");
   };
   const goToSection = () => setMenuOpen(false);
