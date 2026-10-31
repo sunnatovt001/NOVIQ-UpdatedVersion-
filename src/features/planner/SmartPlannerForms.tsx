@@ -75,6 +75,8 @@ export function SmartTaskForm({ plan, c, task, onSave, onCancel }: {
                     throw new Error();
                 const due = deadline ? localInstant(deadline.slice(0, 10), deadline.slice(11, 16), plan.timezone) : undefined;
                 const next: SmartTask = { ...task, id: task?.id || newId(), title: title.trim(), subjectId, minutes, priority, description, type, resource, flexibility, repeat, repeatUntil, createdAt: task?.createdAt || Date.now(), completed: task?.completed || false, dependsOn: dependency ? [dependency] : [], ...(due ? { deadline: due } : {}) };
+                // An edited AI draft becomes a student-owned task.
+                delete next.origin;
                 if (!due)
                     delete next.deadline;
                 if (onSave(next)) {
