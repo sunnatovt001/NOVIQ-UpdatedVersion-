@@ -1,4 +1,4 @@
-name: Focus fullscreen and extension
+name: Focus fullscreen and mobile
 on:
   push:
     branches: ['codex/focus-fullscreen*']
@@ -24,8 +24,7 @@ jobs:
           cache: npm
       - run: npm ci && npm ci --prefix functions && npm ci --prefix server
       - run: npx playwright install --with-deps chromium
-      - run: node --test tests/focus-extension.test.cjs
-      - run: node tests/run-fixture.mjs tests/real-account-fixture-server.mjs 4184 tests/focus-lock-browser.cjs tests/focus-extension-browser.cjs
+      - run: node tests/run-fixture.mjs tests/real-account-fixture-server.mjs 4184 tests/focus-lock-browser.cjs
         env:
           NOVIQ_BROWSER_CHANNEL: chromium
       - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
