@@ -2,7 +2,7 @@ import { proposeSchedule, type StudyAssignment, type StudyBlock, type TimeRange 
 
 export type Subject = { color?: string; id: string; name: string; mode: 'self' | 'tutor' | 'hybrid'; paused: boolean; target: string; estimate: string; deadline: string; priorities: string; materials: string; roadmap: string };
 export type WeeklyRange = { id: string; label: string; days: number[]; start: string; end: string; date?: string; until?: string };
-export type SmartTask = StudyAssignment & { description: string; type: string; resource: string; flexibility: 'flexible' | 'fixed'; repeat: 'none' | 'daily' | 'weekly'; repeatUntil: string; createdAt: number; completedAt?: number; parentId?: string };
+export type SmartTask = StudyAssignment & { origin?: 'ai'; description: string; type: string; resource: string; flexibility: 'flexible' | 'fixed'; repeat: 'none' | 'daily' | 'weekly'; repeatUntil: string; createdAt: number; completedAt?: number; parentId?: string };
 export type FocusReceipt = { id: string; taskId: string; seconds: number; timestamp: number; verified: boolean };
 export type SmartPlan = {
   persistenceVersion?: 3; sequence?: number; previousRevision?: string | null; confirmedAt?: number;
