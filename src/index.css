@@ -1136,3 +1136,6 @@ body:has([data-focus-expanded="true"]) {overflow:hidden;}
 .noviq-app .focus-lock-controls button {min-height:44px;padding:8px 16px;border:1px solid var(--noviq-border,#dbe3ed);border-radius:12px;background:var(--noviq-card,#fff);color:var(--noviq-text,#14213d);}
 .noviq-app .focus-lock-controls p {flex-basis:100%;margin:0;line-height:1.5;}
 .noviq-app .focus-lock-controls :is(button,input):focus-visible {outline:2px solid var(--noviq-accent,#2563eb);outline-offset:3px;}
+/* Keep shell navigation outside the expanded workspace on mobile as well. */
+.noviq-app:has([data-focus-expanded="true"]) :is(.app-mobile-header,.app-sidebar,.mobile-bottom-nav) {display:none!important;}
+.noviq-app :has([data-focus-expanded="true"]) {transform:none!important;filter:none!important;backdrop-filter:none!important;contain:none!important;}

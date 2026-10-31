@@ -33,7 +33,7 @@ const {chromium}=require('playwright'),assert=require('node:assert/strict'),fs=r
   fs.mkdirSync('artifacts/focus-lock',{recursive:true});await page.screenshot({path:`artifacts/focus-lock/fullscreen-${fallback?'fallback':'native'}-${pro?'pro':'free'}-${seconds}.png`});
   await page.getByRole('button',{name:seconds<1200?'End incomplete session':'Complete focus session',exact:true}).click();
   await page.waitForFunction(()=>document.fullscreenElement===null);
-  const stats=await api('stats'),record=stats.records[`users/${uid}/studySessions/${id}`];
+  let record; for(let attempt=0;attempt<50;attempt++){const stats=await api('stats');record=stats.records[`users/${uid}/studySessions/${id}`];if(record)break;await page.waitForTimeout(100);}
   assert.ok(record,'Server session saved');assert.ok(record.duration>=seconds&&record.duration<seconds+15);assert.ok(record.duration<1500);
   if(seconds<1200){assert.equal(record.status,'partial');assert.equal(record.xpEarned,0);await page.getByRole('status').filter({hasText:'Session incomplete'}).waitFor();}
   else {assert.notEqual(record.status,'partial');assert.ok(record.xpEarned>0);}
