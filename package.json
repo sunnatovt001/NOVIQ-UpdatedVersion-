@@ -23,7 +23,7 @@
     "dev:local-ai": "vite --port=3000 --host=127.0.0.1 --mode local-ai",
     "bot:diagnose": "node scripts/telegram-runner.mjs --diagnose",
     "bot:poll": "node scripts/telegram-runner.mjs --poll",
-    "build": "vite build",
+    "build": "node scripts/package-focus-extension.mjs && vite build",
     "preview": "vite preview",
     "clean": "node -e \"require('node:fs').rmSync('dist', {recursive:true, force:true})\"",
     "lint": "tsc --noEmit",
@@ -42,7 +42,7 @@
     "release:check": "node scripts/release-preflight.mjs",
     "release:check:live": "node scripts/release-preflight.mjs --live",
     "test:planner:browser": "node tests/run-fixture.mjs tests/planner21-browser-server.mjs 4182 tests/planner21-persistence-browser.cjs tests/planner21-integration-browser.cjs tests/planner21-experience-browser.cjs",
-    "test:pro:browser": "node tests/run-fixture.mjs tests/real-account-fixture-server.mjs 4184 tests/real-account-controls.cjs tests/real-account-workflows.cjs tests/real-account-data-browser.cjs tests/tutor-recovery-browser.cjs tests/tutor-pro-browser.cjs tests/focus-lock-browser.cjs",
+    "test:pro:browser": "node tests/run-fixture.mjs tests/real-account-fixture-server.mjs 4184 tests/real-account-controls.cjs tests/real-account-workflows.cjs tests/real-account-data-browser.cjs tests/tutor-recovery-browser.cjs tests/tutor-pro-browser.cjs tests/focus-lock-browser.cjs tests/focus-extension-browser.cjs",
     "test:entitlements": "npx firebase-tools@15.32.1 emulators:exec --project demo-noviq --config firebase.entitlements.json --only auth,firestore \"node tests/run-fixture.mjs tests/entitlement-server.mjs 4184 tests/isolation-security.cjs\""
   },
   "dependencies": {

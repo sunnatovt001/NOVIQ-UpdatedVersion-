@@ -1,0 +1,12 @@
+{
+  "manifest_version": 3,
+  "name": "NOVIQ Focus Lock",
+  "version": "1.0.0",
+  "description": "Blocks other websites during a NOVIQ Focus lock-in session. Exit from NOVIQ to release the block.",
+  "minimum_chrome_version": "120",
+  "permissions": ["declarativeNetRequest", "storage", "alarms"],
+  "host_permissions": ["http://*/*", "https://*/*"],
+  "background": {"service_worker": "background.js"},
+  "content_scripts": [{"matches": ["http://*/*", "https://*/*"], "js": ["content.js"], "run_at": "document_start", "all_frames": false}],
+  "web_accessible_resources": [{"resources": ["blocked.html", "blocked.js"], "matches": ["http://*/*", "https://*/*"]}]
+}

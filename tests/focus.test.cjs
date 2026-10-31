@@ -163,7 +163,7 @@ function focusHarness({
     exports: {},
     require: (name) => {
       if(name==='@/src/lib/visitStreak')return {visitStreaks:()=>({current:0,best:0})};
-      if(name==='@/src/features/focus/FocusLock')return {FocusLock:()=>null};
+      if(name==='@/src/features/focus/FocusLock')return {FocusLock:()=>null,requestFocusFullscreen:()=>{}};
       if(name==='@/src/features/pro/FocusReflection')return {FocusReflection:()=>null};
       assert.ok(name in modules, name);
       return modules[name];
