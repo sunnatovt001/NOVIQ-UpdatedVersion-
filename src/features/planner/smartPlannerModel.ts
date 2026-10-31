@@ -1,10 +1,12 @@
 import { proposeSchedule, type StudyAssignment, type StudyBlock, type TimeRange } from './smartSchedule';
 
-export type Subject = { color?: string; id: string; name: string; mode: 'self' | 'tutor' | 'hybrid'; paused: boolean; target: string; estimate: string; deadline: string; priorities: string; materials: string; roadmap: string };
+export type TopicProgress = {key:string; label:string; rating:'again'|'good'|'easy'; reviewedAt:number; nextReviewAt:number; intervalDays:number};
+export type Subject = { topics?:TopicProgress[]; color?: string; id: string; name: string; mode: 'self' | 'tutor' | 'hybrid'; paused: boolean; target: string; estimate: string; deadline: string; priorities: string; materials: string; roadmap: string };
 export type WeeklyRange = { id: string; label: string; days: number[]; start: string; end: string; date?: string; until?: string };
-export type SmartTask = StudyAssignment & { origin?: 'ai'; description: string; type: string; resource: string; flexibility: 'flexible' | 'fixed'; repeat: 'none' | 'daily' | 'weekly'; repeatUntil: string; createdAt: number; completedAt?: number; parentId?: string };
+export type SmartTask = StudyAssignment & { origin?: 'ai'; topic?:string; demand?:'deep'|'practice'|'review'; preferredPeriod?:'morning'|'afternoon'|'evening'|'any'; description: string; type: string; resource: string; flexibility: 'flexible' | 'fixed'; repeat: 'none' | 'daily' | 'weekly'; repeatUntil: string; createdAt: number; completedAt?: number; parentId?: string };
 export type FocusReceipt = { id: string; taskId: string; seconds: number; timestamp: number; verified: boolean };
 export type SmartPlan = {
+  adaptation?: {enabled:boolean; lastDay:string; style:'hybrid'|'self'};
   persistenceVersion?: 3; sequence?: number; previousRevision?: string | null; confirmedAt?: number;
   version: 2; userId: string; updatedAt: number; revision: string; startedAt: number; completedOnboardingAt?: number; step: number; ready: boolean;
   statuses: string[]; timezone: string; subjects: Subject[]; windows: WeeklyRange[]; commitments: WeeklyRange[];
@@ -24,7 +26,10 @@ export function initialSmartPlan(userId: string): SmartPlan {
 export function validSmartPlan(value: unknown, uid: string): value is SmartPlan {
   const p = value as SmartPlan;
   if(!p || typeof p.timezone!=='string')return false;
+  if(p.adaptation&&(!(typeof p.adaptation.enabled==='boolean')||!['hybrid','self'].includes(p.adaptation.style)||typeof p.adaptation.lastDay!=='string'||!/^($|\d{4}-\d{2}-\d{2})$/.test(p.adaptation.lastDay)))return false;
+  if(Array.isArray(p.subjects)&&p.subjects.some(s=>s?.topics!==undefined&&(!Array.isArray(s.topics)||s.topics.length>200||s.topics.some(t=>!t||typeof t.key!=='string'||t.key.length>100||typeof t.label!=='string'||!['again','good','easy'].includes(t.rating)||!Number.isFinite(t.reviewedAt)||!Number.isFinite(t.nextReviewAt)||!Number.isInteger(t.intervalDays)||t.intervalDays<1||t.intervalDays>60))))return false;
   try{new Intl.DateTimeFormat('en',{timeZone:p.timezone});}catch{return false;}
+  if(Array.isArray(p.tasks)&&p.tasks.some(t=>t&&((t.topic!==undefined&&(typeof t.topic!=='string'||!t.topic.trim()||t.topic.length>100))||(t.demand!==undefined&&!['deep','practice','review'].includes(t.demand))||(t.preferredPeriod!==undefined&&!['morning','afternoon','evening','any'].includes(t.preferredPeriod)))))return false;
   const range=(r:WeeklyRange)=>!!r && typeof r.id==='string' && typeof r.label==='string' && Array.isArray(r.days) && r.days.every(d=>Number.isInteger(d) && d>=0 && d<=6) && typeof r.start==='string' && typeof r.end==='string';
   return !!p && p.version === 2 && p.userId === uid &&
     Array.isArray(p.subjects) && p.subjects.every(s=>!!s && typeof s.id==='string' && typeof s.name==='string' && ['self','tutor','hybrid'].includes(s.mode)) &&

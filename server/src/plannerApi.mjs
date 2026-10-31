@@ -6,11 +6,13 @@ const fail = status => Object.assign(new Error('Planner request rejected.'), { s
 const text = value => typeof value === 'string';
 const list = (value, limit, check) => Array.isArray(value) && value.length <= limit && value.every(check);
 const record = value => value && typeof value === 'object' && !Array.isArray(value);
-const allowed = new Set(['persistenceVersion','sequence','previousRevision','confirmedAt','version','userId','updatedAt','revision','startedAt','completedOnboardingAt','step','ready','statuses','timezone','subjects','windows','commitments','sessionMinutes','breakMinutes','dailyLimit','split','mode','preference','tasks','sessions','history']);
+const allowed = new Set(['adaptation','persistenceVersion','sequence','previousRevision','confirmedAt','version','userId','updatedAt','revision','startedAt','completedOnboardingAt','step','ready','statuses','timezone','subjects','windows','commitments','sessionMinutes','breakMinutes','dailyLimit','split','mode','preference','tasks','sessions','history']);
 export function validMongoPlan(p, uid) {
   if (!record(p) || Object.keys(p).some(k => !allowed.has(k)) || p.version !== 2 || p.userId !== uid ||
       !text(p.revision) || !/^[A-Za-z0-9_-]{1,128}$/.test(p.revision) || !text(p.timezone)) return false;
   try { new Intl.DateTimeFormat('en', { timeZone: p.timezone }); } catch { return false; }
+  if(p.adaptation&&(!record(p.adaptation)||typeof p.adaptation.enabled!=='boolean'||!['hybrid','self'].includes(p.adaptation.style)||!text(p.adaptation.lastDay)||!/^($|\d{4}-\d{2}-\d{2})$/.test(p.adaptation.lastDay)))return false;
+  if(Array.isArray(p.subjects)&&p.subjects.some(s=>s?.topics!==undefined&&!list(s.topics,200,t=>record(t)&&text(t.key)&&t.key.length<=100&&text(t.label)&&['again','good','easy'].includes(t.rating)&&Number.isFinite(t.reviewedAt)&&Number.isFinite(t.nextReviewAt)&&Number.isInteger(t.intervalDays)&&t.intervalDays>=1&&t.intervalDays<=60)))return false;
   const range = r => record(r) && text(r.id) && text(r.label) && list(r.days, 7, d => Number.isInteger(d) && d >= 0 && d <= 6) &&
     /^([01]\d|2[0-3]):[0-5]\d$/.test(r.start) && /^([01]\d|2[0-3]):[0-5]\d$/.test(r.end);
   const unique = rows => new Set(rows.map(r => r.id)).size === rows.length;
