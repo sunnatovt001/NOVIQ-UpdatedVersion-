@@ -1139,3 +1139,5 @@ body:has([data-focus-expanded="true"]) {overflow:hidden;}
 /* Keep shell navigation outside the expanded workspace on mobile as well. */
 .noviq-app:has([data-focus-expanded="true"]) :is(.app-mobile-header,.app-sidebar,.mobile-bottom-nav) {display:none!important;}
 .noviq-app :has([data-focus-expanded="true"]) {transform:none!important;filter:none!important;backdrop-filter:none!important;contain:none!important;}
+.noviq-app:has([data-focus-expanded="true"]) header:not([data-focus-zone] header) {display:none!important;}
+.noviq-app :has([data-focus-expanded="true"]) {z-index:auto!important;}
