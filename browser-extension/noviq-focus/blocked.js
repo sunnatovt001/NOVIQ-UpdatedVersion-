@@ -1,0 +1,1 @@
+document.getElementById('return').onclick=()=>chrome.runtime.sendMessage({type:'NOVIQ_FOCUS_RETURN'}).then(state=>{if(!state.active)document.getElementById('status').textContent='Sessiya tugagan. Oldingi saytga qaytish uchun brauzerning Back tugmasini bosing.';});

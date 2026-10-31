@@ -1,4 +1,4 @@
-import { FocusLock } from '@/src/features/focus/FocusLock';
+import { FocusLock, requestFocusFullscreen } from '@/src/features/focus/FocusLock';
 import { visitStreaks } from '@/src/lib/visitStreak';
 
 import { FocusReflection } from '@/src/features/pro/FocusReflection';
@@ -16,9 +16,9 @@ import { useFocusController } from '@/src/features/focus/useFocusController';
 export const Focus = () => {
   const { FOCUS_DURATION, SHORT_BREAK_DURATION, LONG_BREAK_DURATION, DAILY_GOAL, tracks, profile, study, locale, copy, time, isActive, mode, deepWork, music, setMusic, breakDuration, setBreakDuration, taskInputOpen, setTaskInputOpen, helpOpen, setHelpOpen, taskDraft, setTaskDraft, focusTask, taskDone, setTaskDone, audioRef, sessionBusy, sessionError, localOnly, verifying, xpReceipt, completeCurrentFocusSession, toggleTimer, resetTimer, selectTimerMode, updateFocusTask, skipTimer, completedToday, focusMinutes, progress, sessionNumber } = useFocusController();
   return (
-    <div
+    <div data-focus-zone data-focus-running={isActive && mode === "focus"}
       className={cn(
-        "free-focus min-h-[calc(100dvh-9rem)] rounded-[32px] border border-slate-200/90 bg-[#f8fbff] p-3 text-slate-900 shadow-[0_20px_70px_rgba(15,23,42,0.05)] sm:p-4 dark:border-slate-800 dark:bg-slate-950",
+        "free-focus min-h-[calc(100dvh-9rem)] [&:fullscreen]:overflow-auto [&:fullscreen]:rounded-none [&:fullscreen]:h-screen rounded-[32px] border border-slate-200/90 bg-[#f8fbff] p-3 text-slate-900 shadow-[0_20px_70px_rgba(15,23,42,0.05)] sm:p-4 dark:border-slate-800 dark:bg-slate-950",
         deepWork && "dark:bg-black",
       )}
     >
@@ -164,7 +164,7 @@ export const Focus = () => {
                   type="button"
                   aria-label={isActive ? copy.pauseTimer : copy.startTimer}
                   disabled={sessionBusy}
-                  onClick={toggleTimer}
+                  onClick={() => { if(!isActive && mode==='focus')requestFocusFullscreen(); toggleTimer(); }}
                   className="mt-2 text-[clamp(4rem,9vw,6.5rem)] font-black leading-none tracking-[-0.08em] text-slate-900 transition hover:text-blue-600 disabled:opacity-50 dark:text-white"
                 >
                   {formatTime(time)}
@@ -195,7 +195,7 @@ export const Focus = () => {
               type="button"
               aria-label={isActive ? copy.pauseTimer : copy.startTimer}
               disabled={sessionBusy}
-              onClick={toggleTimer}
+              onClick={() => { if(!isActive && mode==='focus')requestFocusFullscreen(); toggleTimer(); }}
               className="inline-flex min-w-0 items-center justify-center gap-2 rounded-full bg-blue-600 px-3 py-4 text-base font-black text-white shadow-lg shadow-blue-500/25 transition hover:bg-blue-500 disabled:opacity-50 sm:min-w-48 sm:gap-3 sm:px-8 sm:text-lg"
             >
               {isActive ? (

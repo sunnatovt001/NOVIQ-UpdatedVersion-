@@ -1,0 +1,35 @@
+name: Focus fullscreen and extension
+on:
+  push:
+    branches: ['codex/focus-fullscreen*']
+  pull_request:
+    paths:
+      - 'browser-extension/**'
+      - 'src/features/focus/**'
+      - 'src/features/free/FreeFocus.tsx'
+      - 'src/pages/Focus.tsx'
+      - 'tests/focus*'
+      - '.github/workflows/focus-extension.yml'
+permissions:
+  contents: read
+jobs:
+  browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci && npm ci --prefix functions && npm ci --prefix server
+      - run: npx playwright install --with-deps chromium
+      - run: node --test tests/focus-extension.test.cjs
+      - run: node tests/run-fixture.mjs tests/real-account-fixture-server.mjs 4184 tests/focus-lock-browser.cjs tests/focus-extension-browser.cjs
+        env:
+          NOVIQ_BROWSER_CHANNEL: chromium
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        if: always()
+        with:
+          name: focus-fullscreen-browser
+          path: artifacts/focus-lock
