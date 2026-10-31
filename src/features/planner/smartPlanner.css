@@ -103,3 +103,9 @@
 @media(prefers-reduced-motion:reduce){.smart-planner.sp-v21 *{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
 
 .sp-v21 .sp-next>.sp-subject{margin-left:10px}
+.smart-planner .sp-ai-planning {margin:16px 0;padding:20px;border:1px solid var(--sp-border,var(--noviq-border));border-radius:16px;background:var(--sp-card,var(--noviq-card));}
+.smart-planner .sp-ai-planning h2 {display:flex;align-items:center;gap:8px;font-size:18px;}
+.smart-planner .sp-ai-planning>p {line-height:1.6;margin:12px 0;max-width:85ch;}
+.smart-planner .sp-ai-planning .sp-choices {margin:14px 0;}
+.smart-planner .sp-ai-planning .sp-checkbox {margin:12px 0;}
+@media(max-width:600px){.smart-planner .sp-ai-planning {padding:14px;}.smart-planner .sp-ai-planning .sp-section-heading {align-items:flex-start;flex-direction:column;}.smart-planner .sp-ai-planning .sp-choices {display:grid;grid-template-columns:1fr;}}

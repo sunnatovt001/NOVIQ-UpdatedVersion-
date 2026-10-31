@@ -15,6 +15,7 @@ import { loadPlanRevisions, type PlanRevision } from './plannerCloud';
 import { clonePlan } from './plannerPersistence';
 import type { StudyBlock } from './smartSchedule';
 import './smartPlanner.css';
+import {PlannerAiPanel} from './PlannerAiPanel';
 import './plannerReference.css';
 import { PlannerTaskRail } from './PlannerTaskRail';
 import { useMembership } from '@/src/features/pro/MembershipContext';
@@ -216,6 +217,7 @@ function PlannerWorkspace({ uid, onLegacy, referenceAppearance }: {
             setSetup(null);
             localStorage.removeItem(`noviq:${uid}:plannerSetupDraft:v3`);
         } }}>{c.savePreferences}</button></>}</div><SmartSetup plan={setup || plan} c={c} uz={locale === 'uz'} onChange={setup ? stageSetup : next => data.save(next, 'Continue plan setup')} onPreview={propose} onFinish={propose} summary={<><p>{(setup || plan).subjects.map(s => s.name).join(' · ') || c.subjectHelp}</p><p>{c.currentPlanPreserved}</p></>}/></> : <>
+      <PlannerAiPanel plan={plan} receipts={receipts} locale={locale} disabled={!!data.conflict || data.blocked} onSettings={()=>editSetup(3)} onReview={(next,warnings)=>setProposal({plan:next,baseRevision:plan.revision,receiptSignature:signature,description:'Apply reviewed AI study plan',warnings})}/>
       <section className="sp-day-brief"><div className="sp-next"><span className="sp-eyebrow">{c.nextUp}</span>{nextTask ? <><span className="sp-subject">{plan.subjects.find(s => s.id === nextTask.subjectId)?.name}</span><h2>{nextTask.title}</h2><p>{nextSession ? `${format(nextSession.start)}–${time(nextSession.end)}` : `${Math.max(0, Math.round(nextTask.minutes - actual(nextTask.id)))} ${c.minutes} · ${c.unscheduled}`}</p><div className="sp-actions"><button className="sp-button sp-primary" onClick={() => startFocus(nextTask)}><Play size={15}/>{c.focus}</button><button className="sp-text" onClick={() => inspect(nextTask.id, nextSession)}>{c.edit}</button></div></> : <><h2>{c.noToday}</h2><button className="sp-text" onClick={() => inspect('new')}>{c.addTask}</button></>}</div><div className="sp-today-ledger"><span className="sp-eyebrow">{c.todayShort}</span><strong>{totals.free}<small> {c.minutes}</small></strong><p>{c.remaining}</p><span>{totals.planned} {c.planned} · {totals.actual} {c.actual}</span></div></section>
       <div className={`sp-calendar-workspace ${!contextOpen && !taskPanel && !historyOpen ? 'sp-wide-calendar' : ''}`}>
         {referenceAppearance && <PlannerTaskRail searchable={!cinematic} plan={plan} c={c} onAdd={() => inspect('new')} onInspect={inspect} onComplete={complete}/>}
