@@ -1141,3 +1141,4 @@ body:has([data-focus-expanded="true"]) {overflow:hidden;}
 .noviq-app :has([data-focus-expanded="true"]) {transform:none!important;filter:none!important;backdrop-filter:none!important;contain:none!important;}
 .noviq-app:has([data-focus-expanded="true"]) header:not([data-focus-zone] header) {display:none!important;}
 .noviq-app :has([data-focus-expanded="true"]) {z-index:auto!important;}
+.noviq-app.pro-environment [data-focus-zone]:is(:fullscreen,[data-focus-expanded="true"]) {background:var(--noviq-bg,#f8fbff)!important;position:fixed;inset:0;z-index:450;padding: max(12px,env(safe-area-inset-top)) max(12px,env(safe-area-inset-right)) max(12px,env(safe-area-inset-bottom)) max(12px,env(safe-area-inset-left));border-radius:0;}
