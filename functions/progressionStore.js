@@ -164,7 +164,7 @@ module.exports = function progressionStore({db,onCall,HttpsError,FieldValue,Time
       let [proofSnap,saved,lease]=await Promise.all([tx.get(ref),tx.get(sessionRef),tx.get(lock)]);
       if(saved.exists) {
         const ledger=await tx.get(root.collection('progressEvents').doc(`session-${sessionId}`));
-        return {sessionId,...(ledger.data()?.result||{xpDelta:0,status:'unverified'})};
+        return {sessionId,duration:saved.data().duration,recordedDuration:saved.data().duration,...(ledger.data()?.result||{xpDelta:0,status:saved.data().status||'unverified'})};
       }
       if(!proofSnap.exists) {ref=root.collection('trusted').doc('activeSession');proofSnap=await tx.get(ref);}
       const proof=proofSnap.data(), now=Date.now();
@@ -182,6 +182,12 @@ module.exports = function progressionStore({db,onCall,HttpsError,FieldValue,Time
       const seconds=Math.min(Math.floor(duration),Math.floor(accrued.verifiedSeconds));
       if(seconds<60) throw new HttpsError('failed-precondition','At least one verified minute is needed to save a server session. Your timer can continue.');
       const at=new Date(now).toISOString();
+      if(proof.category==='focus' && seconds<1200){
+        tx.create(sessionRef,{userId:uid,duration:seconds,recordedDuration:seconds,verifiedDuration:seconds,subject,category:proof.category,timestamp:at,createdAt:FieldValue.serverTimestamp(),verified:true,status:'partial',progressionVersion:2,xpEarned:0,xpDelta:0,syncStatus:'synced'});
+        tx.update(ref,{completed:true,running:false,verifiedSeconds:seconds,daySeconds:accrued.daySeconds});
+        if(lease.data()?.id===sessionId)tx.set(lock,{id:sessionId,seenAt:0});
+        return {sessionId,duration:seconds,recordedDuration:seconds,xpDelta:0,sourceXp:0,status:'partial'};
+      }
       // Legacy revision/quiz timers keep their study records, but are not an XP source.
       let result={xpDelta:0,sourceXp:0,status:'unverified'};
       const prepared=[];

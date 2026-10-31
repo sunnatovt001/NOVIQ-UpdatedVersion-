@@ -402,6 +402,22 @@ test("study session completion requires a server-issued start and caps elapsed t
     0,
   );
 });
+test('Focus completion requires twenty verified minutes and never records the planned twenty-five',async()=>{
+  for(const seconds of [120,1199,1200,1260]){
+    const h=harness();const {sessionId}=await h.functions.startStudySession({auth,data:{category:'focus',context:'focus'}});
+    const proof=h.records.get(`users/u1/trusted/start-${sessionId}`);
+    Object.assign(proof,{verifiedSeconds:seconds,running:false,daySeconds:{[require('./policy').dayKey()]:seconds}});
+    const request={auth,data:{sessionId,duration:1500,subject:'Focus'}};
+    const receipt=await h.functions.completeStudySession(request);
+    const saved=h.records.get(`users/u1/studySessions/${sessionId}`);
+    assert.equal(saved.duration,seconds);assert.equal(receipt.duration,seconds);
+    if(seconds<1200){assert.equal(saved.status,'partial');assert.equal(saved.xpEarned,0);assert.equal(receipt.xpDelta,0);}
+    else {assert.notEqual(saved.status,'partial');assert.ok(saved.xpEarned>0);}
+    const replay=await h.functions.completeStudySession(request);assert.equal(replay.duration,seconds);
+    if(seconds<1200)assert.equal(replay.status,'partial');
+  }
+});
+
 test("legacy triggers retain their records without replaying historical rewards", async () => {
   const h = harness();
   const now = Date.now();

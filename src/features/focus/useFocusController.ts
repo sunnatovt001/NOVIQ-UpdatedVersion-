@@ -217,7 +217,7 @@ export function useFocusController() {
         duration: sessionDuration,
         timestamp: completedAt.toISOString(),
         origin: 'device' as const,
-        status: 'completed',
+        status: sessionDuration >= 1200 ? 'completed' : 'partial',
       };
       const nextHistory = [
         savedSession,
@@ -232,8 +232,9 @@ export function useFocusController() {
         return false;
       }
       setFocusHistory(nextHistory);
+      setXpReceipt({duration:sessionDuration,xpDelta:0,status:sessionDuration>=1200?'unverified':'partial'});
       window.dispatchEvent(new Event('noviq:focus-history'));
-      try { recordPlannerFocus(user.uid, id, sessionDuration, completedAt.getTime(), false, plannerContext); } catch { setSessionError(copy.localSaveFailed); }
+      try { if(sessionDuration>=1200)recordPlannerFocus(user.uid, id, sessionDuration, completedAt.getTime(), false, plannerContext); } catch { setSessionError(copy.localSaveFailed); }
       setSessionError(
         copy.localSaved,
       );
@@ -247,24 +248,24 @@ export function useFocusController() {
           persistStudySession(sessionData, profile, [], sessionIdRef.current, receipt => { confirmedReceipt = receipt; setXpReceipt(receipt); }),
         10000,
       );
-      try { recordPlannerFocus(user.uid, recordedId, confirmedReceipt?.duration ?? sessionDuration, completedAt.getTime(), confirmedReceipt?.status !== 'unverified', plannerContext); } catch { setSessionError(copy.localSaveFailed); }
+      try { if((confirmedReceipt?.duration ?? sessionDuration)>=1200)recordPlannerFocus(user.uid, recordedId, confirmedReceipt?.duration ?? sessionDuration, completedAt.getTime(), confirmedReceipt?.status !== 'unverified', plannerContext); } catch { setSessionError(copy.localSaveFailed); }
       sessionIdRef.current = undefined;
       const current=loadLocalData<FocusHistoryEntry[]>(`noviq-focus-history-${user.uid}`,[]);
       const next = [
           {
             id: recordedId,
-            duration: sessionDuration,
+            duration: confirmedReceipt?.duration ?? sessionDuration,
             timestamp: completedAt.toISOString(),
             origin: 'server' as const,
-            status: 'completed',
+            status: confirmedReceipt?.status === 'partial' || (confirmedReceipt?.duration ?? sessionDuration)<1200 ? 'partial' : 'completed',
           },
           ...current.filter(record=>record.id!==recordedId),
         ].slice(0,100);
       saveLocalData(`noviq-focus-history-${user.uid}`,next);setFocusHistory(next);
       window.dispatchEvent(new Event('noviq:focus-history'));
-      trackUserEvent(user.uid, "focus_session_completed", 0, {
-        focusMinutes: Math.round(sessionDuration / 60),
-        durationSeconds: sessionDuration,
+      trackUserEvent(user.uid, (confirmedReceipt?.duration ?? sessionDuration)>=1200 ? "focus_session_completed" : "focus_session_partial", 0, {
+        focusMinutes: Math.floor((confirmedReceipt?.duration ?? sessionDuration) / 60),
+        durationSeconds: confirmedReceipt?.duration ?? sessionDuration,
         deepWork,
       }).catch(() => undefined);
       return true;
@@ -283,6 +284,7 @@ export function useFocusController() {
     if (mode !== "focus" || completingRef.current || verifying) return;
     const elapsedSeconds = FOCUS_DURATION - time;
     if (elapsedSeconds <= 0) return;
+    if(elapsedSeconds<60){preservePartial();selectTimerMode('break',breakDuration);setXpReceipt({duration:elapsedSeconds,xpDelta:0,status:'partial'});return;}
     setIsActive(false);
     if (timerRef.current) clearInterval(timerRef.current);
     completingRef.current = true;
@@ -433,7 +435,7 @@ export function useFocusController() {
 
   const timezone='Asia/Tashkent';
   const todaySessions=study.records.filter(session=>session.category==='focus' && activityDay(Date.parse(session.timestamp),timezone)===activityDay(Date.now(),timezone));
-  const completedToday=todaySessions.filter(session=>session.status!=='partial').length;
+  const completedToday=todaySessions.filter(session=>session.status!=='partial' && session.status!=='unverified' && session.duration>=1200).length;
   const focusMinutes=Math.floor(todaySessions.reduce((total,session)=>total+session.duration,0)/60);
   const progress = Math.min(
     100,

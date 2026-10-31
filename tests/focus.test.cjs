@@ -163,6 +163,7 @@ function focusHarness({
     exports: {},
     require: (name) => {
       if(name==='@/src/lib/visitStreak')return {visitStreaks:()=>({current:0,best:0})};
+      if(name==='@/src/features/focus/FocusLock')return {FocusLock:()=>null};
       if(name==='@/src/features/pro/FocusReflection')return {FocusReflection:()=>null};
       assert.ok(name in modules, name);
       return modules[name];
@@ -242,7 +243,7 @@ test("missing backend does not block start, pause, resume or local completion", 
   assert.match(app.text(), /24:00/);
   app.click("Start timer");
   assert.equal(app.starts, 1);
-  app.click("Complete focus session");
+  app.click("End incomplete session");
   await app.settle();
   assert.match(app.text(), /Short break/);
   assert.equal(app.storage.get("noviq-focus-history-user")[0].duration, 60);
@@ -279,7 +280,7 @@ test("verified focus sessions still use server completion", async () => {
   app.click("Start timer");
   await app.settle();
   app.tick(60);
-  app.click("Complete focus session");
+  app.click("End incomplete session");
   await app.settle();
   assert.equal(app.cloudWrites, 1);
   assert.equal(app.storage.get("noviq-focus-history-user")[0].id, 'verified-receipt');
@@ -302,22 +303,22 @@ test("restored device-only session resumes without losing elapsed time", async (
   await app.settle();
   app.tick(10);
   assert.equal(app.starts, 0);
-  app.click("Complete focus session");
+  app.click("End incomplete session");
   await app.settle();
   assert.equal(app.storage.get("noviq-focus-history-user")[0].duration, 510);
 });
 
 test('Focus attributes completed local time to the selected Planner assignment', async () => {
   const app=focusHarness({plannerContext:{taskId:'assignment',title:'My homework',subject:'Physics'}});
-  app.click('Start timer');await app.settle();app.tick(60);app.click('Complete focus session');await app.settle();
+  app.click('Start timer');await app.settle();app.tick(1200);app.click('Complete focus session');await app.settle();
   const receipts=[...app.storage.entries()].filter(([key])=>key.startsWith('planner-receipt-'));
-  assert.equal(receipts.length,1);assert.equal(receipts[0][1].context.taskId,'assignment');assert.equal(receipts[0][1].seconds,60);assert.equal(receipts[0][1].verified,false);
+  assert.equal(receipts.length,1);assert.equal(receipts[0][1].context.taskId,'assignment');assert.equal(receipts[0][1].seconds,1200);assert.equal(receipts[0][1].verified,false);
 });
 
 test('Focus attributes verified time once without creating an extra study session', async () => {
   const app=focusHarness({start:async()=> 'verified-receipt',plannerContext:{taskId:'assignment',title:'My homework',subject:'Physics'}});
-  app.click('Start timer');await app.settle();app.tick(60);app.click('Complete focus session');await app.settle();
-  assert.equal(app.cloudWrites,1);assert.equal(app.storage.get('planner-receipt-verified-receipt').seconds,60);
+  app.click('Start timer');await app.settle();app.tick(1200);app.click('Complete focus session');await app.settle();
+  assert.equal(app.cloudWrites,1);assert.equal(app.storage.get('planner-receipt-verified-receipt').seconds,1200);
 });
 
 test('switching assignments cannot attribute a previous timer to the new assignment', async () => {

@@ -1,3 +1,4 @@
+import { FocusLock } from '@/src/features/focus/FocusLock';
 import { visitStreaks } from '@/src/lib/visitStreak';
 
 import { FocusReflection } from '@/src/features/pro/FocusReflection';
@@ -21,7 +22,8 @@ export const Focus = () => {
         deepWork && "dark:bg-black",
       )}
     >
-      <audio ref={audioRef} loop />
+      <audio ref={audioRef} loop /><FocusLock running={isActive} mode={mode} time={time} task={focusTask} locale={locale} busy={sessionBusy || verifying} error={sessionError} onToggle={toggleTimer} onFinish={completeCurrentFocusSession}/>
+      {xpReceipt?.status === 'partial' && <p role="status" className="mb-4 rounded-xl bg-amber-50 p-4 text-sm text-amber-900">{locale==='uz'?'Sessiya oxirigacha tugamadi. XP berilmadi. Haqiqiy vaqt:':locale==='ru'?'Сессия не завершена. XP не начислены. Фактическое время:':'Session incomplete. No XP awarded. Actual time:'} {formatTime(xpReceipt.duration || 0)}</p>}
       {xpReceipt?.duration !== undefined && xpReceipt.recordedDuration !== undefined && xpReceipt.recordedDuration > xpReceipt.duration && <p role="status" className="mb-3 text-sm">{locale === 'uz' ? 'Qayd etilgan vaqt' : locale === 'ru' ? 'Записанное время' : 'Recorded time'}: {formatTime(xpReceipt.recordedDuration)} · {locale === 'uz' ? 'server tasdiqlagan' : locale === 'ru' ? 'подтверждено сервером' : 'server verified'}: {formatTime(xpReceipt.duration)}</p>}
           <header className="ff-heading flex flex-wrap items-center justify-between gap-4">
             <div className="flex items-center gap-4">
@@ -216,12 +218,12 @@ export const Focus = () => {
           {mode === "focus" && time < FOCUS_DURATION && (
             <button
               type="button"
-              disabled={sessionBusy || verifying || time > FOCUS_DURATION - 60}
+              disabled={sessionBusy || verifying}
               onClick={completeCurrentFocusSession}
-              className="mx-auto mt-4 inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-bold text-emerald-700 hover:bg-emerald-50 disabled:opacity-50 dark:text-emerald-300"
+              className="mx-auto mt-4 inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-bold text-slate-600 hover:bg-slate-100 disabled:opacity-50 dark:text-slate-300"
             >
               <CheckCircle2 size={17} />{" "}
-              {sessionBusy ? copy.savingSession : copy.completeSession}
+              {sessionBusy ? copy.savingSession : FOCUS_DURATION-time<1200 ? (locale==='uz'?'Tugallanmagan deb yakunlash':locale==='ru'?'Завершить как неполную':'End incomplete session') : copy.completeSession}
             </button>
           )}
           <div className="mt-6 text-center">
