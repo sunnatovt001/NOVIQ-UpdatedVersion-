@@ -1,5 +1,5 @@
 import fs from 'node:fs';
-const names=['manifest.json','background.js','content.js','blocked.html','blocked.js','README.md'];
+const names=['manifest.json','background.js','content.js','blocked.html','blocked.js','INSTALL.txt'];
 const crc=bytes=>{let value=0xffffffff;for(const byte of bytes){value^=byte;for(let bit=0;bit<8;bit++)value=(value>>>1)^((value&1)?0xedb88320:0);}return (value^0xffffffff)>>>0;};
 const files=[],directory=[];let offset=0;
 for(const name of names){

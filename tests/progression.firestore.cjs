@@ -106,7 +106,8 @@ test('restored auth cannot earn a fresh login; old XP and unrelated user fields 
   const user=await student({xp:4600,streak:9,lastActive:new Date().toISOString(),settings:{privateSetting:true}});
   user.auth.token.auth_time=Math.floor(Date.now()/1000)-86400;
   const result=await api.checkInProgress(request(user,{}));assert.equal(result.xpDelta,0);
-  await finish(user,300);
+  // Use an eligible session: shorter Focus sessions no longer normalize/reward progress.
+  await finish(user,1200);
   const saved=(await db.doc(`users/${user.uid}`).get()).data();assert.ok(saved.xp>=4600);assert.equal(saved.level,9);
   assert.equal(saved.streak,9);assert.equal(saved.settings.privateSetting,true);
 });

@@ -42,8 +42,9 @@
     "release:check": "node scripts/release-preflight.mjs",
     "release:check:live": "node scripts/release-preflight.mjs --live",
     "test:planner:browser": "node tests/run-fixture.mjs tests/planner21-browser-server.mjs 4182 tests/planner21-persistence-browser.cjs tests/planner21-integration-browser.cjs tests/planner21-experience-browser.cjs",
-    "test:pro:browser": "node tests/run-fixture.mjs tests/real-account-fixture-server.mjs 4184 tests/real-account-controls.cjs tests/real-account-workflows.cjs tests/real-account-data-browser.cjs tests/tutor-recovery-browser.cjs tests/tutor-pro-browser.cjs tests/focus-lock-browser.cjs tests/focus-extension-browser.cjs",
-    "test:entitlements": "npx firebase-tools@15.32.1 emulators:exec --project demo-noviq --config firebase.entitlements.json --only auth,firestore \"node tests/run-fixture.mjs tests/entitlement-server.mjs 4184 tests/isolation-security.cjs\""
+    "test:pro:browser": "node tests/run-fixture.mjs tests/real-account-fixture-server.mjs 4184 tests/real-account-controls.cjs tests/real-account-workflows.cjs tests/real-account-data-browser.cjs tests/tutor-recovery-browser.cjs tests/tutor-pro-browser.cjs tests/focus-lock-browser.cjs",
+    "test:entitlements": "npx firebase-tools@15.32.1 emulators:exec --project demo-noviq --config firebase.entitlements.json --only auth,firestore \"node tests/run-fixture.mjs tests/entitlement-server.mjs 4184 tests/isolation-security.cjs\"",
+    "test:focus:extension": "node tests/run-fixture.mjs tests/real-account-fixture-server.mjs 4184 tests/focus-extension-browser.cjs"
   },
   "dependencies": {
     "@vercel/functions": "^3.10.4",
