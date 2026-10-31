@@ -11,6 +11,8 @@ export type ScheduleInput = {
   sessionMinutes: number; breakMinutes: number;
   dailyLimit?: number; dayKey?: (instant: number) => string; preserveExisting?: boolean;
   preferenceScore?: (instant: number) => number; balanceDays?: boolean;
+  taskPreferenceScore?: (task:StudyAssignment,instant:number)=>number;
+  periodKey?: (instant:number)=>string; balancePeriods?: boolean;
 };
 export type ScheduleWarning = { taskId: string; remainingMinutes: number; reason: 'capacity' | 'dependency' | 'invalid' | 'locked-conflict' | 'review-estimate' };
 const overlaps = (a: TimeRange, b: TimeRange) => a.start < b.end && b.start < a.end;
@@ -73,8 +75,8 @@ export function proposeSchedule(input: ScheduleInput): { sessions: StudyBlock[];
     }
     let lastEnd = sessions.filter(block=>block.taskId===task.id).reduce((end,block)=>Math.max(end,block.end),earliest);
     const rankedWindows = windows.slice().sort((a,b)=>{
-      if(!input.balanceDays && !input.preferenceScore)return a.start-b.start;
-      const score=(w:TimeRange)=>(input.balanceDays?usedOnDay(w.start)/60000:0)+(w.start-input.now)/86400000*3+(input.preferenceScore?.(w.start) ?? 0);
+      if(!input.balanceDays && !input.preferenceScore && !input.taskPreferenceScore && !input.balancePeriods)return a.start-b.start;
+      const score=(w:TimeRange)=>(input.balanceDays?usedOnDay(w.start)/60000:0)+(w.start-input.now)/86400000*3+(input.preferenceScore?.(w.start) ?? 0)+(input.taskPreferenceScore?.(task,w.start) ?? 0)+(input.balancePeriods?sessions.filter(s=>input.periodKey?.(s.start)===input.periodKey?.(w.start)).reduce((n,s)=>n+(s.end-s.start)/60000,0)*4:0);
       return score(a)-score(b) || a.start-b.start;
     });
     for (const window of rankedWindows) {

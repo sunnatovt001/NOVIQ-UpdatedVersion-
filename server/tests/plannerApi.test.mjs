@@ -54,3 +54,10 @@ test('Planner HTTP is owner-only, CAS-safe and preserves immutable history beyon
   assert.equal((await request('PUT',{},'a','https://app.invalid','/api/planner/history')).status,405);
   assert.equal((await request('GET',undefined,'a','https://app.invalid','/api/planner/plan?userId=other')).status,400);
 });
+
+test('Planner accepts validated daily review/topic state and rejects malformed learning metadata',()=>{
+ const valid={...plan(),adaptation:{enabled:true,lastDay:'2026-10-31',style:'hybrid'},subjects:[{id:'sat',name:'SAT',mode:'self',topics:[{key:'algebra',label:'Algebra',rating:'easy',reviewedAt:100,nextReviewAt:200,intervalDays:7}]}]};
+ assert.equal(validMongoPlan(valid,'owner'),true);
+ for(const adaptation of [{enabled:'yes',lastDay:'2026-10-31',style:'hybrid'},{enabled:true,lastDay:'bad',style:'hybrid'},{enabled:true,lastDay:'',style:'unbounded'}])assert.equal(validMongoPlan({...valid,adaptation},'owner'),false);
+ assert.equal(validMongoPlan({...valid,subjects:[{...valid.subjects[0],topics:[{...valid.subjects[0].topics[0],intervalDays:-1}]}]},'owner'),false);
+});
