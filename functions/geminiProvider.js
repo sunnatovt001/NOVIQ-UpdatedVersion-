@@ -58,7 +58,7 @@ const callGeminiRest = async ({ model, contents, config, feature }) => {
       : {}),
   };
 
-  const response = await fetchImpl(
+  const send = () => fetchImpl(
     `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
     {
       method: "POST",
@@ -67,7 +67,18 @@ const callGeminiRest = async ({ model, contents, config, feature }) => {
       signal: AbortSignal.timeout(25000),
     },
   );
-  const payload = await response.json().catch(() => ({}));
+  let response = await send();
+  let payload = await response.json().catch(() => ({}));
+  // Some models reject otherwise valid response schemas (including complexity
+  // limits). Retry only an explicit schema rejection, never an uncertain timeout
+  // or a credential/quota failure. JSON mode and server instructions remain set;
+  // the planner still validates every draft before offering it for review.
+  if (response.status === 400 && feature === 'planner' && body.generationConfig?.responseSchema &&
+      /schema|too many states|constraint/i.test(String(payload?.error?.message || ''))) {
+    delete body.generationConfig.responseSchema;
+    response = await send();
+    payload = await response.json().catch(() => ({}));
+  }
   if (!response.ok) {
     const message =
       payload?.error?.message ||

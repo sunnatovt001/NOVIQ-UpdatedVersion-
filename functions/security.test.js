@@ -1009,3 +1009,17 @@ test('Planner schedule tier and system rules are server-owned; Free cannot repla
  const user=h.records.get('users/u1');h.records.set('users/u1',{...user,subscription:{plan:'pro',status:'active',currentPeriodEnd:new Date(Date.now()+86400000).toISOString()}});
  const pro=await h.functions.generateAiResponse({auth:{uid:'u1'},data:{...data,replanAi:true,planningStyle:'self'}});assert.equal(pro.scheduleTier,'pro');assert.match(calls[1].systemInstruction.parts[0].text,/7 days/);assert.match(calls[1].systemInstruction.parts[0].text,/self-study/);
 });
+
+test('Planner schema fallback charges one request and retains authoritative Free rules',async()=>{
+ const calls=[];const h=harness({}, {fetch:async(url,options)=>{
+  calls.push(JSON.parse(options.body));
+  if(calls.length===1)return {ok:false,status:400,json:async()=>({error:{message:'Invalid response schema: too many states'}})};
+  return {ok:true,status:200,json:async()=>({candidates:[{content:{parts:[{text:'{"summary":"Plan","tasks":[]}'}]}}]})};
+ }});
+ const result=await h.functions.generateAiResponse({auth:{uid:'u1'},data:{feature:'planner',plannerMode:'schedule',planningStyle:'self',contents:'{"language":"en"}'}});
+ assert.equal(result.scheduleTier,'free');assert.equal(calls.length,2);
+ assert.equal(h.records.get('users/u1/trusted/aiUsage').counts.planner,1);
+ assert.equal(calls[1].generationConfig.responseMimeType,'application/json');
+ assert.equal(calls[1].generationConfig.responseSchema,undefined);
+ assert.match(calls[1].systemInstruction.parts[0].text,/today only/);
+});

@@ -1,5 +1,6 @@
 import {useEffect,useRef,useState} from 'react';
 import {Sparkles,ChevronDown} from 'lucide-react';
+import {classifyAiFailure,getAiFailureMessage} from '@/src/lib/aiFailure';
 import {membershipCall,useMembership} from '@/src/features/pro/MembershipContext';
 import {aiPlanningSource,planningContext,reviewAiPlan,type PlanningStyle} from './aiPlanning';
 import {dailyPlanningSource} from './adaptivePlanning';
@@ -27,12 +28,12 @@ export function PlannerAiPanel({plan,receipts,locale,disabled,onReview,onSetting
       if(id!==serial.current)return;
       if(latest.current!==base||dateKey(Date.now(),plan.timezone)!==day){setError(t('Your plan changed. Generate a fresh draft.','Jadvalingiz o‘zgardi. Yangi taklif yarating.','План изменился. Создайте новый черновик.'));return;}
       if(!response.text)throw new Error('empty');
-      try{localStorage.setItem('noviq:'+plan.userId+':aiDraft:'+day,JSON.stringify({baseRevision:plan.revision,text:response.text,scheduleTier:response.scheduleTier,style,locale}));for(const key of Object.keys(localStorage)){if((key.startsWith('noviq:'+plan.userId+':aiDraft:')||key.startsWith('noviq:'+plan.userId+':daily-ai:'))&&key.slice(-10)<addDays(day,-7))localStorage.removeItem(key);}}catch{}
       const result=reviewAiPlan(plan,receipts,response.text,pro&&response.scheduleTier==='pro',Math.ceil(Date.now()/60000)*60000,replan,daily);
+      try{localStorage.setItem('noviq:'+plan.userId+':aiDraft:'+day,JSON.stringify({baseRevision:plan.revision,text:response.text,scheduleTier:response.scheduleTier,style,locale}));for(const key of Object.keys(localStorage)){if((key.startsWith('noviq:'+plan.userId+':aiDraft:')||key.startsWith('noviq:'+plan.userId+':daily-ai:'))&&key.slice(-10)<addDays(day,-7))localStorage.removeItem(key);}}catch{}
       if(!result.added&&JSON.stringify(result.plan.tasks)===JSON.stringify(plan.tasks)&&JSON.stringify(result.plan.sessions)===JSON.stringify(plan.sessions)){setError(t('No new practice is due or a complete task cannot fit your remaining availability. Your current plan is preserved.','Hozir yangi mashq muddati kelmagan yoki qolgan vaqtga to‘liq vazifa sig‘madi. Joriy rejangiz saqlanadi.','Новая практика пока не требуется либо целое задание не помещается в оставшееся время. Текущий план сохранён.'));return;}
       onReview({...result.plan,adaptation:{enabled:daily,lastDay:day,style}},[result.summary,t(`${result.added} AI tasks proposed. Your own tasks and time blocks are preserved.`,`${result.added} ta AI vazifasi taklif qilindi. O‘z vazifalaringiz va band vaqtlaringiz saqlandi.`,`${result.added} заданий предложено ИИ. Ваши задачи и занятое время сохранены.`),...(result.omitted?[t(`${result.omitted} suggestions did not fit and were omitted.`,`${result.omitted} ta taklif vaqtga sig‘magani uchun qo‘shilmadi.`,`${result.omitted} предложений не поместилось и не было добавлено.`)]:[])]);
       void member.refresh();
-    }catch(e){if(id!==serial.current)return;const code=String((e as {code?:string})?.code||'');setError(code.includes('resource-exhausted')?t('AI request limit reached. Try again later.','AI so‘rov limiti tugadi. Keyinroq urinib ko‘ring.','Лимит ИИ исчерпан. Попробуйте позже.'):t('AI could not create a valid plan. Your saved plan is unchanged. Try again.','AI to‘g‘ri reja tuza olmadi. Saqlangan rejangiz o‘zgarmadi. Qayta urinib ko‘ring.','ИИ не смог составить корректный план. Сохранённый план не изменён. Повторите попытку.'));}
+    }catch(e){if(id!==serial.current)return;const kind=classifyAiFailure(e);const code=String((e as {code?:string})?.code||'');if(kind!=='invalid'){setError(getAiFailureMessage(kind,locale==='uz'?'uz':locale==='ru'?'ru':'en'));return;}setError(code.includes('resource-exhausted')?t('AI request limit reached. Try again later.','AI so‘rov limiti tugadi. Keyinroq urinib ko‘ring.','Лимит ИИ исчерпан. Попробуйте позже.'):t('AI could not create a valid plan. Your saved plan is unchanged. Try again.','AI to‘g‘ri reja tuza olmadi. Saqlangan rejangiz o‘zgarmadi. Qayta urinib ko‘ring.','ИИ не смог составить корректный план. Сохранённый план не изменён. Повторите попытку.'));}
     finally{pending.current=false;if(id===serial.current)setBusy(false);}
   };
   useEffect(()=>{
