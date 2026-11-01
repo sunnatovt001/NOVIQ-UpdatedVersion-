@@ -29,12 +29,26 @@ test('existing membership logic on MongoDB adapter preserves explicit agreement,
 });
 test('existing community logic on MongoDB adapter creates membership atomically and rejects outsider directory access',async()=>{
   const {db}=fixture();await db.doc('users/owner').set({uid:'owner',displayName:'Owner'});
-  const api=require('../../functions/community.js')({db,onCall,HttpsError,FieldValue});
-  const room=await api.createCommunity({auth:{uid:'owner',token:{email_verified:true}},data:{name:'Synthetic group',description:'Verification'}});
+  const assertAdmin=async request=>{if(request.auth?.token?.admin!==true)throw new HttpsError('permission-denied','Admin access required.');};
+  const api=require('../../functions/community.js')({db,onCall,HttpsError,FieldValue,assertAdmin});
+  await assert.rejects(api.createCommunity({auth:{uid:'owner'},data:{name:'Blocked'}}),{code:'permission-denied'});
+  const room=await api.createCommunity({auth:{uid:'owner',token:{admin:true,email_verified:true}},data:{name:'Synthetic group',description:'Verification'}});
   const id=room.communityId||room.id;assert.ok(id);
   assert.equal((await db.doc(`communities/${id}/members/owner`).get()).exists,true);
   assert.equal((await db.doc(`users/owner/joinedCommunities/${id}`).get()).exists,true);
   const directory=api.getCommunityMembers;
   assert.equal(typeof directory,'function');
   await assert.rejects(directory({auth:{uid:'outsider'},data:{communityId:id}}));
+});
+
+test('admin data browser paginates MongoDB user records without leaking another account',async()=>{
+  const {db}=fixture();await db.doc('users/target').set({uid:'target',displayName:'Target'});
+  for(let i=0;i<12;i++)await db.doc(`users/target/plannerHistory/r${String(i).padStart(2,'0')}`).set({revision:i});
+  await db.doc('users/other/plannerHistory/other').set({revision:'private'});
+  const assertAdmin=async request=>{if(request.auth?.token?.admin!==true)throw new HttpsError('permission-denied','Admin access required.');};
+  const api=require('../../functions/adminUserData.js')({db,onCall,HttpsError,assertAdmin});
+  const auth={uid:'admin',token:{admin:true}},data={userId:'target',section:'plannerHistory'};
+  const first=await api.adminGetUserData({auth,data});assert.equal(first.records.length,10);
+  const second=await api.adminGetUserData({auth,data:{...data,after:first.nextCursor}});assert.equal(second.records.length,2);assert.equal(second.nextCursor,null);
+  assert.deepEqual([...first.records,...second.records].map(r=>r.data.revision),Array.from({length:12},(_,i)=>i));
 });

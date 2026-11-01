@@ -86,7 +86,7 @@ const selectableGroups = (groups: Room[]) => {
   return groups.filter((group, index) => group.name.trim().toLowerCase() !== "sat" || index === lastSat);
 };
 export const Community = () => {
-  const { user } = useAuth();
+  const { user, isAdmin } = useAuth();
   const { cinematic } = useMembership();
   const { locale } = useLocale();
   const copy = getCommunityCopy(locale);
@@ -508,7 +508,7 @@ export const Community = () => {
             <UserPlus size={18} className="text-blue-600" aria-hidden="true" /> {copy.inviteFriends}
           </span>
         </div>
-        {!cinematic && <div className="fcm-header-actions"><button type="button" onClick={() => { setFreeView('groups'); requestAnimationFrame(() => document.getElementById('community-invite-email')?.focus()); }}><Send size={17}/>{copy.inviteFriends}</button><button type="button" onClick={() => { setFreeView('groups'); setCreateOpen(true); requestAnimationFrame(() => document.getElementById('community-name')?.focus()); }}><Plus size={18}/>{copy.createGroup}</button></div>}
+        {!cinematic && <div className="fcm-header-actions"><button type="button" onClick={() => { setFreeView('groups'); requestAnimationFrame(() => document.getElementById('community-invite-email')?.focus()); }}><Send size={17}/>{copy.inviteFriends}</button>{isAdmin && <button type="button" onClick={() => { setFreeView('groups'); setCreateOpen(true); requestAnimationFrame(() => document.getElementById('community-name')?.focus()); }}><Plus size={18}/>{copy.createGroup}</button>}</div>}
       </header>
       {!online && (
         <p role="status" className="rounded-xl bg-amber-50 p-3 text-amber-900">
@@ -581,7 +581,7 @@ export const Community = () => {
       {cinematic && <nav className="cg-tabs" aria-label={copy.title}>
         <button type="button" aria-pressed={workspaceView === "groups"} onClick={() => setWorkspaceView("groups")}>{copy.myGroups}</button>
         <button type="button" aria-pressed={workspaceView === "discover"} onClick={() => setWorkspaceView("discover")}>{copy.discoverGroups}</button>
-        <button type="button" className="cg-create" onClick={() => { setWorkspaceView("groups"); setCreateOpen(true); requestAnimationFrame(() => document.getElementById("community-name")?.focus()); }}><Plus size={17}/>{copy.createGroup}</button>
+        {isAdmin && <button type="button" className="cg-create" onClick={() => { setWorkspaceView("groups"); setCreateOpen(true); requestAnimationFrame(() => document.getElementById("community-name")?.focus()); }}><Plus size={17}/>{copy.createGroup}</button>}
       </nav>}
       {!cinematic && <nav className="fcm-tabs" aria-label={copy.title}><button type="button" aria-pressed={freeView === 'groups'} onClick={() => setFreeView('groups')}>{copy.myGroups}</button><button type="button" aria-pressed={freeView === 'discover'} onClick={() => setFreeView('discover')}>{copy.discoverGroups}</button><button type="button" aria-pressed={freeView === 'friends'} onClick={() => setFreeView('friends')}>{copy.friends}</button></nav>}
       <div data-free-view={freeView} data-view={workspaceView} className="cg-workspace mt-5 grid gap-5 xl:grid-cols-[minmax(250px,0.72fr)_minmax(0,1.6fr)_minmax(270px,0.8fr)]">
@@ -591,16 +591,16 @@ export const Community = () => {
               <h2 className="flex items-center gap-2 text-lg font-black">
                 <UsersRound size={22} className="text-blue-600" aria-hidden="true" /> {copy.myGroups}
               </h2>
-              <button
+              {isAdmin && <button
                 type="button"
                 aria-label={copy.createGroup}
                 onClick={() => setCreateOpen((current) => !current)}
                 className="inline-flex h-9 items-center justify-center rounded-xl bg-blue-600 px-3 text-sm font-bold text-white shadow-sm transition hover:bg-blue-500"
               >
                 <Plus size={17} />
-              </button>
+              </button>}
             </div>
-            {createOpen && (
+            {isAdmin && createOpen && (
               <form
                 className="mt-4 rounded-2xl border border-blue-100 bg-blue-50/60 p-3 dark:border-blue-500/20 dark:bg-blue-500/5"
                 onSubmit={(event) => {
@@ -684,7 +684,7 @@ export const Community = () => {
                     className="mx-auto mb-2 text-slate-300"
                     size={28}
                   />
-                  {cinematic ? copy.noJoinedGroups : <div className="fcm-library-empty"><h3>{locale === 'uz' ? 'O‘quv davrangiz shu yerdan boshlanadi.' : 'Your study circle starts here.'}</h3><p>{locale === 'uz' ? 'Guruhga qo‘shiling yoki o‘zingiz yarating.' : 'Join a group or create your own.'}</p><button type="button" onClick={() => setFreeView('discover')}>{copy.discoverGroups}<ChevronRight size={16}/></button></div>}
+                  {cinematic ? copy.noJoinedGroups : <div className="fcm-library-empty"><h3>{locale === 'uz' ? 'O‘quv davrangiz shu yerdan boshlanadi.' : 'Your study circle starts here.'}</h3><p>{locale === 'uz' ? 'Adminlar yaratgan o‘quv guruhlariga qo‘shiling.' : locale === 'ru' ? 'Присоединяйтесь к учебным группам, созданным администраторами.' : 'Join study groups created by the admins.'}</p><button type="button" onClick={() => setFreeView('discover')}>{copy.discoverGroups}<ChevronRight size={16}/></button></div>}
                 </div>
               ) : !visibleJoined.length ? (
                 <p className="py-5 text-center text-sm text-slate-500">

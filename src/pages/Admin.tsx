@@ -2,6 +2,7 @@ import { isAdminQuotaError, readAdminUsersCache, saveAdminUsersCache } from '@/s
 import { visitStreaks } from '@/src/lib/visitStreak';
 import { useActivityClock } from '@/src/lib/useActivityClock';
 import { AdminPromos } from '@/src/features/admin/AdminPromos';
+import { AdminUserData } from '@/src/features/admin/AdminUserData';
 import React, { useEffect, useMemo, useState } from "react";
 import { collection, collectionGroup, limit, onSnapshot, orderBy, query } from '@/src/lib/dataStore';
 import { httpsCallable } from "@/src/lib/callable";
@@ -682,6 +683,7 @@ export const Admin = ({ setActiveTab }: { setActiveTab?: (t: string) => void }) 
           <MetricCard label="Last active" value={formatDateOnly(selectedUser.lastActive)} icon={Clock} detail={formatDateTime(selectedUser.lastActive)} />
         </div>
 
+        <AdminUserData key={selectedUser.id} userId={selectedUser.id}/>
         <div className="grid gap-6 xl:grid-cols-3">
           <Section title="Profile Data" eyebrow="Identity">
             <div className="grid gap-3 text-sm">

@@ -312,6 +312,7 @@ const assertAdmin = async (request) => {
 };
 
 const promos = require('./promo').register({exports,db,onCall,HttpsError,FieldValue,assertAdmin,PRICES,buildSubscription,nextBillingDate});
+Object.assign(exports, require('./adminUserData')({db,onCall,HttpsError,assertAdmin}));
 
 const processProgressEvent = progression.processLegacyEvent;
 Object.assign(exports, progression.api);
@@ -1698,7 +1699,7 @@ exports.sendDailyTelegramStudySummary = onSchedule(
 exports.runTelegramNotificationSweep = runTelegramDailySummarySweep;
 Object.assign(
   exports,
-  require("./community")({ db, onCall, HttpsError, FieldValue }),
+  require("./community")({ db, onCall, HttpsError, FieldValue, assertAdmin }),
 );
 Object.assign(exports,require('./metrics')({db,onCall,onDocumentCreated,onDocumentWritten:require('firebase-functions/v2/firestore').onDocumentWritten,HttpsError,FieldValue,logger,database:FIRESTORE_DATABASE}).api);
 

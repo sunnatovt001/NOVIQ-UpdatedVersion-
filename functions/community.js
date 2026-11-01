@@ -1,5 +1,5 @@
 const { randomBytes } = require("node:crypto");
-module.exports = ({ db, onCall, HttpsError, FieldValue }) => {
+module.exports = ({ db, onCall, HttpsError, FieldValue, assertAdmin }) => {
   const api = {};
   const auth = (request) => {
     if (!request.auth?.uid)
@@ -35,6 +35,7 @@ module.exports = ({ db, onCall, HttpsError, FieldValue }) => {
   };
   api.createCommunity = onCall(async (request) => {
     const uid = auth(request);
+    await assertAdmin(request);
     const name = text(request.data?.name, 80, "Group name");
     const description = String(request.data?.description || "").trim();
     if (description.length > 500)

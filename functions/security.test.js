@@ -214,6 +214,7 @@ function harness(env = {}, overrides = {}) {
     "./progressionStore": require("./progressionStore"),
     "./telegramNotifications": require("./telegramNotifications"),
     "./community": require("./community"),
+    "./adminUserData": require("./adminUserData"),
     "./metrics": require("./metrics"),
     "./appUrl": require("./appUrl"),
   };
@@ -777,8 +778,41 @@ test("parallel timers cannot credit more time than the server wall clock", async
   assert.ok(h.records.get(`users/u1/studySessions/${starts[1].sessionId}`).duration<=90);
   assert.equal(h.records.has(`users/u1/studySessions/${starts[0].sessionId}`),false);
 });
+test('Only platform admins create communities; forged body roles and group ownership grant no access',async()=>{
+ const h=harness();const data={name:'Restricted',isAdmin:true,role:'admin',uid:'admin'};
+ await assert.rejects(h.functions.createCommunity({data}),{code:'unauthenticated'});
+ h.records.set('communities/old/members/u1',{role:'owner'});
+ const before=JSON.stringify([...h.records]);
+ await assert.rejects(h.functions.createCommunity({auth,data}),{code:'permission-denied'});
+ assert.equal(JSON.stringify([...h.records]),before,'Denied creation writes no group, membership or rate record');
+ const created=await h.functions.createCommunity({auth:{uid:'u1',token:{admin:true}},data:{name:'Approved'}});
+ assert.equal(h.records.get(`communities/${created.communityId}`).createdBy,'u1');
+});
+
+test('Admin user records require verified admin access, paginate per account and redact credentials',async()=>{
+ const h=harness();h.records.set('users/target',{displayName:'Student',email:'student@example.test',settings:{language:'uz'},passwordHash:'hidden',auth:{refreshToken:'hidden'}});
+ for(let i=0;i<13;i++)h.records.set(`users/target/notebookNotes/n${String(i).padStart(2,'0')}`,{title:`Note ${i}`,content:'Full note',token:'hidden'});
+ h.records.set('users/other/notebookNotes/private',{content:'Other account'});
+ const data={userId:'target',section:'notebookNotes'};
+ await assert.rejects(h.functions.adminGetUserData({data}),{code:'unauthenticated'});
+ await assert.rejects(h.functions.adminGetUserData({auth,data:{...data,isAdmin:true}}),{code:'permission-denied'});
+ const admin={uid:'u1',token:{admin:true}};
+ const profile=await h.functions.adminGetUserData({auth:admin,data:{userId:'target'}});
+ assert.equal(profile.records[0].data.email,'student@example.test');assert.equal(profile.records[0].data.passwordHash,'[redacted]');
+ assert.equal(profile.records[0].data.auth.refreshToken,'[redacted]');
+ const first=await h.functions.adminGetUserData({auth:admin,data});assert.equal(first.records.length,10);assert.ok(first.nextCursor);
+ const next=await h.functions.adminGetUserData({auth:admin,data:{...data,after:first.nextCursor}});assert.equal(next.records.length,3);assert.equal(next.nextCursor,null);
+ assert.ok([...first.records,...next.records].every(r=>r.data.token==='[redacted]'&&r.data.content==='Full note'));
+ for(const patch of [{section:'../trusted'},{userId:'target/../other'},{section:'cards',deckId:'a/b'},{after:'a/b'}])await assert.rejects(h.functions.adminGetUserData({auth:admin,data:{...data,...patch}}),{code:'invalid-argument'});
+ h.records.set('users/u1',{...h.records.get('users/u1'),isAdmin:true});
+ h.records.set('users/target/decks/d/cards/c',{front:'Question',back:'Answer'});
+ const cards=await h.functions.adminGetUserData({auth,data:{userId:'target',section:'cards',deckId:'d'}});assert.equal(cards.records[0].data.back,'Answer');
+ await assert.rejects(h.functions.adminGetUserData({auth,data:{userId:'missing'}}),{code:'not-found'});
+});
+
 test("community membership writes are atomic and repeat joins/leaves preserve counts", async () => {
   const h = harness();
+  h.records.set('users/u1',{...h.records.get('users/u1'),isAdmin:true});
   h.records.set("users/u2", { displayName: "Friend" });
   const { communityId } = await h.functions.createCommunity({
     auth,
