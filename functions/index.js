@@ -475,7 +475,7 @@ exports.createSubscriptionCheckout = onCall(async (request) => {
   const { billingCycle, provider, promoCode } = request.data || {};
   if (
     !Object.hasOwn(PRICES, billingCycle) ||
-    !["click", "payme", "card"].includes(provider)
+    !["click", "payme", "card", "flowkey"].includes(provider)
   ) {
     throw new HttpsError("invalid-argument", "Invalid billing options.");
   }
@@ -491,8 +491,8 @@ exports.createSubscriptionCheckout = onCall(async (request) => {
       throw new HttpsError('failed-precondition','pending',{reason:'pending'});
     }
   }
-  const endpoint = process.env.PAYMENT_CHECKOUT_URL;
-  const secret = process.env.PAYMENT_CHECKOUT_SECRET;
+  const endpoint = provider==="flowkey" ? "https://flowkey.uz/api/v1/checkout/sessions" : process.env.PAYMENT_CHECKOUT_URL;
+  const secret = provider==="flowkey" ? process.env.FLOWKEY_API_KEY : process.env.PAYMENT_CHECKOUT_SECRET;
   if ((!endpoint || !secret) && !promoCode)
     throw new HttpsError(
       "failed-precondition",
@@ -544,6 +544,11 @@ exports.createSubscriptionCheckout = onCall(async (request) => {
   });
   if(checkout.amount===0) return {checkoutId:checkoutRef.id,activated:true,amount:0};
   try {
+    if(provider==="flowkey"){
+      const result=await require('./flowkey.cjs').createFlowkeyCheckout({secret,checkoutId:checkoutRef.id,billingCycle,amount:checkout.amount});
+      await checkoutRef.set({...result,verificationStatus:'sandbox_only',paymentMode:'test'},{merge:true});
+      return {checkoutId:checkoutRef.id,checkoutUrl:result.checkoutUrl,livemode:false};
+    }
     const providerResponse = await fetch(endpoint, {
       method: "POST",
       redirect: "error",

@@ -38,6 +38,7 @@ export interface UserProfile {
 export type SubscriptionPlan = "free" | "pro";
 export type BillingCycle = "monthly" | "yearly";
 export type PaymentProvider =
+  | "flowkey"
   | "click"
   | "payme"
   | "card";

@@ -23,7 +23,7 @@ function registerMembership({exports, db, onCall, onSchedule, HttpsError, FieldV
     const today = new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Tashkent',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
     const recorded = usage.data();
     const visibleUsage = recorded?.dayKey===today ? {dayKey:today,total:Number(recorded.total)||0,counts:recorded.counts||{}} : {dayKey:today,total:0,counts:{}};
-    return {...membership(user.data().subscription), usage: visibleUsage, billing: {recurring: false, providersConfigured: !!(process.env.PAYMENT_CHECKOUT_URL && process.env.PAYMENT_CHECKOUT_SECRET)}, configVersion: config.version};
+    return {...membership(user.data().subscription), usage: visibleUsage, billing: {recurring: false, providersConfigured: !!(process.env.FLOWKEY_API_KEY || (process.env.PAYMENT_CHECKOUT_URL && process.env.PAYMENT_CHECKOUT_SECRET))}, configVersion: config.version};
   });
   exports.startProTrial = onCall(async request => {
     const uid = uidOf(request);

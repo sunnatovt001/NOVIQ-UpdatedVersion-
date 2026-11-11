@@ -9,7 +9,7 @@ for(const args of checks){
   // final frontend build still receives its real deployment build settings.
   const env=build?process.env:{...process.env,NODE_ENV:'test',NOVIQ_DATA_BACKEND:'firestore',NOVIQ_FIREBASE_MIRROR:'false'};
   if(!build)for(const name of ['MONGODB_URI','MONGODB_DATABASE','FIREBASE_SERVICE_ACCOUNT_JSON','TELEGRAM_BOT_TOKEN',
-    'TELEGRAM_WEBHOOK_SECRET','CRON_SECRET','GEMINI_API_KEY','PAYMENT_WEBHOOK_SECRET','PAYMENT_CHECKOUT_SECRET',
+    'TELEGRAM_WEBHOOK_SECRET','CRON_SECRET','GEMINI_API_KEY','PAYMENT_WEBHOOK_SECRET','PAYMENT_CHECKOUT_SECRET','FLOWKEY_API_KEY',
     'MONGO_FILE_SIGNING_KEY','FIREBASE_MIRROR_ENCRYPTION_KEY'])delete env[name];
   const result=spawnSync(npm,args,{stdio:'inherit',env,shell:process.platform==='win32',windowsHide:true});
   if(result.status!==0)process.exit(result.status||1);
